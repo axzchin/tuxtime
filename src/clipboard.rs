@@ -1,5 +1,35 @@
 use std::io::{self, Write};
 
+/// Copy `content` to the system clipboard. Uses `arboard` (native system
+/// clipboard via X11/Wayland/macOS/Windows) when available, falling back to
+/// the OSC 52 escape sequence for terminal-based clipboard support.
+pub fn copy(content: &str) -> io::Result<()> {
+    // Try the native system clipboard first.
+    if try_arboard(content) {
+        return Ok(());
+    }
+    // Fall back to OSC 52 terminal escape sequence.
+    let mut stdout = io::stdout();
+    stdout.write_all(format_osc52(content).as_bytes())?;
+    stdout.flush()
+}
+
+fn try_arboard(content: &str) -> bool {
+    // Each call opens a fresh clipboard connection so the global clipboard
+    // state reflects the most recent copy, even across multiple TUI frames.
+    match arboard::Clipboard::new() {
+        Ok(mut cb) => {
+            // arboard::Clipboard::set_text can fail if the content is
+            // empty on some platforms, so guard that edge case.
+            if content.is_empty() {
+                return false;
+            }
+            cb.set_text(content).is_ok()
+        }
+        Err(_) => false,
+    }
+}
+
 /// Build an OSC 52 escape sequence that asks the controlling terminal to
 /// place `content` on the system clipboard. Most modern terminals (kitty,
 /// alacritty, wezterm, iTerm2, foot, modern xterm) honor this directly;
@@ -8,15 +38,6 @@ use std::io::{self, Write};
 pub fn format_osc52(content: &str) -> String {
     let encoded = base64_encode(content.as_bytes());
     format!("\x1b]52;c;{encoded}\x1b\\")
-}
-
-/// Write `content` to the system clipboard via OSC 52. Errors only surface
-/// I/O problems on stdout; whether the terminal actually honored the
-/// sequence is not observable from here.
-pub fn copy(content: &str) -> io::Result<()> {
-    let mut stdout = io::stdout();
-    stdout.write_all(format_osc52(content).as_bytes())?;
-    stdout.flush()
 }
 
 fn base64_encode(input: &[u8]) -> String {
@@ -49,9 +70,6 @@ mod tests {
 
     #[test]
     fn osc52_wraps_base64_payload_in_escape_sequence() {
-        // "hi" → "aGk=" in base64. The full sequence is the OSC introducer
-        // (ESC ]), the 52;c; selector for the system clipboard, the payload,
-        // and the ST terminator (ESC \).
         assert_eq!(format_osc52("hi"), "\x1b]52;c;aGk=\x1b\\");
     }
 
@@ -62,8 +80,6 @@ mod tests {
 
     #[test]
     fn base64_known_vectors() {
-        // RFC 4648 test vectors plus a UTF-8 case to confirm we encode bytes,
-        // not chars.
         assert_eq!(base64_encode(b""), "");
         assert_eq!(base64_encode(b"f"), "Zg==");
         assert_eq!(base64_encode(b"fo"), "Zm8=");

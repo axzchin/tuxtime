@@ -41,10 +41,14 @@ pub enum Mode {
     /// Theme picker dialog — j/k to preview themes, Enter to accept,
     /// Esc to revert.
     PickTheme,
-    /// First-run welcome prompt, shown when `tuxedo` is launched with no
+    /// First-run welcome prompt, shown when `tuxtime` is launched with no
     /// target and no `./todo.txt` exists. `c` creates `./todo.txt`, `s`
     /// opens the bundled sample, `q`/`Esc` quits without creating anything.
     Welcome,
+    /// Daily/weekly timesheet summary overlay.
+    Timesheet,
+    /// Idle nudge popup — shown when no timer has been running for the configured duration.
+    IdleNudge,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

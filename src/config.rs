@@ -1,6 +1,6 @@
 //! Persisted UI preferences, located per the XDG Base Directory Specification.
 //!
-//! Path: `${XDG_CONFIG_HOME:-$HOME/.config}/tuxedo/config.toml`
+//! Path: `${XDG_CONFIG_HOME:-$HOME/.config}/tuxtime/config.toml`
 //!
 //! Format: simple `key = value` lines. Lines starting with `#` and blank lines
 //! are ignored. Unknown keys are ignored so older binaries won't choke on
@@ -49,6 +49,10 @@ pub struct Config {
     /// this only affects display. Serialized as `hide_keys = a, b, c`.
     pub hidden_keys: Vec<String>,
     pub week_start: Option<WeekStart>,
+    /// Seconds of inactivity before nudging the user to start a timer (default 900 = 15 min).
+    pub idle_nudge_seconds: Option<u64>,
+    /// Seconds a timer can run before nudging (default 7200 = 2 hours).
+    pub long_timer_nudge_seconds: Option<u64>,
 }
 
 impl Config {
@@ -105,7 +109,7 @@ impl Config {
         Ok(())
     }
 
-    /// Resolve `${XDG_CONFIG_HOME:-$HOME/.config}/tuxedo/config.toml`.
+    /// Resolve `${XDG_CONFIG_HOME:-$HOME/.config}/tuxtime/config.toml`.
     /// Returns None only when neither XDG_CONFIG_HOME nor HOME is set.
     pub fn path() -> Option<PathBuf> {
         let base = crate::xdg::config_home()?;
@@ -123,7 +127,7 @@ impl Config {
     /// Construct the config path under an explicit XDG-style base directory.
     /// Used by tests to avoid mutating process env.
     pub fn path_in(xdg_base: &Path) -> PathBuf {
-        xdg_base.join("tuxedo").join("config.toml")
+        xdg_base.join("tuxtime").join("config.toml")
     }
 }
 
@@ -169,6 +173,8 @@ fn parse(s: &str) -> Config {
                     .collect();
             }
             "week_start" => c.week_start = v.parse().ok(),
+            "idle_nudge_seconds" => c.idle_nudge_seconds = v.parse().ok(),
+            "long_timer_nudge_seconds" => c.long_timer_nudge_seconds = v.parse().ok(),
             // Saved searches: `filter.<name> = <query>`. The name is the
             // (trimmed) text after the `filter.` prefix; the query is the
             // (unquoted) value, which may itself contain `=`. A repeated
@@ -191,7 +197,7 @@ fn parse(s: &str) -> Config {
 }
 
 fn serialize(c: &Config) -> String {
-    let mut out = String::from("# tuxedo config\n");
+    let mut out = String::from("# tuxtime config\n");
     // writeln! against a String is infallible; the unwrap can never fire.
     if let Some(v) = &c.theme {
         let _ = writeln!(out, "theme = {v}");
@@ -238,6 +244,12 @@ fn serialize(c: &Config) -> String {
     if let Some(v) = c.week_start {
         let _ = writeln!(out, "week_start = {v}");
     }
+    if let Some(v) = c.idle_nudge_seconds {
+        let _ = writeln!(out, "idle_nudge_seconds = {v}");
+    }
+    if let Some(v) = c.long_timer_nudge_seconds {
+        let _ = writeln!(out, "long_timer_nudge_seconds = {v}");
+    }
     out
 }
 
@@ -283,6 +295,8 @@ mod tests {
             notes_dir: Some("~/notes".into()),
             hidden_keys: vec!["uid".into(), "sync".into()],
             week_start: Some(WeekStart::Sunday),
+            idle_nudge_seconds: Some(900),
+            long_timer_nudge_seconds: Some(7200),
         };
 
         let s = serialize(&c);
@@ -414,14 +428,14 @@ mod tests {
     #[test]
     fn save_then_load_via_explicit_path() {
         let base = std::env::temp_dir().join(format!(
-            "tuxedo-test-{}-{:?}",
+            "tuxtime-test-{}-{:?}",
             std::process::id(),
             std::thread::current().id()
         ));
         let _ = fs::remove_dir_all(&base);
         let path = Config::path_in(&base);
         assert!(path.starts_with(&base));
-        assert!(path.ends_with("tuxedo/config.toml"));
+        assert!(path.ends_with("tuxtime/config.toml"));
 
         let written = Config {
             theme: Some("Dawn".into()),
@@ -439,6 +453,8 @@ mod tests {
             notes_dir: Some("/tmp/notes".into()),
             hidden_keys: vec!["uid".into()],
             week_start: Some(WeekStart::Sunday),
+            idle_nudge_seconds: None,
+            long_timer_nudge_seconds: None,
         };
         written.save_to(&path).expect("save should succeed");
         assert!(path.exists());

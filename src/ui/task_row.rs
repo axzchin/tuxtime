@@ -19,6 +19,10 @@ pub struct RowOpts<'a> {
     /// rendered body. Empty (the common case) means render everything,
     /// byte-for-byte as before.
     pub hidden_keys: &'a [String],
+    /// True when a timer is actively running on this task.
+    pub timer_running: bool,
+    /// Live elapsed seconds for the running timer, if applicable.
+    pub timer_elapsed: Option<u64>,
 }
 
 pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<'a> {
@@ -43,12 +47,18 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
     // status glyph + priority box
     let glyph = if task.done {
         "✓ "
+    } else if opts.timer_running {
+        "▶ "
     } else if opts.cursor {
         "▸ "
     } else {
         "  "
     };
-    let glyph_color = if task.done { theme.done } else { theme.accent };
+    let glyph_color = if task.done {
+        theme.done
+    } else {
+        theme.accent
+    };
     let mut glyph_style = Style::default().fg(glyph_color);
     if opts.cursor {
         glyph_style = glyph_style.add_modifier(Modifier::BOLD);
@@ -133,7 +143,22 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
     } else {
         Style::default()
     };
-    Line::from(spans).style(line_style)
+    let mut line = Line::from(spans).style(line_style);
+
+    // Append live elapsed timer on the right when timer is running.
+    if opts.timer_running
+        && let Some(elapsed) = opts.timer_elapsed
+    {
+            let h = elapsed / 3600;
+            let m = (elapsed % 3600) / 60;
+            let s = elapsed % 60;
+            let timer_text = format!(" [{:02}:{:02}:{:02}]", h, m, s);
+            line.spans.push(Span::styled(
+                timer_text,
+                Style::default().fg(theme.accent),
+            ));
+    }
+    line
 }
 
 fn push_token_spans<'a>(
@@ -376,6 +401,8 @@ mod tests {
             match_term: Some("a"),
             today: "2026-05-06",
             hidden_keys: &[],
+            timer_running: false,
+            timer_elapsed: None,
         };
         // Build must not panic; we don't assert on the rendered spans.
         let _ = build_line(&task, opts, &MUTED);
@@ -397,6 +424,8 @@ mod tests {
             match_term: Some("cade"),
             today: "2026-05-06",
             hidden_keys: &[],
+            timer_running: false,
+            timer_elapsed: None,
         };
         let line = build_line(&task, opts, &MUTED);
         let highlight_bg = MUTED.matched;
@@ -425,6 +454,8 @@ mod tests {
             match_term: None,
             today: "2026-05-06",
             hidden_keys: hidden,
+            timer_running: false,
+            timer_elapsed: None,
         };
         let line = build_line(&task, opts, &MUTED);
         line.spans
@@ -492,6 +523,8 @@ mod tests {
             match_term: None,
             today: "2026-05-06",
             hidden_keys: &[],
+            timer_running: false,
+            timer_elapsed: None,
         };
         let line = build_line(&task, opts, &MUTED);
         let url_span = line
@@ -523,6 +556,8 @@ mod tests {
             match_term: None,
             today: "2026-05-06",
             hidden_keys: &[],
+            timer_running: false,
+            timer_elapsed: None,
         };
         let line = build_line(&task, opts, &MUTED);
         let url_span = line

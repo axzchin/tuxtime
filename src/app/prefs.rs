@@ -1,7 +1,6 @@
 use std::io;
 
 use super::types::{Density, Sort};
-use crate::app::WeekStart;
 use crate::config::Config;
 use crate::theme::{self, Theme};
 
@@ -38,7 +37,10 @@ pub struct Prefs {
     /// Metadata keys whose `key:value` tokens are hidden from task rows.
     /// Config-only (no in-app toggle); see `Config::hidden_keys`.
     pub hidden_keys: Vec<String>,
-    pub week_start: WeekStart,
+    /// Seconds of inactivity before nudging the user to start a timer.
+    pub idle_nudge_seconds: u64,
+    /// Seconds a timer can run before nudging the user.
+    pub long_timer_nudge_seconds: u64,
 }
 
 impl Prefs {
@@ -61,7 +63,8 @@ impl Prefs {
             show_done: cfg.show_done.unwrap_or(false),
             show_future: cfg.show_future.unwrap_or(false),
             hidden_keys: cfg.hidden_keys,
-            week_start: cfg.week_start.unwrap_or(WeekStart::Sunday),
+            idle_nudge_seconds: cfg.idle_nudge_seconds.unwrap_or(900),
+            long_timer_nudge_seconds: cfg.long_timer_nudge_seconds.unwrap_or(7200),
         }
     }
 
@@ -128,14 +131,6 @@ impl Prefs {
         self.show_future = !self.show_future;
     }
 
-    pub fn cycle_week_start(&mut self) -> String {
-        self.week_start = match self.week_start {
-            WeekStart::Sunday => WeekStart::Monday,
-            WeekStart::Monday => WeekStart::Sunday,
-        };
-        format!("week_start: {}", self.week_start)
-    }
-
     /// Persist to the XDG config path. Returns the IO error so the caller
     /// can flash it (writing to stderr from inside the alt-screen would
     /// corrupt the TUI). Saving is best-effort — callers that don't care
@@ -144,7 +139,9 @@ impl Prefs {
     /// Loads the on-disk config first so non-pref fields (like
     /// `share_token` / `share_port`, owned by the capture server) are
     /// preserved across pref toggles.
-    pub fn save(&self) -> io::Result<()> {
+    /// `week_start` lives on `App`, not on `Prefs`, so callers must pass it
+    /// in so it is persisted alongside the other preferences.
+    pub fn save(&self, week_start: crate::app::WeekStart) -> io::Result<()> {
         let mut cfg = Config::load();
         cfg.theme = Some(self.theme().name.to_string());
         cfg.density = Some(self.density);
@@ -156,6 +153,7 @@ impl Prefs {
         cfg.show_done = Some(self.show_done);
         cfg.show_future = Some(self.show_future);
         cfg.hidden_keys = self.hidden_keys.clone();
+        cfg.week_start = Some(week_start);
         cfg.save()
     }
 }

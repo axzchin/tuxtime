@@ -35,6 +35,7 @@ pub enum SlashKind {
     Priority,
     Project,
     Context,
+    Duration,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -83,6 +84,12 @@ pub const SLASH_ENTRIES: &[SlashEntry] = &[
         description: "tool, place or person",
         cmd: "/ctx",
         kind: SlashKind::Context,
+    },
+    SlashEntry {
+        label: "Duration",
+        description: "time spent: 90 (min), 1.5h, 14:30, 9am",
+        cmd: "/dur",
+        kind: SlashKind::Duration,
     },
 ];
 
@@ -152,12 +159,32 @@ pub struct PriorityChooserState {
     pub selected: u8,
 }
 
+/// Time-preset picker for `dur:`. Shows common billable increments.
+#[derive(Debug, Clone)]
+pub struct DurationPickerState {
+    /// Index into the preset list.
+    pub selected: usize,
+    /// Optional trigger anchor, set when auto-triggered by typing `dur:`.
+    pub anchor: Option<usize>,
+}
+
+/// Time presets for the duration picker: (label, description, seconds).
+pub const DURATION_PRESETS: &[(&str, &str, u64)] = &[
+    ("6m", "0.1h", 360),
+    ("15m", "0.3h", 900),
+    ("30m", "0.5h", 1800),
+    ("1h", "1.0h", 3600),
+    ("1.5h", "1.5h", 5400),
+    ("2h", "2.0h", 7200),
+];
+
 #[derive(Debug, Clone)]
 pub enum DraftOverlay {
     SlashMenu(SlashMenuState),
     Calendar(CalendarState),
     RecurrenceBuilder(RecurrenceBuilderState),
     PriorityChooser(PriorityChooserState),
+    DurationPicker(DurationPickerState),
 }
 
 /// Discriminator-only view of `DraftOverlay`, suitable for key-dispatch matches
@@ -168,15 +195,17 @@ pub enum OverlayKind {
     Calendar,
     RecurrenceBuilder,
     PriorityChooser,
+    DurationPicker,
 }
 
 impl DraftOverlay {
-    pub fn kind(&self) -> OverlayKind {
+    pub    fn kind(&self) -> OverlayKind {
         match self {
             DraftOverlay::SlashMenu(_) => OverlayKind::SlashMenu,
             DraftOverlay::Calendar(_) => OverlayKind::Calendar,
             DraftOverlay::RecurrenceBuilder(_) => OverlayKind::RecurrenceBuilder,
             DraftOverlay::PriorityChooser(_) => OverlayKind::PriorityChooser,
+            DraftOverlay::DurationPicker(_) => OverlayKind::DurationPicker,
         }
     }
 }
@@ -236,7 +265,7 @@ impl App {
         }
         let colon_pos = cursor - 1;
         // Try longest keys first so `rec` doesn't shadow a hypothetical `re`.
-        for (key, kind) in [("rec", KvKind::Rec), ("due", KvKind::Due), ("t", KvKind::T)] {
+        for (key, kind) in [("rec", KvKind::Rec), ("due", KvKind::Due), ("t", KvKind::T), ("dur", KvKind::Dur)] {
             if let Some(key_start) = match_key_before(text, colon_pos, key) {
                 match kind {
                     KvKind::Due => {
@@ -247,6 +276,9 @@ impl App {
                     }
                     KvKind::Rec => {
                         self.open_recurrence_builder_anchored(Some(key_start));
+                    }
+                    KvKind::Dur => {
+                        self.open_duration_picker_anchored(Some(key_start));
                     }
                 }
                 return;
@@ -377,10 +409,18 @@ impl App {
             SlashKind::Priority => self.open_priority_chooser(),
             SlashKind::Project => self.insert_sigil_at_cursor('+'),
             SlashKind::Context => self.insert_sigil_at_cursor('@'),
+            SlashKind::Duration => self.insert_text_at_cursor("dur:"),
         }
     }
 
     fn insert_sigil_at_cursor(&mut self, sigil: char) {
+        self.insert_text_at_cursor(&sigil.to_string());
+    }
+
+    /// Insert arbitrary text at the current cursor position, with a leading
+    /// space if the cursor isn't at BOL or after whitespace. Used by the
+    /// slash menu to insert `dur:` (and potentially other prefix literals).
+    fn insert_text_at_cursor(&mut self, text: &str) {
         let pos = self.draft.cursor();
         let needs_space = pos > 0
             && self
@@ -391,9 +431,9 @@ impl App {
                 .copied()
                 .is_some_and(|b| !b.is_ascii_whitespace());
         let insert = if needs_space {
-            format!(" {sigil}")
+            format!(" {text}")
         } else {
-            sigil.to_string()
+            text.to_string()
         };
         self.draft.replace_token(pos, pos, &insert);
     }
@@ -757,6 +797,61 @@ impl App {
 }
 
 // ---------------------------------------------------------------------------
+// Duration picker (time presets)
+// ---------------------------------------------------------------------------
+
+impl App {
+    pub fn open_duration_picker(&mut self) {
+        self.open_duration_picker_anchored(None);
+    }
+
+    pub fn open_duration_picker_anchored(&mut self, anchor: Option<usize>) {
+        self.draft
+            .set_overlay(Some(DraftOverlay::DurationPicker(DurationPickerState {
+                selected: 0,
+                anchor,
+            })));
+    }
+
+    pub fn duration_state(&self) -> Option<&DurationPickerState> {
+        match self.draft.overlay()? {
+            DraftOverlay::DurationPicker(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub fn duration_step(&mut self, forward: bool) {
+        let Some(DraftOverlay::DurationPicker(s)) = self.draft.overlay_mut() else {
+            return;
+        };
+        let n = DURATION_PRESETS.len();
+        let cur = s.selected.min(n - 1);
+        s.selected = if forward {
+            (cur + 1) % n
+        } else {
+            (cur + n - 1) % n
+        };
+    }
+
+    pub fn duration_accept(&mut self) {
+        let Some(DraftOverlay::DurationPicker(s)) = self.draft.overlay() else {
+            return;
+        };
+        let anchor = s.anchor;
+        let (_label, _desc, secs) = DURATION_PRESETS[s.selected];
+        self.draft.set_overlay(None);
+        if let Some(a) = anchor {
+            strip_trigger_literal(self, "dur", a);
+        }
+        self.apply_kv("dur", Some(&secs.to_string()));
+    }
+
+    pub fn duration_cancel(&mut self) {
+        self.draft.set_overlay(None);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // apply_* — write metadata back into the draft buffer
 // ---------------------------------------------------------------------------
 
@@ -850,6 +945,7 @@ enum KvKind {
     Due,
     T,
     Rec,
+    Dur,
 }
 
 /// True when `text[colon_pos - key.len() .. colon_pos] == key` and the char
@@ -1126,12 +1222,26 @@ mod tests {
         let mut app = build_app("");
         app.draft_insert_char('/');
         app.maybe_open_slash_menu();
-        // Typing `du` narrows to "Due date".
+        // Typing `due` narrows to "Due date" only (not Duration).
         app.draft_insert_char('d');
         app.draft_insert_char('u');
+        app.draft_insert_char('e');
         let matches = app.slash_matches();
         assert!(matches.iter().any(|e| e.kind == SlashKind::Due));
         assert!(matches.iter().all(|e| e.kind == SlashKind::Due));
+    }
+
+    #[test]
+    fn slash_menu_filter_dur_matches_duration() {
+        let mut app = build_app("");
+        app.draft_insert_char('/');
+        app.maybe_open_slash_menu();
+        app.draft_insert_char('d');
+        app.draft_insert_char('u');
+        app.draft_insert_char('r');
+        let matches = app.slash_matches();
+        assert!(matches.iter().any(|e| e.kind == SlashKind::Duration));
+        assert!(matches.iter().all(|e| e.kind == SlashKind::Duration));
     }
 
     #[test]

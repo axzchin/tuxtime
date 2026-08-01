@@ -56,6 +56,12 @@ pub struct Task {
     /// filter parses it on demand via `crate::threshold`.
     pub threshold: Option<String>,
     pub notes: Vec<String>,
+    /// ISO 8601 datetime with seconds — present only while a timer is
+    /// actively running on this task. `None` when no timer is active.
+    pub start: Option<String>,
+    /// Accumulated tracked time in integer seconds. `None` or `0` means no
+    /// time has been tracked yet. Incremented when a timer is stopped.
+    pub dur: Option<u64>,
 }
 
 pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
@@ -94,6 +100,8 @@ pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
     let rec = find_kv(rest, "rec");
     let threshold = find_kv(rest, "t");
     let notes = find_quoted_kv(rest, "note");
+    let start = find_kv(rest, "start");
+    let dur = find_kv(rest, "dur").and_then(|v| v.parse::<u64>().ok());
     let clean_raw = body_after_quoted_kv(line);
 
     Ok(Task {
@@ -109,6 +117,8 @@ pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
         rec,
         threshold,
         notes,
+        start,
+        dur,
     })
 }
 
@@ -632,5 +642,40 @@ mod tests {
         for (a, b) in parsed.iter().zip(reparsed.iter()) {
             assert_eq!(a.raw, b.raw);
         }
+    }
+
+    #[test]
+    fn parses_start_tag() {
+        let t = parse_line("Draft motion +Smith @drafting start:2026-07-31T14:30:25 dur:3600").unwrap();
+        assert_eq!(t.start.as_deref(), Some("2026-07-31T14:30:25"));
+        assert_eq!(t.dur, Some(3600));
+    }
+
+    #[test]
+    fn parses_dur_only_no_start() {
+        let t = parse_line("Draft motion +Smith @drafting dur:1800").unwrap();
+        assert_eq!(t.start, None);
+        assert_eq!(t.dur, Some(1800));
+    }
+
+    #[test]
+    fn parses_task_without_time_tags() {
+        let t = parse_line("Call dentist @phone +health due:2026-05-08").unwrap();
+        assert_eq!(t.start, None);
+        assert_eq!(t.dur, None);
+    }
+
+    #[test]
+    fn body_only_strips_start_and_dur() {
+        assert_eq!(
+            body_only("Draft motion +Smith @drafting start:2026-07-31T14:30:25 dur:3600"),
+            "Draft motion",
+        );
+    }
+
+    #[test]
+    fn invalid_dur_value_returns_none() {
+        let t = parse_line("task dur:notanumber").unwrap();
+        assert_eq!(t.dur, None);
     }
 }

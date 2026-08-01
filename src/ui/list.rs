@@ -82,6 +82,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 },
                 today: app.today(),
                 hidden_keys: &app.prefs.hidden_keys,
+                timer_running: app.is_timer_running_on(abs),
+                timer_elapsed: if app.is_timer_running_on(abs) {
+                    app.timer_elapsed_secs()
+                } else {
+                    None
+                },
             };
             if i == app.cursor {
                 cursor_line = Some(lines.len());

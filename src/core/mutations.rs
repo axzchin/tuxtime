@@ -1,7 +1,10 @@
+use std::time::Instant;
+
 use super::Store;
 use super::outcome::{
     AddOutcome, BulkCompleteOutcome, BulkDeleteOutcome, CompleteOutcome, DeleteOutcome,
-    EditOutcome, PriorityOutcome, Reconcile, StoreError, TagOutcome,
+    EditOutcome, PriorityOutcome, Reconcile, StoreError, TagOutcome, TimerOutcome,
+    TimerQuitOutcome,
 };
 use crate::recurrence::{self, RecSpec};
 use crate::todo::{self, TagError};
@@ -409,6 +412,149 @@ impl Store {
             Ok(()) => BulkDeleteOutcome::Done { deleted },
             Err(e) => BulkDeleteOutcome::Error(e),
         }
+    }
+
+    // ---- timer mutations ----
+
+    /// Toggle the timer on the task at `abs`. If a timer is already running on
+    /// another task, stop that one first. If the timer is running on this task,
+    /// stop it instead.
+    pub fn timer_toggle(&mut self, abs: usize) -> TimerOutcome {
+        match self.reconcile() {
+            Reconcile::Unchanged => {}
+            other => return TimerOutcome::Aborted(other),
+        }
+        if abs >= self.tasks.len() {
+            return TimerOutcome::OutOfRange;
+        }
+        if self.active_timer.as_ref().is_some_and(|ts| ts.task_abs == abs) {
+            return self.timer_stop();
+        }
+        if self.active_timer.is_some() {
+            let from_abs = self.active_timer.as_ref().map(|ts| ts.task_abs).unwrap_or(0);
+            let old = self.timer_stop_inner();
+            self.push_history();
+            if let TimerOutcome::Stopped { elapsed_secs, total_secs, project, activity, .. } = old {
+                let start_outcome = self.timer_start_inner(abs);
+                let to_project = self.tasks[abs].projects.first().cloned();
+                let to_activity = self.tasks[abs].contexts.first().cloned();
+                if let Err(e) = self.persist() {
+                    return TimerOutcome::Error(e);
+                }
+                if let TimerOutcome::Started { body: to_body, .. } = start_outcome {
+                    return TimerOutcome::Switched {
+                        from_abs, from_elapsed_secs: elapsed_secs, from_total_secs: total_secs,
+                        from_project: project, from_activity: activity,
+                        to_abs: abs,
+                        to_project,
+                        to_activity,
+                        to_body,
+                    };
+                }
+                return start_outcome;
+            }
+            return old;
+        }
+        self.push_history();
+        let outcome = self.timer_start_inner(abs);
+        if let Err(e) = self.persist() {
+            return TimerOutcome::Error(e);
+        }
+        outcome
+    }
+
+    pub fn stop_timer_on_quit(&mut self) -> TimerQuitOutcome {
+        if self.active_timer.is_none() {
+            return TimerQuitOutcome::NoTimer;
+        }
+        let outcome = self.timer_stop_inner();
+        if let TimerOutcome::Stopped { abs, elapsed_secs, total_secs, .. } = outcome {
+            self.push_history();
+            if let Err(e) = self.persist() {
+                return TimerQuitOutcome::Error(e);
+            }
+            return TimerQuitOutcome::Stopped { abs, elapsed_secs, total_secs };
+        }
+        if let TimerOutcome::Error(e) = outcome { TimerQuitOutcome::Error(e) } else { TimerQuitOutcome::NoTimer }
+    }
+
+    fn timer_start_inner(&mut self, abs: usize) -> TimerOutcome {
+        let now = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
+        let task = &self.tasks[abs];
+        let body = todo::body_after_priority(&task.raw);
+        let prefix = &task.raw[..task.raw.len() - body.len()];
+        let mut new_tokens: Vec<String> = Vec::new();
+        let mut has_start = false;
+        for tok in body.split_whitespace() {
+            if tok.starts_with("start:") {
+                new_tokens.push(format!("start:{now}"));
+                has_start = true;
+            } else {
+                new_tokens.push(tok.to_string());
+            }
+        }
+        if !has_start {
+            new_tokens.push(format!("start:{now}"));
+        }
+        let new_raw = if prefix.is_empty() { new_tokens.join(" ") } else { format!("{}{}", prefix, new_tokens.join(" ")) };
+        match todo::parse_line(&new_raw) {
+            Ok(parsed) => {
+                self.tasks[abs] = parsed;
+                self.active_timer = Some(super::TimerState { task_abs: abs, started_at: Instant::now() });
+                let t = &self.tasks[abs];
+                TimerOutcome::Started {
+                    abs,
+                    project: t.projects.first().cloned(),
+                    activity: t.contexts.first().cloned(),
+                    body: todo::body_only(&t.raw),
+                }
+            }
+            Err(e) => TimerOutcome::Error(StoreError::Parse(e)),
+        }
+    }
+
+    fn timer_stop_inner(&mut self) -> TimerOutcome {
+        let Some(ts) = self.active_timer.take() else { return TimerOutcome::OutOfRange; };
+        let elapsed = ts.started_at.elapsed().as_secs();
+        let abs = ts.task_abs;
+        if abs >= self.tasks.len() { return TimerOutcome::OutOfRange; }
+        let task = &self.tasks[abs];
+        let existing_dur = task.dur.unwrap_or(0);
+        let new_total = existing_dur + elapsed;
+        let body = todo::body_after_priority(&task.raw);
+        let prefix = &task.raw[..task.raw.len() - body.len()];
+        let mut new_tokens: Vec<String> = Vec::new();
+        let mut has_dur = false;
+        for tok in body.split_whitespace() {
+            if tok.starts_with("start:") { continue; }
+            if tok.starts_with("dur:") {
+                new_tokens.push(format!("dur:{new_total}"));
+                has_dur = true;
+            } else {
+                new_tokens.push(tok.to_string());
+            }
+        }
+        if !has_dur { new_tokens.push(format!("dur:{new_total}")); }
+        let new_raw = if prefix.is_empty() { new_tokens.join(" ") } else { format!("{}{}", prefix, new_tokens.join(" ")) };
+        match todo::parse_line(&new_raw) {
+            Ok(parsed) => {
+                let project = parsed.projects.first().cloned();
+                let activity = parsed.contexts.first().cloned();
+                let body = todo::body_only(&parsed.raw);
+                self.tasks[abs] = parsed;
+                TimerOutcome::Stopped { abs, elapsed_secs: elapsed, total_secs: new_total, project, activity, body }
+            }
+            Err(e) => TimerOutcome::Error(StoreError::Parse(e)),
+        }
+    }
+
+    fn timer_stop(&mut self) -> TimerOutcome {
+        let outcome = self.timer_stop_inner();
+        if matches!(outcome, TimerOutcome::Stopped { .. }) {
+            self.push_history();
+            if let Err(e) = self.persist() { return TimerOutcome::Error(e); }
+        }
+        outcome
     }
 }
 

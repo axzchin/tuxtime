@@ -190,3 +190,45 @@ impl DrainReport {
         self.merged == 0 && self.skipped == 0 && self.error.is_none()
     }
 }
+
+/// Outcome of starting or stopping the timer on a task.
+#[derive(Debug)]
+pub enum TimerOutcome {
+    Started {
+        abs: usize,
+        /// The project of the started task, if any.
+        project: Option<String>,
+        activity: Option<String>,
+        body: String,
+    },
+    Stopped {
+        abs: usize,
+        elapsed_secs: u64,
+        total_secs: u64,
+        project: Option<String>,
+        activity: Option<String>,
+        body: String,
+    },
+    Switched {
+        from_abs: usize,
+        from_elapsed_secs: u64,
+        from_total_secs: u64,
+        from_project: Option<String>,
+        from_activity: Option<String>,
+        to_abs: usize,
+        to_project: Option<String>,
+        to_activity: Option<String>,
+        to_body: String,
+    },
+    OutOfRange,
+    Aborted(Reconcile),
+    Error(StoreError),
+}
+
+/// Outcome of stopping the timer on quit.
+#[derive(Debug)]
+pub enum TimerQuitOutcome {
+    Stopped { abs: usize, elapsed_secs: u64, total_secs: u64 },
+    NoTimer,
+    Error(StoreError),
+}

@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use crate::todo::{self, Task};
 
-pub const DEFAULT_NOTES_SUBDIR: &str = "projects/tuxedo-tasks";
+pub const DEFAULT_NOTES_SUBDIR: &str = "projects/tuxtime-tasks";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NoteTarget {
@@ -224,12 +224,12 @@ mod tests {
 
         assert_eq!(
             target.rel,
-            "projects/tuxedo-tasks/reformular-relatorio-diario-eventos-para-slack.md"
+            "projects/tuxtime-tasks/reformular-relatorio-diario-eventos-para-slack.md"
         );
         assert_eq!(
             target.path,
             PathBuf::from(
-                "/home/me/notes/projects/tuxedo-tasks/reformular-relatorio-diario-eventos-para-slack.md"
+                "/home/me/notes/projects/tuxtime-tasks/reformular-relatorio-diario-eventos-para-slack.md"
             )
         );
         assert!(!target.existed_in_task);

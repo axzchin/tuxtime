@@ -247,6 +247,26 @@ pub const ENTRIES: &[PaletteEntry] = &[
         keys: "W",
         action: Action::ChangeWeekStart,
     },
+    PaletteEntry {
+        label: "start/stop timer on selected task",
+        keys: "t",
+        action: Action::TimerStartStop,
+    },
+    PaletteEntry {
+        label: "manual time entry",
+        keys: "M",
+        action: Action::ManualTimeEntry,
+    },
+    PaletteEntry {
+        label: "copy today's narratives to clipboard",
+        keys: "C",
+        action: Action::CopyNarratives,
+    },
+    PaletteEntry {
+        label: "open timesheet summary",
+        keys: "V",
+        action: Action::OpenTimesheet,
+    },
 ];
 
 #[derive(Debug, Default, Clone)]

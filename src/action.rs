@@ -59,6 +59,16 @@ pub enum Action {
     /// Open the theme picker dialog (j/k to preview, Enter to accept).
     OpenThemePicker,
     ChangeWeekStart,
+    /// `t` — start/stop timer on the selected task.
+    TimerStartStop,
+    /// `M` — open the manual time entry dialog.
+    ManualTimeEntry,
+    /// `C` — copy today's narratives for the current project+activity.
+    CopyNarratives,
+    /// Open the daily/weekly timesheet summary overlay.
+    OpenTimesheet,
+    /// Dismiss the idle-nudge popup.
+    DismissNudge,
 }
 
 impl Action {
@@ -112,6 +122,11 @@ impl Action {
             "open_share" | "share" => Some(Self::OpenShare),
             "open_theme_picker" | "theme_picker" => Some(Self::OpenThemePicker),
             "change_week_start" => Some(Self::ChangeWeekStart),
+            "timer_start_stop" | "timer" => Some(Self::TimerStartStop),
+            "manual_time_entry" | "manual_entry" => Some(Self::ManualTimeEntry),
+            "copy_narratives" | "copy_time" => Some(Self::CopyNarratives),
+            "open_timesheet" | "timesheet" => Some(Self::OpenTimesheet),
+            "dismiss_nudge" => Some(Self::DismissNudge),
             _ => None,
         }
     }

@@ -2,7 +2,7 @@
 source: tests/snapshots.rs
 expression: buffer_to_text(&buf)
 ---
- FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tas DETAIL                           
+ FILTERS                   ▶▮◀ /tmp/tuxtime-snapshot.txt  •  15 ta DETAIL                           
                                                                                                     
  PROJECTS                  (2)  PRIORITY A  ────────────────────── priority  (A)                    
    +work             4      1 ▸ (A) Finish Q2 board deck +work @la created   2026-05-01             
@@ -22,15 +22,15 @@ expression: buffer_to_text(&buf)
                            12 │  format: (A) Buy milk +shop @home due│                              
                            13 │                                      │                              
                            14 └──────────────────────────────────────┘                              
-                           15     ┌──────────────────────────────────────────────────────────┐      
-                                  │ ATTACH METADATA                                          │      
-                                  │  Due date    when this needs doing                  /due │      
-                                  │  Recurrence  repeat after completing                /rec │      
-                                  │  Threshold   hide until this date                     /t │      
-                                  │  Priority    A · B · C                             /prio │      
-                                  │  + Project   attach to a project                   /proj │      
-                                  │  @ Context   tool, place or person                  /ctx │      
-                                  │                                                          │      
-                                  │  ↑↓ pick · Enter insert · Esc dismiss · type to filter   │      
-                                  └──────────────────────────────────────────────────────────┘      
- INSERT   Enter save · Esc normal                            15 open · 2026-05-06 · tuxedo 2026.7.1
+                           15     ┌───────────────────────────────────────────────────────────────┐ 
+                                  │ ATTACH METADATA                                               │ 
+                                  │  Due date    when this needs doing                       /due │ 
+                                  │  Recurrence  repeat after completing                     /rec │ 
+                                  │  Threshold   hide until this date                          /t │ 
+                                  │  Priority    A · B · C                                  /prio │ 
+                                  │  + Project   attach to a project                        /proj │ 
+                                  │  @ Context   tool, place or person                       /ctx │ 
+                                  │  Duration    time spent: 90 (min), 1.5h, 14:30, 9am      /dur │ 
+                                  │                                                               │ 
+                                  │  ↑↓ pick · Enter insert · Esc dismiss · type to filter        │ 
+ INSERT   Enter save · Esc normal └───────────────────────────────────────────────────────────────┘

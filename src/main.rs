@@ -10,15 +10,15 @@ use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, Ke
 
 use std::io::Write;
 
-use tuxedo::action::Action;
-use tuxedo::app::{AddOutcome, App, CalendarTarget, DialogInputMode, Mode, OverlayKind, View};
-use tuxedo::cli;
-use tuxedo::config::Config;
-use tuxedo::config_watcher;
-use tuxedo::keybinds::{KeyBindings, ResolvedKey};
-use tuxedo::theme;
-use tuxedo::ui::hyperlinks;
-use tuxedo::{clipboard, todo, ui, update};
+use tuxtime::action::Action;
+use tuxtime::app::{AddOutcome, App, CalendarTarget, DialogInputMode, Mode, OverlayKind, View};
+use tuxtime::cli;
+use tuxtime::config::Config;
+use tuxtime::config_watcher;
+use tuxtime::keybinds::{KeyBindings, ResolvedKey};
+use tuxtime::theme;
+use tuxtime::ui::hyperlinks;
+use tuxtime::{clipboard, todo, ui, update};
 
 const EVENT_POLL: Duration = Duration::from_millis(250);
 
@@ -26,7 +26,7 @@ fn main() -> Result<()> {
     let argv: Vec<String> = std::env::args().skip(1).collect();
     // A recognized subcommand (possibly preceded by `-f`/`--json`) runs the
     // one-shot CLI and exits; otherwise we fall through to the TUI.
-    if let Some(code) = tuxedo::cmd::run(&argv)? {
+    if let Some(code) = tuxtime::cmd::run(&argv)? {
         std::process::exit(code);
     }
     let arg = argv.first().cloned();
@@ -38,7 +38,7 @@ fn main() -> Result<()> {
             return Ok(());
         }
         Some("--version") | Some("-V") => {
-            println!("tuxedo {}", env!("CARGO_PKG_VERSION"));
+            println!("tuxtime {}", env!("CARGO_PKG_VERSION"));
             return Ok(());
         }
         Some("update") => {
@@ -47,8 +47,8 @@ fn main() -> Result<()> {
         }
         Some("--sample") => (cli::sample_path()?, Mode::Normal),
         Some(s) if s.starts_with('-') => {
-            eprintln!("tuxedo: unknown option: {s}");
-            eprintln!("try `tuxedo --help`");
+            eprintln!("tuxtime: unknown option: {s}");
+            eprintln!("try `tuxtime --help`");
             std::process::exit(2);
         }
         _ => match cli::resolve_target(arg)? {
@@ -102,7 +102,7 @@ fn main() -> Result<()> {
         0 => {}
         1 => app_state.flash(theme_warnings.into_iter().next().expect("len==1")),
         n => app_state.flash(format!(
-            "{n} theme(s) skipped — check ~/.config/tuxedo/themes/"
+            "{n} theme(s) skipped — check ~/.config/tuxtime/themes/"
         )),
     }
     if std::env::var_os("TUXEDO_NO_UPDATE_CHECK").is_none() {
@@ -110,7 +110,7 @@ fn main() -> Result<()> {
     }
 
     let terminal = ratatui::init();
-    // Give the window/tab a consistent `tuxedo <path>` title across terminals
+    // Give the window/tab a consistent `tuxtime <path>` title across terminals
     // and operating systems, shortening long paths to fit a fixed budget.
     let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
     let title = ui::title::terminal_title(&path, home.as_deref(), ui::title::DEFAULT_BUDGET);
@@ -118,7 +118,7 @@ fn main() -> Result<()> {
     let result = run(terminal, &mut app_state, &keybinds, config_rx);
     ratatui::restore();
     // Clear the title on exit so the shell retitles on its next prompt rather
-    // than leaving `tuxedo …` behind.
+    // than leaving `tuxtime …` behind.
     let _ = crossterm::execute!(io::stdout(), crossterm::terminal::SetTitle(""));
     // Print the file path *after* restoring the terminal so the message
     // survives in the user's scrollback rather than being eaten by the
@@ -126,15 +126,15 @@ fn main() -> Result<()> {
     // rebound to the sample. Skip the line if the user quit the welcome
     // prompt without choosing — no file was opened.
     if app_state.mode != Mode::Welcome {
-        eprintln!("tuxedo: {}", app_state.file_path.display());
+        eprintln!("tuxtime: {}", app_state.file_path.display());
     }
     result
 }
 
 fn print_usage() {
-    println!("usage: tuxedo [FILE]                 launch the TUI");
-    println!("       tuxedo <command> [args]       run a one-shot command");
-    println!("       tuxedo update");
+    println!("usage: tuxtime [FILE]                 launch the TUI");
+    println!("       tuxtime <command> [args]       run a one-shot command");
+    println!("       tuxtime update");
     println!();
     println!("Without FILE or a command, opens ./todo.txt if present; otherwise");
     println!("prompts to create ./todo.txt here or open a sample todo.txt, in");
@@ -159,7 +159,7 @@ fn print_usage() {
     println!("  listpri, lsp [PRIORITY]   list prioritized tasks");
     println!("  listproj, lsprj           list +projects");
     println!("  listcon, lsc              list @contexts");
-    println!("  update                    print instructions for upgrading tuxedo");
+    println!("  update                    print instructions for upgrading tuxtime");
     println!();
     println!("Options:");
     println!("  -f, --force      skip confirmation prompts (e.g. for del)");
@@ -239,9 +239,18 @@ fn run(
                 }
                 _ => {}
             }
-        } else if !app.check_external_changes() {
-            // Idle tick — file changed under us; reload was performed.
-            dirty = true;
+        } else {
+            // Idle tick: check external changes and nudges.
+            if !app.check_external_changes() {
+                // File changed under us; reload was performed.
+                dirty = true;
+            } else if app.check_nudges() {
+                dirty = true;
+            } else if app.timer_running() {
+                // Timer is running and no nudge fired — still need a redraw
+                // for the live HH:MM:SS display in the status bar.
+                dirty = true;
+            }
         }
         if app.flash_should_clear() {
             app.clear_flash();
@@ -304,6 +313,12 @@ fn open_path_in_editor(path: &std::path::Path) -> Result<()> {
 }
 
 fn next_timeout(app: &App) -> Duration {
+    // When a timer is running, poll at ~1s so the status-bar HH:MM:SS ticks live.
+    let base = if app.timer_running() {
+        Duration::from_millis(500)
+    } else {
+        EVENT_POLL
+    };
     let earliest = match (app.flash_deadline(), app.chord.deadline()) {
         (Some(f), Some(c)) => Some(f.min(c)),
         (a, b) => a.or(b),
@@ -311,8 +326,8 @@ fn next_timeout(app: &App) -> Duration {
     match earliest {
         Some(deadline) => deadline
             .saturating_duration_since(Instant::now())
-            .min(EVENT_POLL),
-        None => EVENT_POLL,
+            .min(base),
+        None => base,
     }
 }
 
@@ -337,6 +352,8 @@ fn handle_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
         Mode::Share => handle_share(app, key),
         Mode::Welcome => handle_welcome(app, key),
         Mode::Normal | Mode::Visual => handle_normal(app, key, keybinds),
+        Mode::Timesheet => handle_timesheet(app, key),
+        Mode::IdleNudge => handle_idle_nudge(app, key),
     }
 }
 
@@ -532,6 +549,7 @@ fn handle_insert_normal(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Enter => {
             let outcome = if app.selection.editing().is_some() {
+                app.manual_time_entry = false;
                 app.save_edit();
                 AddOutcome::Saved
             } else {
@@ -541,12 +559,14 @@ fn handle_insert_normal(app: &mut App, key: KeyEvent) {
                 app.mode = Mode::Normal;
                 app.draft_clear();
                 app.selection.exit_edit();
+                app.manual_time_entry = false;
             }
         }
         KeyCode::Esc => {
             app.mode = Mode::Normal;
             app.draft_clear();
             app.selection.exit_edit();
+            app.manual_time_entry = false;
         }
         KeyCode::Char('h') | KeyCode::Left => app.draft_left(),
         KeyCode::Char('l') | KeyCode::Right => app.draft_right(),
@@ -598,6 +618,10 @@ fn handle_insert(app: &mut App, key: KeyEvent) {
             handle_insert_priority(app, key);
             return;
         }
+        Some(OverlayKind::DurationPicker) => {
+            handle_insert_duration(app, key);
+            return;
+        }
         Some(OverlayKind::SlashMenu) => {
             if handle_insert_slash_menu(app, key) {
                 return;
@@ -639,6 +663,7 @@ fn handle_insert(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Enter => {
             let outcome = if app.selection.editing().is_some() {
+                app.manual_time_entry = false;
                 app.save_edit();
                 AddOutcome::Saved
             } else {
@@ -756,6 +781,16 @@ fn handle_insert_priority(app: &mut App, key: KeyEvent) {
         KeyCode::Char('k') | KeyCode::Up => app.priority_step(false),
         KeyCode::Enter => app.priority_accept(),
         KeyCode::Esc => app.priority_cancel(),
+        _ => {}
+    }
+}
+
+fn handle_insert_duration(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Char('j') | KeyCode::Down => app.duration_step(true),
+        KeyCode::Char('k') | KeyCode::Up => app.duration_step(false),
+        KeyCode::Enter => app.duration_accept(),
+        KeyCode::Esc => app.duration_cancel(),
         _ => {}
     }
 }
@@ -931,7 +966,7 @@ fn handle_prompt(app: &mut App, key: KeyEvent) {
     }
 }
 
-// `Action` lives in `tuxedo::action` (see `src/action.rs`). Keeping it in the
+// `Action` lives in `tuxtime::action` (see `src/action.rs`). Keeping it in the
 // library lets the command palette enumerate every variant without pulling
 // main.rs into the dependency graph.
 
@@ -1031,6 +1066,9 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> O
         KeyCode::Char('F') => Action::ToggleShowFuture,
         KeyCode::Esc => Action::EscapeStack,
         KeyCode::Char('W') => Action::ChangeWeekStart,
+        KeyCode::Char('t') => Action::TimerStartStop,
+        KeyCode::Char('M') => Action::ManualTimeEntry,
+        KeyCode::Char('V') => Action::OpenTimesheet,
         _ => return None,
     })
 }
@@ -1080,7 +1118,10 @@ fn apply_action(app: &mut App, action: Action) {
     }
     let len = app.visible_indices().len();
     match action {
-        Action::Quit => app.should_quit = true,
+        Action::Quit => {
+            app.stop_timer_on_quit();
+            app.should_quit = true;
+        }
         Action::CursorDown => {
             if len > 0 {
                 app.cursor = (app.cursor + 1).min(len - 1);
@@ -1101,6 +1142,7 @@ fn apply_action(app: &mut App, action: Action) {
             app.mode = Mode::Insert;
             app.draft_clear();
             app.selection.exit_edit();
+            app.manual_time_entry = false;
         }
         Action::BeginEdit => {
             if let Some(abs) = app.cur_abs()
@@ -1284,8 +1326,39 @@ fn apply_action(app: &mut App, action: Action) {
             }
         }
         Action::ChangeWeekStart => {
-            app.toggle_week_start_date();
-            app.recompute_visible();
+            app.cycle_week_start();
+        }
+        Action::TimerStartStop => {
+            app.toggle_timer();
+        }
+        Action::ManualTimeEntry => {
+            // Enter full insert dialog with description pre-filled and
+            // cursor parked after "dur:" ready for time input.
+            app.draft_clear();
+            if let Some(t) = app.cur_task() {
+                let body = crate::todo::body_only(&t.raw);
+                if !body.is_empty() {
+                    app.draft_set_insert(format!("{body} dur:"));
+                } else {
+                    app.draft_set_insert("dur:".to_string());
+                }
+            } else {
+                app.draft_set_insert("dur:".to_string());
+            }
+            app.manual_time_entry = true;
+            app.mode = Mode::Insert;
+            app.selection.exit_edit();
+        }
+        Action::OpenTimesheet => {
+            app.mode = Mode::Timesheet;
+        }
+        // CopyNarratives is now handled inside the Timesheet view.
+        Action::CopyNarratives => {
+            app.flash("open the timesheet (V) to copy narratives");
+        }
+        Action::DismissNudge => {
+            app.mode = Mode::Normal;
+            app.last_timer_activity = std::time::Instant::now();
         }
     }
 }
@@ -1312,12 +1385,78 @@ fn copy_current_task(app: &mut App, body_only: bool) {
     }
 }
 
+
+fn handle_timesheet(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') => {
+            app.mode = Mode::Normal;
+            app.timesheet_cursor = 0;
+        }
+        KeyCode::Char('w') => {
+            app.timesheet_weekly = true;
+            app.timesheet_cursor = 0;
+        }
+        KeyCode::Char('d') => {
+            app.timesheet_weekly = false;
+            app.timesheet_cursor = 0;
+        }
+        KeyCode::Char('j') | KeyCode::Down => {
+            let groups = app.build_timesheet_groups();
+            if !groups.is_empty() {
+                app.timesheet_cursor = (app.timesheet_cursor + 1).min(groups.len() - 1);
+            }
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            app.timesheet_cursor = app.timesheet_cursor.saturating_sub(1);
+        }
+        KeyCode::Char('c') | KeyCode::Char('C') | KeyCode::Char('y') => {
+            let groups = app.build_timesheet_groups();
+            if groups.is_empty() {
+                app.flash("no entries to copy");
+                return;
+            }
+            // Clamp cursor to valid range before indexing.
+            let idx = app.timesheet_cursor.min(groups.len().saturating_sub(1));
+            app.timesheet_cursor = idx;
+            let (_key, _total, narratives) = &groups[idx];
+            if narratives.is_empty() {
+                app.flash("no narratives to copy");
+            } else {
+                let joined = narratives.join("; ");
+                match clipboard::copy(&joined) {
+                    Ok(()) => app.flash(format!("copied {} narrative(s)", narratives.len())),
+                    Err(e) => app.flash(format!("copy failed: {e}")),
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn handle_idle_nudge(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Char('S') => {
+            app.mode = Mode::Normal;
+            app.toggle_timer();
+        }
+        KeyCode::Char('M') => {
+            // Enter manual time entry with the full insert dialog.
+            apply_action(app, Action::ManualTimeEntry);
+        }
+        KeyCode::Char('D') | KeyCode::Esc => {
+            app.mode = Mode::Normal;
+            app.last_timer_activity = std::time::Instant::now();
+        }
+        _ => {}
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use chrono::NaiveDate;
     use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-    use tuxedo::config::Config;
+    use tuxtime::config::Config;
 
     fn key(c: char) -> KeyEvent {
         KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)
@@ -1337,7 +1476,7 @@ mod tests {
 
     fn welcome_app(name: &str) -> (App, std::path::PathBuf) {
         let path = std::env::temp_dir().join(format!(
-            "tuxedo-welcome-{name}-{}-{:?}.txt",
+            "tuxtime-welcome-{name}-{}-{:?}.txt",
             std::process::id(),
             std::thread::current().id()
         ));
@@ -1371,7 +1510,7 @@ mod tests {
         assert_eq!(app.mode, Mode::Normal);
         assert_ne!(app.file_path, path, "`s` rebinds away from the cwd target");
         assert!(
-            app.file_path.ends_with("tuxedo-sample.txt"),
+            app.file_path.ends_with("tuxtime-sample.txt"),
             "`s` opens the bundled sample, got {:?}",
             app.file_path
         );
@@ -1394,7 +1533,7 @@ mod tests {
 
     fn build_app() -> App {
         let path = std::env::temp_dir().join(format!(
-            "tuxedo-bindings-{}-{:?}.txt",
+            "tuxtime-bindings-{}-{:?}.txt",
             std::process::id(),
             std::thread::current().id()
         ));
@@ -1409,7 +1548,7 @@ mod tests {
 
     fn build_app_with_due() -> App {
         let path = std::env::temp_dir().join(format!(
-            "tuxedo-bindings-{}-{:?}.txt",
+            "tuxtime-bindings-{}-{:?}.txt",
             std::process::id(),
             std::thread::current().id()
         ));
@@ -1579,7 +1718,7 @@ mod tests {
         static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let dir =
-            std::env::temp_dir().join(format!("tuxedo-bindings-{}-{}", std::process::id(), n));
+            std::env::temp_dir().join(format!("tuxtime-bindings-{}-{}", std::process::id(), n));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("create test dir");
         let todo_path = dir.join("todo.txt");

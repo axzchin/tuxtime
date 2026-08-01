@@ -1,7 +1,8 @@
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::Style;
-use ratatui::widgets::{Block, Clear};
+use ratatui::style::{Modifier, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
 use crate::app::{App, Mode, View};
 
@@ -59,20 +60,63 @@ pub fn draw(frame: &mut Frame, app: &App) {
 
     // Determine pane widths. Sidebars apply to every view; navigation +
     // detail pane track the cursor regardless of which view is active.
+    //
+    // We compute exact Column widths instead of relying on ratatui's
+    // constraint solver, which can zero out `Length` or `Max` panes when
+    // the total exceeds the terminal width.  Sidebars get a guaranteed
+    // minimum so they never become invisible; extra space goes to the
+    // centre body (up to its desired width) and then to the sidebars.
     let show_left = app.prefs.layout.left;
     let show_right = app.prefs.layout.right;
-    let left_w = if show_left { LEFT_PANE_W } else { 0 };
-    let right_w = if show_right { RIGHT_PANE_W } else { 0 };
 
-    let constraints = match (show_left, show_right) {
+    // Minimum widths for sidebars to remain useful on narrow terminals.
+    const MIN_LEFT_W: u16 = 12;
+    const MIN_RIGHT_W: u16 = 16;
+
+    let left_desired = if show_left { LEFT_PANE_W } else { 0 };
+    let right_desired = if show_right { RIGHT_PANE_W } else { 0 };
+    let left_min = if show_left { MIN_LEFT_W } else { 0 };
+    let right_min = if show_right { MIN_RIGHT_W } else { 0 };
+
+    let available = body_area.width;
+    let total_min = left_min + MIN_BODY_W + right_min;
+
+    let (left_w, center_w, right_w) = if available <= total_min {
+        // Even minimums barely fit — give sidebars their floor, centre
+        // gets whatever is left.
+        let after_sides = available.saturating_sub(left_min + right_min);
+        (left_min, after_sides, right_min)
+    } else {
+        // Minimums fit.  Start there, then grow sidebars toward their
+        // desired widths before giving remaining space to the centre.
+        let mut extra = available - total_min;
+        let mut left = left_min;
+        let mut right = right_min;
+
+        if left < left_desired {
+            let need = left_desired - left;
+            let take = need.min(extra);
+            left += take;
+            extra -= take;
+        }
+        if right < right_desired {
+            let need = right_desired - right;
+            let take = need.min(extra);
+            right += take;
+            extra -= take;
+        }
+        (left, MIN_BODY_W + extra, right)
+    };
+
+    let constraints: Vec<Constraint> = match (show_left, show_right) {
         (true, true) => vec![
             Constraint::Length(left_w),
-            Constraint::Min(MIN_BODY_W),
+            Constraint::Length(center_w),
             Constraint::Length(right_w),
         ],
-        (true, false) => vec![Constraint::Length(left_w), Constraint::Min(MIN_BODY_W)],
-        (false, true) => vec![Constraint::Min(MIN_BODY_W), Constraint::Length(right_w)],
-        (false, false) => vec![Constraint::Min(1)],
+        (true, false) => vec![Constraint::Length(left_w), Constraint::Length(center_w)],
+        (false, true) => vec![Constraint::Length(center_w), Constraint::Length(right_w)],
+        (false, false) => vec![Constraint::Length(center_w)],
     };
     let chunks = Layout::horizontal(constraints).split(body_area);
 
@@ -86,9 +130,15 @@ pub fn draw(frame: &mut Frame, app: &App) {
     if let Some(la) = left_area {
         filters::render(frame, la, app);
     }
-    match app.view() {
-        View::List => list::render(frame, center_area, app),
-        View::Archive => archive::render(frame, center_area, app),
+    // Timesheet renders inline in the center area (not as an overlay) so the
+    // project/context sidebars and task detail pane stay fully visible.
+    if app.mode == Mode::Timesheet {
+        render_timesheet(frame, center_area, app);
+    } else {
+        match app.view() {
+            View::List => list::render(frame, center_area, app),
+            View::Archive => archive::render(frame, center_area, app),
+        }
     }
     if let Some(ra) = right_area {
         detail::render(frame, ra, app);
@@ -169,11 +219,140 @@ pub fn draw(frame: &mut Frame, app: &App) {
             frame.render_widget(Clear, r);
             welcome::render(frame, r, app);
         }
+        Mode::IdleNudge => {
+            let r = centered_in(area, 60, 6);
+            frame.render_widget(Clear, r);
+            let theme = app.theme();
+            let block = Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.accent).bg(theme.panel))
+                .title(" ⏰ Idle Nudge ")
+                .style(Style::default().bg(theme.panel));
+            let inner = block.inner(r);
+            frame.render_widget(block, r);
+            let lines = vec![
+                Line::from(Span::styled(
+                    "No timer running!",
+                    Style::default().fg(theme.fg).bg(theme.panel).add_modifier(Modifier::BOLD),
+                )),
+                Line::raw(""),
+                Line::from(Span::styled(
+                    "[S]tart timer  [M]anual entry  [D]ismiss",
+                    Style::default().fg(theme.dim).bg(theme.panel),
+                )),
+            ];
+            frame.render_widget(Paragraph::new(lines).centered(), inner);
+        }
         _ => {}
     }
     // OSC 8 hyperlinks are applied post-draw by the caller (see
     // `hyperlinks::collect` + `emit_overlay`). Doing it inside the buffer
     // breaks ratatui's diff width calculation — keep cell symbols pristine.
+}
+
+/// Render the timesheet inline in the center area so sidebars remain fully
+/// visible. Mirrors the previous overlay rendering but sized to fill the
+/// available center area rather than floating on top of everything.
+fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
+    let theme = app.theme();
+
+    let view_label = if app.timesheet_weekly {
+        Span::styled(
+            " WEEKLY ",
+            Style::default()
+                .fg(theme.bg)
+                .bg(theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )
+    } else {
+        Span::styled(
+            " TODAY ",
+            Style::default()
+                .fg(theme.bg)
+                .bg(theme.today)
+                .add_modifier(Modifier::BOLD),
+        )
+    };
+    let title = Line::from(vec![
+        Span::raw(" Timesheet "),
+        view_label,
+    ]);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border).bg(theme.panel))
+        .title(title)
+        .style(Style::default().bg(theme.panel));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let groups = app.build_timesheet_groups();
+
+    let mut lines: Vec<Line> = Vec::new();
+    if groups.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "  No time entries for this period.",
+            Style::default().fg(theme.dim).bg(theme.panel),
+        )));
+    } else {
+        let cursor = app.timesheet_cursor.min(groups.len().saturating_sub(1));
+        let mut grand_total: u64 = 0;
+        for (i, (key, total_secs, narratives)) in groups.iter().enumerate() {
+            let formatted = crate::app::format_duration(*total_secs);
+            let is_selected = i == cursor;
+            let group_style = if is_selected {
+                Style::default()
+                    .fg(theme.accent)
+                    .bg(theme.selection)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+                    .fg(theme.accent)
+                    .bg(theme.panel)
+                    .add_modifier(Modifier::BOLD)
+            };
+            lines.push(Line::from(Span::styled(
+                format!("  {key}  —  {formatted}"),
+                group_style,
+            )));
+            for n in narratives {
+                let narr_style = if is_selected {
+                    Style::default().fg(theme.fg).bg(theme.selection)
+                } else {
+                    Style::default().fg(theme.fg).bg(theme.panel)
+                };
+                lines.push(Line::from(Span::styled(
+                    format!("    • {n}"),
+                    narr_style,
+                )));
+            }
+            grand_total += total_secs;
+        }
+        // Grand total
+        lines.push(Line::raw(""));
+        let total_str = crate::app::format_duration(grand_total);
+        lines.push(Line::from(Span::styled(
+            format!("  Total: {total_str}"),
+            Style::default()
+                .fg(theme.accent)
+                .bg(theme.panel)
+                .add_modifier(Modifier::BOLD),
+        )));
+    }
+
+    // Scroll if content exceeds space
+    let [_pad_top, body_rect, footer_rect] =
+        Layout::vertical([Constraint::Length(1), Constraint::Min(0), Constraint::Length(1)])
+            .areas(inner);
+    let max_lines = body_rect.height as usize;
+    let visible: Vec<Line> = lines.into_iter().take(max_lines).collect();
+    frame.render_widget(Paragraph::new(visible), body_rect);
+
+    // Footer hints
+    let footer = Span::styled(
+        "j/k navigate  ·  c/C/y copy  ·  w weekly  ·  d daily  ·  Esc/q back",
+        Style::default().fg(theme.dim).bg(theme.panel),
+    );
+    frame.render_widget(Paragraph::new(footer).right_aligned(), footer_rect);
 }
 
 pub(crate) fn centered_in(parent: Rect, w: u16, h: u16) -> Rect {

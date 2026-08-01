@@ -30,6 +30,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         Mode::Share => "SHARE".into(),
         Mode::PickTheme => "PICK THEME".into(),
         Mode::Welcome => "WELCOME".into(),
+        Mode::Timesheet => "TIMESHEET".into(),
+        Mode::IdleNudge => "IDLE NUDGE".into(),
     };
     if matches!(app.view, View::Archive) {
         mode_label = "ARCHIVE".into();
@@ -38,26 +40,55 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         mode_label = format!("{mode_label} · {f}").into();
     }
 
-    let hint = match app.mode {
-        Mode::Insert => match app.draft.input_mode() {
-            DialogInputMode::Normal => {
-                "h/l navigate · w/b/e word · i/a insert · Enter save · Esc cancel"
+    let hint = if app.timer_running() {
+        if let Some(task) = app.active_timer_task() {
+            let elapsed = app.timer_elapsed_secs().unwrap_or(0);
+            let h = elapsed / 3600;
+            let m = (elapsed % 3600) / 60;
+            let s = elapsed % 60;
+            let proj = task.projects.first().map(|p| format!("+{p} ")).unwrap_or_default();
+            let act = task.contexts.first().map(|a| format!("@{a} ")).unwrap_or_default();
+            let body = crate::todo::body_only(&task.raw);
+            let mut time_str = format!("▶ {proj}{act} {h:02}:{m:02}:{s:02}  {body}");
+            if app.long_timer_nudge_active {
+                time_str = format!("⏰ {}  —  timer running long!", time_str);
             }
-            DialogInputMode::Insert => "Enter save · Esc normal",
-        },
-        Mode::Visual => "space toggle · x complete · dd delete · Esc cancel",
-        Mode::Help => "? close help",
-        Mode::Settings => "Esc back",
-        Mode::PromptProject => "type +project name · Enter save · Esc cancel",
-        Mode::PromptContext => "type @context name · Enter toggle · Esc cancel",
-        Mode::PickProject => "j/k or ↑↓ cycle projects · Enter keep · Esc clear",
-        Mode::PickContext => "j/k or ↑↓ cycle contexts · Enter keep · Esc clear",
-        Mode::PickSavedFilter => "j/k or ↑↓ cycle filters · Enter keep · Esc revert",
-        Mode::PromptSaveFilter => "type a filter name · Enter save · Esc cancel",
-        Mode::CommandPalette => "type to filter · Enter run · Esc cancel",
-        Mode::Share => "scan the QR · any key dismisses",
-        Mode::Welcome => "c create ./todo.txt · s open sample · q quit",
-        _ => "j/k · n new · r reschedule · x done · / search · ? help · u undo · q quit",
+            time_str
+        } else {
+            "▶ timer running".to_string()
+        }
+    } else {
+        match app.mode {
+            Mode::Insert => match app.draft.input_mode() {
+                DialogInputMode::Normal => {
+                    if app.manual_time_entry {
+                        "h/l navigate · w/b/e word · i/a insert · dur:90 (min) dur:1.5h dur:14:30 dur:9am → Enter save".to_string()
+                    } else {
+                        "h/l navigate · w/b/e word · i/a insert · Enter save · Esc cancel".to_string()
+                    }
+                }
+                DialogInputMode::Insert => {
+                    if app.manual_time_entry {
+                        "Enter save · Esc normal — type a duration after dur:".to_string()
+                    } else {
+                        "Enter save · Esc normal".to_string()
+                    }
+                }
+            },
+            Mode::Visual => "space toggle · x complete · dd delete · Esc cancel".to_string(),
+            Mode::Help => "? close help".to_string(),
+            Mode::Settings => "Esc back".to_string(),
+            Mode::PromptProject => "type +project name · Enter save · Esc cancel".to_string(),
+            Mode::PromptContext => "type @context name · Enter toggle · Esc cancel".to_string(),
+            Mode::PickProject => "j/k or ↑↓ cycle projects · Enter keep · Esc clear".to_string(),
+            Mode::PickContext => "j/k or ↑↓ cycle contexts · Enter keep · Esc clear".to_string(),
+            Mode::PickSavedFilter => "j/k or ↑↓ cycle filters · Enter keep · Esc revert".to_string(),
+            Mode::PromptSaveFilter => "type a filter name · Enter save · Esc cancel".to_string(),
+            Mode::CommandPalette => "type to filter · Enter run · Esc cancel".to_string(),
+            Mode::Share => "scan the QR · any key dismisses".to_string(),
+            Mode::Welcome => "c create ./todo.txt · s open sample · q quit".to_string(),
+            _ => "j/k · n new · t timer · x done · / search · ? help · u undo · q quit".to_string(),
+        }
     };
 
     let mut right_parts = Vec::new();
@@ -75,7 +106,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     // accent color (the rest of the right text is dim).
     let update_suffix = app
         .update_available()
-        .map(|tag| format!(" · ↑ {tag} (tuxedo update)"));
+        .map(|tag| format!(" · ↑ {tag} (tuxtime update)"));
     let right_text = right_parts.join(" · ");
 
     // Append a chord indicator (e.g. " g…") so two-key sequences like gg/dd/fp
