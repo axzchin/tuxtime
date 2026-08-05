@@ -21,7 +21,7 @@ const PREFIX: &str = "tuxtime ";
 /// `~`. The returned string never exceeds `budget` characters unless even a
 /// fully-shortened path plus the filename is longer (the filename is never
 /// abbreviated).
-#[must_use] 
+#[must_use]
 pub fn terminal_title(path: &Path, home: Option<&Path>, budget: usize) -> String {
     let (prefix, rest) = split_display(path, home);
 

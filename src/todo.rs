@@ -236,12 +236,12 @@ fn is_valid_key(k: &str) -> bool {
     chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
-#[must_use] 
+#[must_use]
 pub fn parse_file(s: &str) -> Vec<Task> {
     s.lines().filter_map(|line| parse_line(line).ok()).collect()
 }
 
-#[must_use] 
+#[must_use]
 pub fn serialize(tasks: &[Task]) -> String {
     let mut out = String::new();
     for t in tasks {
@@ -383,7 +383,7 @@ impl Task {
 }
 
 /// True if `s` begins with a `(X) ` priority token.
-#[must_use] 
+#[must_use]
 pub fn starts_with_priority(s: &str) -> bool {
     let b = s.as_bytes();
     b.len() >= 4 && b[0] == b'(' && b[1].is_ascii_uppercase() && b[2] == b')' && b[3] == b' '
@@ -391,7 +391,7 @@ pub fn starts_with_priority(s: &str) -> bool {
 
 /// True if `s` begins with a `YYYY-MM-DD` token (followed by EOL or whitespace
 /// is not required here — callers use this as a hint, not a tokenizer).
-#[must_use] 
+#[must_use]
 pub fn starts_with_iso_date(s: &str) -> bool {
     let b = s.as_bytes();
     b.len() >= 10
@@ -409,7 +409,7 @@ pub fn starts_with_iso_date(s: &str) -> bool {
 
 /// Strip a leading `(X) ` priority token if present, otherwise return the
 /// input unchanged.
-#[must_use] 
+#[must_use]
 pub fn strip_priority(raw: &str) -> &str {
     let b = raw.as_bytes();
     if b.len() >= 4 && b[0] == b'(' && b[1].is_ascii_uppercase() && b[2] == b')' && b[3] == b' ' {
@@ -421,7 +421,7 @@ pub fn strip_priority(raw: &str) -> &str {
 /// A project/context name is valid if non-empty and contains no characters
 /// that would break the todo.txt tokenization: whitespace splits a tag in
 /// half, and `+`/`@`/`:` collide with the format's own sigils.
-#[must_use] 
+#[must_use]
 pub fn is_valid_tag_name(name: &str) -> bool {
     !name.is_empty()
         && name
@@ -429,7 +429,7 @@ pub fn is_valid_tag_name(name: &str) -> bool {
             .all(|c| !c.is_whitespace() && c != '+' && c != '@' && c != ':')
 }
 
-#[must_use] 
+#[must_use]
 pub fn body_after_priority(raw: &str) -> &str {
     let mut s = raw;
     if let Some(stripped) = strip_prefix_x(s) {
@@ -452,9 +452,7 @@ pub fn body_after_quoted_kv(raw: &str) -> String {
     while let Some(st) = body.find(r#":""#) {
         let before = &body[..st];
         let after = &body[st + 2..];
-        let st_key = before
-            .rfind(char::is_whitespace)
-            .map_or(0, |i| i + 1);
+        let st_key = before.rfind(char::is_whitespace).map_or(0, |i| i + 1);
         if let Some(second_aps) = after.find('"') {
             let after = after[second_aps + 1..].trim_start();
             body = format!("{}{}", &before[..st_key], after);
@@ -470,7 +468,7 @@ pub fn body_after_quoted_kv(raw: &str) -> String {
 /// `@context`, and `key:value` token from what remains. Whitespace between
 /// surviving words collapses to single spaces. Returns an owned `String`
 /// because we're filtering tokens, not slicing a prefix.
-#[must_use] 
+#[must_use]
 pub fn body_only(raw: &str) -> String {
     let new_body = body_after_quoted_kv(raw);
     body_after_priority(&new_body)
@@ -661,7 +659,8 @@ mod tests {
 
     #[test]
     fn parses_start_tag() {
-        let t = parse_line("Draft motion +Smith @drafting start:2026-07-31T14:30:25 dur:3600").unwrap();
+        let t =
+            parse_line("Draft motion +Smith @drafting start:2026-07-31T14:30:25 dur:3600").unwrap();
         assert_eq!(t.start.as_deref(), Some("2026-07-31T14:30:25"));
         assert_eq!(t.dur, Some(3600));
     }

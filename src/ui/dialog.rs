@@ -4,12 +4,12 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
+use super::calendar_utils::{calendar_cells, calendar_footer, format_focused, month_name};
 use crate::app::{
-    App, BuilderField, CalendarTarget, DraftOverlay, Mode, REC_UNIT_ORDER, TokenKind, WeekStart,
-    DURATION_PRESETS,
+    App, BuilderField, CalendarTarget, DURATION_PRESETS, DraftOverlay, Mode, REC_UNIT_ORDER,
+    TokenKind, WeekStart,
 };
 use crate::theme::Theme;
-use super::calendar_utils::{calendar_cells, calendar_footer, format_focused, month_name};
 
 /// Classifier output: byte range + what kind of token lives there. Segments
 /// cover the input contiguously and don't overlap.
@@ -237,13 +237,8 @@ fn next_boundary(s: &str, i: usize) -> usize {
 /// Render `draft` with the insertion point highlighted at byte offset `cursor`.
 /// When the cursor sits past the last char, append a block glyph; otherwise the
 /// character under the cursor is drawn with swapped fg/bg so it stays readable.
-#[must_use] 
-pub fn draft_cursor_spans(
-    draft: &str,
-    cursor: usize,
-    fg: Color,
-    bg: Color,
-) -> Vec<Span<'_>> {
+#[must_use]
+pub fn draft_cursor_spans(draft: &str, cursor: usize, fg: Color, bg: Color) -> Vec<Span<'_>> {
     let cursor = cursor.min(draft.len());
     let before = &draft[..cursor];
     let after = &draft[cursor..];
@@ -477,7 +472,7 @@ pub fn render_prompt(frame: &mut Frame, area: Rect, app: &App) {
 
 /// Colored example tokens illustrating the todo.txt format.
 /// Used by both the empty state and the add/edit dialog so they stay in sync.
-#[must_use] 
+#[must_use]
 pub fn format_hint_spans<'a>(theme: &Theme) -> Vec<Span<'a>> {
     use ratatui::style::Modifier;
     vec![
@@ -855,7 +850,6 @@ fn render_calendar(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
     );
 }
 
-
 fn render_recurrence_builder(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
     let theme = app.theme();
     let Some(state) = app.recurrence_state() else {
@@ -976,7 +970,8 @@ fn render_recurrence_builder(frame: &mut Frame, dlg: Rect, screen: Rect, app: &A
                 }),
         ),
     ];
-    let next = crate::app::recurrence_next_preview(state, app.today()).map_or_else(|| "—".into(), format_focused);
+    let next = crate::app::recurrence_next_preview(state, app.today())
+        .map_or_else(|| "—".into(), format_focused);
     let next_label = format!("next: {next}");
     // Measure the already-built left side instead of hardcoding a width that
     // silently drifts when the mode-line copy changes. The `+ 2` keeps a
@@ -1159,15 +1154,9 @@ fn render_duration_picker(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App)
                 Span::styled("  ", Style::default().bg(bg)),
                 Span::styled(
                     label.to_string(),
-                    Style::default()
-                        .fg(theme.accent)
-                        .bg(bg)
-                        .add_modifier(m),
+                    Style::default().fg(theme.accent).bg(bg).add_modifier(m),
                 ),
-                Span::styled(
-                    format!("  ({desc})"),
-                    Style::default().fg(theme.dim).bg(bg),
-                ),
+                Span::styled(format!("  ({desc})"), Style::default().fg(theme.dim).bg(bg)),
                 Span::styled(
                     " ".repeat(
                         (inner.width as usize).saturating_sub(4 + label.len() + desc.len() + 4),
@@ -1206,10 +1195,6 @@ fn render_duration_picker(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App)
         inner,
     );
 }
-
-
-
-
 
 fn hint_line<'a>(theme: &Theme) -> Line<'a> {
     let mut spans = vec![

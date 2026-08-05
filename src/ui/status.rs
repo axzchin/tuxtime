@@ -55,8 +55,16 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             let h = elapsed / 3600;
             let m = (elapsed % 3600) / 60;
             let s = elapsed % 60;
-            let proj = task.projects.first().map(|p| format!("+{p} ")).unwrap_or_default();
-            let act = task.contexts.first().map(|a| format!("@{a} ")).unwrap_or_default();
+            let proj = task
+                .projects
+                .first()
+                .map(|p| format!("+{p} "))
+                .unwrap_or_default();
+            let act = task
+                .contexts
+                .first()
+                .map(|a| format!("@{a} "))
+                .unwrap_or_default();
             let body = crate::todo::body_only(&task.raw);
             let mut time_str = format!("▶ {proj}{act} {h:02}:{m:02}:{s:02}  {body}");
             if app.session.long_timer_nudge_active {
@@ -78,7 +86,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 }
                 DialogInputMode::Insert => {
                     if app.session.manual_time_entry {
-                        "Enter save · C-Enter save+start · Esc normal — type a duration after dur:".to_string()
+                        "Enter save · C-Enter save+start · Esc normal — type a duration after dur:"
+                            .to_string()
                     } else {
                         "Enter save · C-Enter save+start · Esc normal".to_string()
                     }
@@ -86,22 +95,22 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             },
             Mode::Visual => "space toggle · x complete · dd delete · Esc cancel".to_string(),
             Mode::Help => "? close help".to_string(),
-            Mode::Settings => "Esc/ ,/ q dismiss  ·  i idle nudge  ·  l long timer nudge".to_string(),
+            Mode::Settings => {
+                "Esc/ ,/ q dismiss  ·  i idle nudge  ·  l long timer nudge".to_string()
+            }
             Mode::PromptProject => "type +project name · Enter save · Esc cancel".to_string(),
             Mode::PromptContext => "type @context name · Enter toggle · Esc cancel".to_string(),
             Mode::PickProject => "j/k or ↑↓ cycle projects · Enter keep · Esc clear".to_string(),
             Mode::PickContext => "j/k or ↑↓ cycle contexts · Enter keep · Esc clear".to_string(),
-            Mode::PickSavedFilter => "j/k or ↑↓ cycle filters · Enter keep · Esc revert".to_string(),
+            Mode::PickSavedFilter => {
+                "j/k or ↑↓ cycle filters · Enter keep · Esc revert".to_string()
+            }
             Mode::PromptSaveFilter => "type a filter name · Enter save · Esc cancel".to_string(),
             Mode::PromptAddTime => {
                 "type duration (e.g. 30, 1.5, 14:30) · Enter add · Esc cancel".to_string()
             }
-            Mode::PromptIdleNudge => {
-                "type minutes · Enter save · Esc cancel".to_string()
-            }
-            Mode::PromptLongTimerNudge => {
-                "type minutes · Enter save · Esc cancel".to_string()
-            }
+            Mode::PromptIdleNudge => "type minutes · Enter save · Esc cancel".to_string(),
+            Mode::PromptLongTimerNudge => "type minutes · Enter save · Esc cancel".to_string(),
             Mode::PickTimesheetDate => {
                 "hjkl/arrows navigate  ·  type date  ·  Enter select  ·  Esc cancel  ·  t today"
                     .to_string()
@@ -117,12 +126,23 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 let filtered: Vec<&String> = if needle.is_empty() {
                     all.iter().collect()
                 } else {
-                    all.iter().filter(|n| n.to_lowercase().contains(&needle)).collect()
+                    all.iter()
+                        .filter(|n| n.to_lowercase().contains(&needle))
+                        .collect()
                 };
                 let sort = app.project_manager.project_sort.label();
-                let base = format!("j/k nav · x archive · r rename · s sort ({sort}) · / search · Esc/P back");
+                let base = format!(
+                    "j/k nav · x archive · r rename · s sort ({sort}) · / search · Esc/P back"
+                );
                 if needle.is_empty() {
-                    format!("{base}  —  {total} projects{archived}", archived = if archived_count > 0 { format!(", {archived_count} archived") } else { String::new() })
+                    format!(
+                        "{base}  —  {total} projects{archived}",
+                        archived = if archived_count > 0 {
+                            format!(", {archived_count} archived")
+                        } else {
+                            String::new()
+                        }
+                    )
                 } else {
                     format!("{base}  —  /{needle} ({}/{total})", filtered.len())
                 }
@@ -134,7 +154,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 } else {
                     "j/k · n new · t timer · T interrupt · x done · / search · ? help · u undo · q quit".to_string()
                 }
-            },
+            }
         }
     };
 

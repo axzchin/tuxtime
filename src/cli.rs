@@ -39,13 +39,14 @@ pub fn resolve_path(arg: Option<String>) -> io::Result<PathBuf> {
 
 /// Resolve the `done.txt` path for archiving. Honors `$DONE_FILE`; otherwise
 /// the sibling `done.txt` next to the todo file (the core's default).
-#[must_use] 
+#[must_use]
 pub fn done_path(todo_path: &Path) -> PathBuf {
     if let Some(f) = std::env::var_os("DONE_FILE") {
         return PathBuf::from(f);
     }
     todo_path
-        .parent().map_or_else(|| PathBuf::from("done.txt"), |p| p.join("done.txt"))
+        .parent()
+        .map_or_else(|| PathBuf::from("done.txt"), |p| p.join("done.txt"))
 }
 
 /// Create `pb` (and any missing parent directories) if it doesn't exist, then

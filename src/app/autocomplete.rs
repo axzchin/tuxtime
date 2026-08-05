@@ -31,7 +31,7 @@ pub struct AutocompleteTarget<'a> {
 /// chars to the start of the current word; returns `Some` only if that word
 /// begins with `+` or `@`. Cursor on whitespace, on plain text, or at byte 0
 /// of an empty draft yields `None`.
-#[must_use] 
+#[must_use]
 pub fn active_token(draft: &str, cursor: usize) -> Option<ActiveToken<'_>> {
     let cursor = cursor.min(draft.len());
     if cursor == 0 {

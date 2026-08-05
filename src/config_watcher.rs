@@ -15,7 +15,7 @@ const DEBOUNCE: Duration = Duration::from_millis(200);
 /// When the config directory cannot be watched (e.g. missing parent, platform
 /// limit) the function returns `None` and the caller should silently skip
 /// hot-reload support rather than crashing or flashing an error.
-#[must_use] 
+#[must_use]
 pub fn spawn(config_path: PathBuf) -> Option<mpsc::Receiver<()>> {
     let target = config_path
         .file_name()

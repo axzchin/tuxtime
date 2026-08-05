@@ -33,8 +33,10 @@ mod types;
 
 pub use types::ParsedNl;
 
-use passes::{pass_date, pass_leading_priority, pass_priority, pass_project_context,
-             pass_recurrence, pass_sigiled, pass_threshold};
+use passes::{
+    pass_date, pass_leading_priority, pass_priority, pass_project_context, pass_recurrence,
+    pass_sigiled, pass_threshold,
+};
 use scratch::Scratch;
 
 /// Cheap heuristic gating the full parse. Returns `true` when the buffer

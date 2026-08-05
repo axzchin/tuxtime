@@ -43,35 +43,36 @@ pub(crate) mod test_support;
 pub use crate::core::Archive;
 pub use crate::core::History;
 pub use crate::core::filter::{ListDueBucket, ordered_unique};
+pub use archive_cache::ArchiveCache;
 pub use autocomplete::{ActiveToken, AutocompleteTarget, TokenKind, active_token};
 pub use chord::Chord;
 pub use draft::{DialogInputMode, DraftCursor, DraftState};
 pub use draft_overlay::{
-    BuilderField, CalendarState, CalendarTarget, DraftOverlay, OverlayKind, PriorityChooserState,
-    REC_UNIT_ORDER, RecurrenceBuilderState, SLASH_ENTRIES, SlashEntry, SlashKind, SlashMenuState,
-    format_rec_value, recurrence_next_preview, DurationPickerState, DURATION_PRESETS,
+    BuilderField, CalendarState, CalendarTarget, DURATION_PRESETS, DraftOverlay,
+    DurationPickerState, OverlayKind, PriorityChooserState, REC_UNIT_ORDER, RecurrenceBuilderState,
+    SLASH_ENTRIES, SlashEntry, SlashKind, SlashMenuState, format_rec_value,
+    recurrence_next_preview,
 };
+pub use duration::{format_billable, format_billable_tenths};
+pub(crate) use duration::{format_duration, parse_duration_input};
 pub use flash::Flash;
+pub use navigation::Navigation;
 pub use palette::CommandPaletteState;
 pub use prefs::{Layout, Prefs};
+pub use project_manager::ProjectManager;
+pub use saved_filter_picker::SavedFilterPicker;
 pub use selection::Selection;
+pub use session::Session;
+pub use share_state::ShareState;
+pub use theme_picker_state::ThemePicker;
+pub use timesheet::TimesheetState;
 pub use types::{
     AUTOCOMPLETE_CAP, AddOutcome, Density, FLASH_TTL, Filter, LEADER_WINDOW, Mode, ProjectSort,
     SavedFilter, Sort, TimesheetEntry, TimesheetSort, TimesheetTaskRef, UNDO_LIMIT, View,
 };
-pub use visibility::GroupKey;
-pub use archive_cache::ArchiveCache;
-pub use navigation::Navigation;
-pub use project_manager::ProjectManager;
-pub use saved_filter_picker::SavedFilterPicker;
-pub use session::Session;
-pub use share_state::ShareState;
-pub use theme_picker_state::ThemePicker;
 pub use update_checker::UpdateChecker;
+pub use visibility::GroupKey;
 pub use week_start::WeekStart;
-pub(crate) use duration::{format_duration, parse_duration_input};
-pub use duration::{format_billable, format_billable_tenths};
-pub use timesheet::TimesheetState;
 
 pub struct App {
     /// The headless durable store: tasks, archive, history, persistence, and
@@ -132,14 +133,14 @@ pub struct App {
 
 impl App {
     /// Construct an App whose archive is the sibling `done.txt` of `file_path`.
-    #[must_use] 
+    #[must_use]
     pub fn new(file_path: PathBuf, body: String, today: String, cfg: Config) -> Self {
         let store = Store::new(file_path.clone(), body, today);
         Self::from_store(store, file_path, cfg)
     }
 
     /// Like [`App::new`] but with an explicit `done.txt` path (e.g. `DONE_FILE`).
-    #[must_use] 
+    #[must_use]
     pub fn new_with_done(
         file_path: PathBuf,
         done_path: PathBuf,
@@ -227,7 +228,8 @@ impl App {
             self.share_state.share = Some(info);
         }
         Ok(self
-            .share_state.share
+            .share_state
+            .share
             .as_ref()
             .expect("share is Some after the bind branch"))
     }

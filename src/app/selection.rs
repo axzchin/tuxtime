@@ -7,17 +7,17 @@ pub struct Selection {
 }
 
 impl Selection {
-    #[must_use] 
+    #[must_use]
     pub fn is_selected(&self, abs: usize) -> bool {
         self.selected.contains(&abs)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.selected.is_empty()
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn len(&self) -> usize {
         self.selected.len()
     }
@@ -36,7 +36,7 @@ impl Selection {
         self.selected.clear();
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn editing(&self) -> Option<usize> {
         self.editing
     }

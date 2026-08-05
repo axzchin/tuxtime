@@ -37,9 +37,7 @@ pub enum InstallKind {
 /// `return Ok(())` after invoking this.
 pub fn run() -> io::Result<()> {
     let exe = std::env::current_exe().ok();
-    let kind = exe
-        .as_deref()
-        .map_or(InstallKind::Unknown, detect_kind);
+    let kind = exe.as_deref().map_or(InstallKind::Unknown, detect_kind);
     let current = env!("CARGO_PKG_VERSION");
     println!("tuxtime {current}");
     if let Some(p) = &exe {
@@ -76,7 +74,7 @@ pub fn run() -> io::Result<()> {
 }
 
 /// Classify an executable path into an [`InstallKind`]. Exposed for tests.
-#[must_use] 
+#[must_use]
 pub fn detect_kind(exe: &Path) -> InstallKind {
     let s = exe.to_string_lossy();
     if s.contains("/Cellar/")
@@ -102,7 +100,7 @@ pub fn detect_kind(exe: &Path) -> InstallKind {
 /// one message — `Some(tag)` if a cached or freshly-fetched tag is available,
 /// otherwise `None`. The receiver is dropped when the thread exits, so a
 /// disconnect on `try_recv` means "give up, nothing's coming".
-#[must_use] 
+#[must_use]
 pub fn spawn_check() -> Receiver<Option<String>> {
     let (tx, rx) = mpsc::sync_channel::<Option<String>>(1);
     thread::spawn(move || {
@@ -172,7 +170,7 @@ fn fetch_latest_body() -> Option<String> {
 /// pull in a JSON parser — release payloads are well-formed enough that a
 /// targeted string scan suffices, and a malformed payload simply returns
 /// `None`. Exposed for unit testing.
-#[must_use] 
+#[must_use]
 pub fn parse_tag_from_release_json(body: &str) -> Option<String> {
     let key = "\"tag_name\"";
     let i = body.find(key)?;
@@ -194,7 +192,7 @@ pub fn parse_tag_from_release_json(body: &str) -> Option<String> {
 /// is stripped on both sides. Non-numeric segments fall back to lexicographic
 /// comparison of that segment, so a future suffix like `2026.5.5-rc1` won't
 /// crash — it just compares the strings.
-#[must_use] 
+#[must_use]
 pub fn is_newer(latest: &str, current: &str) -> bool {
     let l = latest.trim_start_matches('v');
     let c = current.trim_start_matches('v');

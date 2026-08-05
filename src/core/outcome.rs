@@ -197,7 +197,7 @@ pub struct DrainReport {
 
 impl DrainReport {
     /// True when nothing happened and there was no error — the common case.
-    #[must_use] 
+    #[must_use]
     pub fn is_noop(&self) -> bool {
         self.merged == 0 && self.skipped == 0 && self.error.is_none()
     }
@@ -240,7 +240,11 @@ pub enum TimerOutcome {
 /// Outcome of stopping the timer on quit.
 #[derive(Debug)]
 pub enum TimerQuitOutcome {
-    Stopped { abs: usize, elapsed_secs: u64, total_secs: u64 },
+    Stopped {
+        abs: usize,
+        elapsed_secs: u64,
+        total_secs: u64,
+    },
     NoTimer,
     Error(StoreError),
 }

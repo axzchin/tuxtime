@@ -19,7 +19,7 @@ pub(crate) fn format_duration(total_secs: u64) -> String {
 
 /// Format seconds as billable units (0.1h increments, rounded up).
 /// 1 minute = 0.1h, 6 minutes = 0.1h, 30 minutes = 0.5h, etc.
-#[must_use] 
+#[must_use]
 pub fn format_billable(total_secs: u64) -> String {
     // Round up to nearest 0.1 hour (6 minutes / 360 seconds).
     format_billable_tenths(total_secs.div_ceil(360))
@@ -28,7 +28,7 @@ pub fn format_billable(total_secs: u64) -> String {
 /// Format pre-computed billable tenths. Use this when summing rounded
 /// values across groups so that each project+activity rounds independently
 /// (1 min × 5 matters = 0.5h, not 0.1h).
-#[must_use] 
+#[must_use]
 pub fn format_billable_tenths(tenths: u64) -> String {
     let whole = tenths / 10;
     let frac = tenths % 10;
@@ -70,16 +70,16 @@ pub(crate) fn parse_duration_input(s: &str) -> u64 {
 
     // Clock time: "14:30" or "9:30" (no am/pm)
     if let Some((h_str, m_str)) = num_part.split_once(':') {
-            if let (Ok(h), Ok(m)) = (h_str.parse::<u32>(), m_str.parse::<u32>()) {
-                let now = chrono::Local::now();
-                let target_secs = h * 3600 + m * 60;
-                let now_secs = now.hour() * 3600 + now.minute() * 60 + now.second();
-                if target_secs <= now_secs {
-                    return u64::from(now_secs - target_secs);
-                }
-                // Target is in the future — assume yesterday.
-                return u64::from(now_secs + 24 * 3600 - target_secs);
+        if let (Ok(h), Ok(m)) = (h_str.parse::<u32>(), m_str.parse::<u32>()) {
+            let now = chrono::Local::now();
+            let target_secs = h * 3600 + m * 60;
+            let now_secs = now.hour() * 3600 + now.minute() * 60 + now.second();
+            if target_secs <= now_secs {
+                return u64::from(now_secs - target_secs);
             }
+            // Target is in the future — assume yesterday.
+            return u64::from(now_secs + 24 * 3600 - target_secs);
+        }
         return 0;
     }
 
@@ -141,8 +141,8 @@ fn parse_ampm_time(s: &str) -> Option<u64> {
     }
 
     let hour_24 = match (hour, is_pm) {
-        (12, false) => 0,   // 12am = midnight
-        (12, true) => 12,   // 12pm = noon
+        (12, false) => 0, // 12am = midnight
+        (12, true) => 12, // 12pm = noon
         (h, true) if h < 12 => h + 12,
         (h, _) => h,
     };

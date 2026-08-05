@@ -10,7 +10,7 @@ use crate::theme::Theme;
 /// Build the human-readable filter chip shown in the header. `+project` /
 /// `@context` / `/search` precedence matches what the sidebar shows. Returns
 /// `None` when no filter is active.
-#[must_use] 
+#[must_use]
 pub fn filter_label(filter: &Filter) -> Option<String> {
     if let Some(p) = &filter.project {
         Some(format!("+{p}"))

@@ -1,10 +1,9 @@
-//! Unit tests for the natural-language parser. Included from 
-//! [`super::mod`] via `mod tests;`, so `super::*` resolves to the `nl`
-//! module (re-exports [`ParsedNl`], `try_parse`, `format_as_todo_txt`, 
-//! and `looks_like_natural_language`).
+//! Unit tests for the natural-language parser. Included from `src/nl/mod.rs`
+//! via `mod tests;`, so `super::*` resolves to the `nl` module (re-exports
+//! [`ParsedNl`], `try_parse`, `format_as_todo_txt`, and
+//! `looks_like_natural_language`).
 
 use super::*;
-
 
 fn d(s: &str) -> NaiveDate {
     NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap()
@@ -117,8 +116,7 @@ fn date_marker_words_are_consumed() {
         "Pay rent before Friday",
         "Pay rent starting Friday",
     ] {
-        let parsed =
-            try_parse(input, today).unwrap_or_else(|| panic!("no parse for {input:?}"));
+        let parsed = try_parse(input, today).unwrap_or_else(|| panic!("no parse for {input:?}"));
         assert_eq!(parsed.body, "Pay rent", "input: {input:?}");
         assert!(parsed.due.is_some(), "input: {input:?}");
     }
@@ -297,8 +295,7 @@ fn rec_values_are_recurrence_module_compatible() {
         "yearly taxes",
         "biweekly retro",
     ] {
-        let parsed =
-            try_parse(input, today).unwrap_or_else(|| panic!("no parse for {input:?}"));
+        let parsed = try_parse(input, today).unwrap_or_else(|| panic!("no parse for {input:?}"));
         let rec = parsed.rec.unwrap_or_else(|| panic!("no rec for {input:?}"));
         assert!(
             crate::recurrence::parse_rec_spec(&rec).is_some(),
@@ -315,8 +312,7 @@ fn threshold_values_are_threshold_module_compatible() {
         "Task due tomorrow 2 weeks before due",
         "Task due tomorrow show 1 month before",
     ] {
-        let parsed =
-            try_parse(input, today).unwrap_or_else(|| panic!("no parse for {input:?}"));
+        let parsed = try_parse(input, today).unwrap_or_else(|| panic!("no parse for {input:?}"));
         let t = parsed
             .threshold
             .unwrap_or_else(|| panic!("no threshold for {input:?}"));

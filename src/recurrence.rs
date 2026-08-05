@@ -41,7 +41,7 @@ pub struct RecSpec {
 /// for empty strings, missing or non-positive numbers, and unknown units.
 /// Lone `+` (no digits) and `-` prefixes are also rejected — recurrence only
 /// moves forward.
-#[must_use] 
+#[must_use]
 pub fn parse_rec_spec(value: &str) -> Option<RecSpec> {
     let bytes = value.as_bytes();
     if bytes.is_empty() {
@@ -88,7 +88,7 @@ pub fn parse_rec_spec(value: &str) -> Option<RecSpec> {
 /// Business days advance one weekday at a time, skipping Sat/Sun. Starting on
 /// a weekend rolls forward to Monday before counting, so "Saturday + 1b"
 /// resolves to Monday — same convention as dorecur.
-#[must_use] 
+#[must_use]
 pub fn advance(date: NaiveDate, spec: &RecSpec) -> Option<NaiveDate> {
     match spec.unit {
         RecUnit::Day => date.checked_add_days(Days::new(u64::from(spec.n))),

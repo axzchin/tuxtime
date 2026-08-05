@@ -704,7 +704,10 @@ fn cmd_listtags(store: &Store, json: bool, kind: TagKind) -> i32 {
             set.insert(v.as_str());
         }
     }
-    let names: Vec<String> = set.into_iter().map(std::string::ToString::to_string).collect();
+    let names: Vec<String> = set
+        .into_iter()
+        .map(std::string::ToString::to_string)
+        .collect();
     if json {
         println!(
             "{{\"ok\":true,\"action\":\"{action}\",\"tags\":{}}}",

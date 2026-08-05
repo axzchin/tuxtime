@@ -588,4 +588,3 @@ fn list_scrolls_to_keep_cursor_visible_when_below_fold() {
         "cursor row {label:?} should be visible in the scrolled viewport:\n{text}"
     );
 }
-

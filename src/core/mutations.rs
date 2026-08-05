@@ -427,14 +427,25 @@ impl Store {
         if abs >= self.tasks.len() {
             return TimerOutcome::OutOfRange;
         }
-        if self.active_timer.as_ref().is_some_and(|ts| ts.task_abs == abs) {
+        if self
+            .active_timer
+            .as_ref()
+            .is_some_and(|ts| ts.task_abs == abs)
+        {
             return self.timer_stop();
         }
         if self.active_timer.is_some() {
             let from_abs = self.active_timer.as_ref().map_or(0, |ts| ts.task_abs);
             let old = self.timer_stop_inner();
             self.push_history();
-            if let TimerOutcome::Stopped { elapsed_secs, total_secs, project, activity, .. } = old {
+            if let TimerOutcome::Stopped {
+                elapsed_secs,
+                total_secs,
+                project,
+                activity,
+                ..
+            } = old
+            {
                 let start_outcome = self.timer_start_inner(abs);
                 let to_project = self.tasks[abs].projects.first().cloned();
                 let to_activity = self.tasks[abs].contexts.first().cloned();
@@ -443,8 +454,11 @@ impl Store {
                 }
                 if let TimerOutcome::Started { body: to_body, .. } = start_outcome {
                     return TimerOutcome::Switched {
-                        from_abs, from_elapsed_secs: elapsed_secs, from_total_secs: total_secs,
-                        from_project: project, from_activity: activity,
+                        from_abs,
+                        from_elapsed_secs: elapsed_secs,
+                        from_total_secs: total_secs,
+                        from_project: project,
+                        from_activity: activity,
                         to_abs: abs,
                         to_project,
                         to_activity,
@@ -468,14 +482,28 @@ impl Store {
             return TimerQuitOutcome::NoTimer;
         }
         let outcome = self.timer_stop_inner();
-        if let TimerOutcome::Stopped { abs, elapsed_secs, total_secs, .. } = outcome {
+        if let TimerOutcome::Stopped {
+            abs,
+            elapsed_secs,
+            total_secs,
+            ..
+        } = outcome
+        {
             self.push_history();
             if let Err(e) = self.persist() {
                 return TimerQuitOutcome::Error(e);
             }
-            return TimerQuitOutcome::Stopped { abs, elapsed_secs, total_secs };
+            return TimerQuitOutcome::Stopped {
+                abs,
+                elapsed_secs,
+                total_secs,
+            };
         }
-        if let TimerOutcome::Error(e) = outcome { TimerQuitOutcome::Error(e) } else { TimerQuitOutcome::NoTimer }
+        if let TimerOutcome::Error(e) = outcome {
+            TimerQuitOutcome::Error(e)
+        } else {
+            TimerQuitOutcome::NoTimer
+        }
     }
 
     fn timer_start_inner(&mut self, abs: usize) -> TimerOutcome {
@@ -485,7 +513,10 @@ impl Store {
         match todo::parse_line(&new_raw) {
             Ok(parsed) => {
                 self.tasks[abs] = parsed;
-                self.active_timer = Some(super::TimerState { task_abs: abs, started_at: Instant::now() });
+                self.active_timer = Some(super::TimerState {
+                    task_abs: abs,
+                    started_at: Instant::now(),
+                });
                 let t = &self.tasks[abs];
                 TimerOutcome::Started {
                     abs,
@@ -499,31 +530,49 @@ impl Store {
     }
 
     fn timer_stop_inner(&mut self) -> TimerOutcome {
-        let Some(ts) = self.active_timer.take() else { return TimerOutcome::OutOfRange; };
+        let Some(ts) = self.active_timer.take() else {
+            return TimerOutcome::OutOfRange;
+        };
         let elapsed = ts.started_at.elapsed().as_secs();
         let abs = ts.task_abs;
-        if abs >= self.tasks.len() { return TimerOutcome::OutOfRange; }
+        if abs >= self.tasks.len() {
+            return TimerOutcome::OutOfRange;
+        }
         let task = &self.tasks[abs];
         let existing_dur = task.dur.unwrap_or(0);
         let new_total = existing_dur + elapsed;
-        let new_raw = rebuild_token_line(&task.raw, "dur:", Some("start:"), &format!("dur:{new_total}"));
+        let new_raw = rebuild_token_line(
+            &task.raw,
+            "dur:",
+            Some("start:"),
+            &format!("dur:{new_total}"),
+        );
         match todo::parse_line(&new_raw) {
             Ok(parsed) => {
                 let project = parsed.projects.first().cloned();
                 let activity = parsed.contexts.first().cloned();
                 let body = todo::body_only(&parsed.raw);
                 self.tasks[abs] = parsed;
-                TimerOutcome::Stopped { abs, elapsed_secs: elapsed, total_secs: new_total, project, activity, body }
+                TimerOutcome::Stopped {
+                    abs,
+                    elapsed_secs: elapsed,
+                    total_secs: new_total,
+                    project,
+                    activity,
+                    body,
+                }
             }
             Err(e) => TimerOutcome::Error(StoreError::Parse(e)),
         }
     }
 
-fn timer_stop(&mut self) -> TimerOutcome {
+    fn timer_stop(&mut self) -> TimerOutcome {
         let outcome = self.timer_stop_inner();
         if matches!(outcome, TimerOutcome::Stopped { .. }) {
             self.push_history();
-            if let Err(e) = self.persist() { return TimerOutcome::Error(e); }
+            if let Err(e) = self.persist() {
+                return TimerOutcome::Error(e);
+            }
         }
         outcome
     }

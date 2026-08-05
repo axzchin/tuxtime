@@ -76,7 +76,11 @@ pub(crate) fn resolve_builtin_single_key(key: KeyEvent) -> Option<Action> {
 /// Tries user-configured keybinds first, then falls back to the built-in
 /// mapping. Mutates the chord state because chord progress is part of
 /// interpreting the key.
-pub(crate) fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> Option<Action> {
+pub(crate) fn resolve_normal_key(
+    app: &mut App,
+    key: KeyEvent,
+    keybinds: &KeyBindings,
+) -> Option<Action> {
     match keybinds.resolve_normal(key, &mut app.chord) {
         Some(ResolvedKey::Action(action)) => return Some(action),
         Some(ResolvedKey::Pending) => return None,

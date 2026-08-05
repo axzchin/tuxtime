@@ -16,8 +16,8 @@ use tuxtime::keybinds::KeyBindings;
 use super::action_dispatch::handle_normal;
 use super::insert::handle_insert;
 use super::overlays::{
-    handle_command_palette, handle_help, handle_idle_nudge, handle_manual_entry_choice,
-    handle_manage_projects, handle_pick, handle_pick_theme, handle_pick_timesheet_date,
+    handle_command_palette, handle_help, handle_idle_nudge, handle_manage_projects,
+    handle_manual_entry_choice, handle_pick, handle_pick_theme, handle_pick_timesheet_date,
     handle_prompt, handle_search, handle_settings, handle_share, handle_welcome,
 };
 
@@ -33,8 +33,8 @@ impl<'a> ModeDispatcher<'a> {
         Self { keybinds }
     }
 
-    /// Route one keypress to the handler for `app.nav.mode()`. Returns
-    /// `true` when the key was consumed (i.e. the app should redraw).
+    /// Route one keypress to the handler for `app.nav.mode()`. The caller is
+    /// responsible for triggering a redraw after the call.
     pub(crate) fn dispatch(&self, app: &mut App, key: KeyEvent) {
         // Detect external edits before processing the key. On detection the
         // file is reloaded, the keystroke is consumed (re-press to act on
@@ -47,8 +47,12 @@ impl<'a> ModeDispatcher<'a> {
             Mode::Search => handle_search(app, key),
             Mode::Help => handle_help(app, key),
             Mode::Settings => handle_settings(app, key),
-            Mode::PromptProject | Mode::PromptContext | Mode::PromptSaveFilter
-            | Mode::PromptAddTime | Mode::PromptIdleNudge | Mode::PromptLongTimerNudge
+            Mode::PromptProject
+            | Mode::PromptContext
+            | Mode::PromptSaveFilter
+            | Mode::PromptAddTime
+            | Mode::PromptIdleNudge
+            | Mode::PromptLongTimerNudge
             | Mode::PromptRenameProject => {
                 handle_prompt(app, key);
             }

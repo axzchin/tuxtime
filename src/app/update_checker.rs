@@ -2,8 +2,7 @@
 
 use std::sync::mpsc::Receiver;
 
-#[derive(Debug)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct UpdateChecker {
     /// Latest known release tag, populated asynchronously by the update
     /// checker. `None` while we haven't heard back (or the check is disabled,
@@ -13,4 +12,3 @@ pub struct UpdateChecker {
     /// once a result has been received or the sender hung up.
     pub receiver: Option<Receiver<Option<String>>>,
 }
-

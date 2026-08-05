@@ -11,7 +11,7 @@ use tuxtime::app::{App, Mode, View};
 use tuxtime::cli;
 use tuxtime::todo;
 
-use super::{apply_action, apply_to_draft, DraftEffect};
+use super::{DraftEffect, apply_action, apply_to_draft};
 
 // ---------------------------------------------------------------------------
 // Welcome & share — first-run and network overlay
@@ -71,19 +71,13 @@ pub(crate) fn handle_search(app: &mut App, key: KeyEvent) {
 }
 
 pub(crate) fn handle_help(app: &mut App, key: KeyEvent) {
-    if matches!(
-        key.code,
-        KeyCode::Esc | KeyCode::Char('?' | 'q')
-    ) {
+    if matches!(key.code, KeyCode::Esc | KeyCode::Char('?' | 'q')) {
         app.nav.enter_normal();
     }
 }
 
 pub(crate) fn handle_settings(app: &mut App, key: KeyEvent) {
-    if matches!(
-        key.code,
-        KeyCode::Esc | KeyCode::Char(',' | 'q')
-    ) {
+    if matches!(key.code, KeyCode::Esc | KeyCode::Char(',' | 'q')) {
         app.nav.enter_normal();
         return;
     }
@@ -227,7 +221,10 @@ pub(crate) fn handle_prompt(app: &mut App, key: KeyEvent) {
 
     match key.code {
         KeyCode::Esc => {
-            let return_mode = if matches!(app.nav.mode(), Mode::PromptIdleNudge | Mode::PromptLongTimerNudge) {
+            let return_mode = if matches!(
+                app.nav.mode(),
+                Mode::PromptIdleNudge | Mode::PromptLongTimerNudge
+            ) {
                 app.nav.nudge_prompt_return.take().unwrap_or(Mode::Normal)
             } else if app.nav.mode() == Mode::PromptRenameProject {
                 Mode::ManageProjects
@@ -241,7 +238,10 @@ pub(crate) fn handle_prompt(app: &mut App, key: KeyEvent) {
             let prev_mode = app.nav.mode();
             let value = app.draft.text().to_string();
             app.draft_clear();
-            let is_nudge = matches!(prev_mode, Mode::PromptIdleNudge | Mode::PromptLongTimerNudge);
+            let is_nudge = matches!(
+                prev_mode,
+                Mode::PromptIdleNudge | Mode::PromptLongTimerNudge
+            );
             let is_rename = prev_mode == Mode::PromptRenameProject;
             let return_mode = if is_nudge {
                 app.nav.nudge_prompt_return.take().unwrap_or(Mode::Normal)

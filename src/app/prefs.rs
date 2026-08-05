@@ -44,7 +44,7 @@ pub struct Prefs {
 }
 
 impl Prefs {
-    #[must_use] 
+    #[must_use]
     pub fn from_config(cfg: Config) -> Self {
         let theme_idx = cfg
             .theme
@@ -69,13 +69,13 @@ impl Prefs {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn theme(&self) -> &'static Theme {
         let all = theme::all();
         all[self.theme_idx % all.len()]
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn theme_idx(&self) -> usize {
         self.theme_idx
     }
@@ -87,7 +87,7 @@ impl Prefs {
         self.theme_idx = idx % theme::all().len();
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn sort_label(&self) -> &'static str {
         self.sort.as_str()
     }

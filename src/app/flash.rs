@@ -17,7 +17,7 @@ impl Flash {
         self.current = None;
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn active(&self) -> Option<&str> {
         self.current
             .as_ref()
@@ -25,12 +25,12 @@ impl Flash {
             .map(|(m, _)| m.as_str())
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn deadline(&self) -> Option<Instant> {
         self.current.as_ref().map(|(_, t)| *t + FLASH_TTL)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn should_clear(&self) -> bool {
         self.current
             .as_ref()

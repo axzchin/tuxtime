@@ -24,7 +24,7 @@ pub fn notes_dir_from_config(configured: Option<&str>) -> PathBuf {
     PathBuf::from("notes")
 }
 
-#[must_use] 
+#[must_use]
 pub fn target_for_task(task: &Task, notes_dir: &Path) -> NoteTarget {
     if let Some(rel) = note_rel_from_raw(&task.raw) {
         let path = path_for_rel(notes_dir, &rel);
@@ -46,7 +46,7 @@ pub fn target_for_task(task: &Task, notes_dir: &Path) -> NoteTarget {
     }
 }
 
-#[must_use] 
+#[must_use]
 pub fn note_rel_from_raw(raw: &str) -> Option<String> {
     raw.split_whitespace()
         .find_map(|token| token.strip_prefix("note:"))
@@ -54,7 +54,7 @@ pub fn note_rel_from_raw(raw: &str) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
-#[must_use] 
+#[must_use]
 pub fn note_template(task: &Task) -> String {
     let title = todo::body_only(&task.raw);
     let title = if title.is_empty() { "Task" } else { &title };

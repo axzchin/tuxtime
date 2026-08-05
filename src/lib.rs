@@ -7,7 +7,7 @@ pub mod clipboard;
 pub mod cmd;
 pub mod config;
 pub mod config_watcher;
-pub(crate) mod core;
+pub mod core;
 pub(crate) mod inbox;
 pub mod keybinds;
 pub(crate) mod nl;

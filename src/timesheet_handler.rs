@@ -52,9 +52,7 @@ pub(crate) fn handle_timesheet_keys(app: &mut App, key: KeyEvent) {
         }
         // g — open calendar to jump to a specific date.
         KeyCode::Char('g') => {
-            if let Ok(d) =
-                chrono::NaiveDate::parse_from_str(&app.timesheet.date, "%Y-%m-%d")
-            {
+            if let Ok(d) = chrono::NaiveDate::parse_from_str(&app.timesheet.date, "%Y-%m-%d") {
                 app.timesheet.calendar_focus = d;
             }
             app.timesheet.date_input.clear();
@@ -79,13 +77,17 @@ pub(crate) fn handle_timesheet_keys(app: &mut App, key: KeyEvent) {
                         app.timesheet.cursor = app.timesheet.cursor.min(count.saturating_sub(1));
                     }
                     TimesheetTaskRef::Archived(_) => {
-                        app.flash("cannot toggle billable on archived entry — press a to unarchive");
+                        app.flash(
+                            "cannot toggle billable on archived entry — press a to unarchive",
+                        );
                     }
                 }
             }
         }
         KeyCode::Char('x') => {
-            if let Some((_gi, _ni, TimesheetTaskRef::Active(abs))) = app.timesheet_narrative_at(app.timesheet.cursor) {
+            if let Some((_gi, _ni, TimesheetTaskRef::Active(abs))) =
+                app.timesheet_narrative_at(app.timesheet.cursor)
+            {
                 app.toggle_complete(abs);
             }
         }
@@ -95,8 +97,7 @@ pub(crate) fn handle_timesheet_keys(app: &mut App, key: KeyEvent) {
                     TimesheetTaskRef::Active(abs) => {
                         app.archive_one(abs);
                         let count = app.timesheet_narrative_count();
-                        app.timesheet.cursor =
-                            app.timesheet.cursor.min(count.saturating_sub(1));
+                        app.timesheet.cursor = app.timesheet.cursor.min(count.saturating_sub(1));
                     }
                     TimesheetTaskRef::Archived(abs) => {
                         app.unarchive(abs);
@@ -193,7 +194,8 @@ pub(crate) fn handle_timesheet_keys(app: &mut App, key: KeyEvent) {
             }
         }
         KeyCode::Enter => {
-            let Some((_gi, _ni, task_ref)) = app.timesheet_narrative_at(app.timesheet.cursor) else {
+            let Some((_gi, _ni, task_ref)) = app.timesheet_narrative_at(app.timesheet.cursor)
+            else {
                 return;
             };
             match task_ref {

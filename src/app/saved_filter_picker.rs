@@ -1,7 +1,6 @@
 //! Saved-filter picker state: restore point and cursor index for the `ff` picker.
 
-#[derive(Debug)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct SavedFilterPicker {
     /// The search string that was active when the `ff` picker opened, so
     /// cancelling (`Esc`) restores it instead of leaving the previewed
@@ -11,4 +10,3 @@ pub struct SavedFilterPicker {
     /// previews.
     pub idx: usize,
 }
-

@@ -79,10 +79,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                         .add_modifier(Modifier::BOLD),
                 ),
                 Span::raw("  "),
-                Span::styled(
-                    format!("{count} completed"),
-                    Style::default().fg(theme.dim),
-                ),
+                Span::styled(format!("{count} completed"), Style::default().fg(theme.dim)),
             ]));
             last_date = Some(date);
         }

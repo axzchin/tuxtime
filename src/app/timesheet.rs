@@ -21,7 +21,7 @@ use std::time::Instant;
 
 use chrono::{Datelike, NaiveDate, Weekday};
 
-use super::{TimesheetSort, TimesheetEntry, FLASH_TTL, App, WeekStart, TimesheetTaskRef, Mode};
+use super::{App, FLASH_TTL, Mode, TimesheetEntry, TimesheetSort, TimesheetTaskRef, WeekStart};
 
 // ---------------------------------------------------------------------------
 // TimesheetState — pure navigation state
@@ -52,7 +52,7 @@ pub struct TimesheetState {
 }
 
 impl TimesheetState {
-    #[must_use] 
+    #[must_use]
     pub fn new(today: &str) -> Self {
         Self {
             weekly: false,
@@ -76,9 +76,7 @@ impl TimesheetState {
     /// Parse `date` to a [`NaiveDate`], falling back to `today`.
     pub fn date_naive(&self, today: &str) -> NaiveDate {
         NaiveDate::parse_from_str(&self.date, "%Y-%m-%d")
-            .unwrap_or_else(|_| {
-                NaiveDate::parse_from_str(today, "%Y-%m-%d").unwrap_or_default()
-            })
+            .unwrap_or_else(|_| NaiveDate::parse_from_str(today, "%Y-%m-%d").unwrap_or_default())
     }
 
     /// Human-readable display form, e.g. "Mon 2026-08-03".
@@ -88,9 +86,10 @@ impl TimesheetState {
 
     /// Shift the anchor by `delta` days (negative = backward).
     pub fn shift_days(&mut self, today: &str, delta: i64) {
-        if let Some(d) = self.date_naive(today).checked_add_signed(
-            chrono::TimeDelta::days(delta),
-        ) {
+        if let Some(d) = self
+            .date_naive(today)
+            .checked_add_signed(chrono::TimeDelta::days(delta))
+        {
             self.date = d.format("%Y-%m-%d").to_string();
             self.cursor = 0;
             self.invalidate_cache();
@@ -144,8 +143,7 @@ impl TimesheetState {
 
     /// Set calendar focus to `today + days`.
     pub fn calendar_set_relative(&mut self, today: &str, days: i64) {
-        let parsed = NaiveDate::parse_from_str(today, "%Y-%m-%d")
-            .unwrap_or(self.calendar_focus);
+        let parsed = NaiveDate::parse_from_str(today, "%Y-%m-%d").unwrap_or(self.calendar_focus);
         if let Some(d) = parsed.checked_add_signed(chrono::TimeDelta::days(days)) {
             self.calendar_focus = d;
         }
@@ -180,11 +178,9 @@ impl App {
         let anchor = &self.timesheet.date;
         // Compute the date range [range_start, range_end] based on view mode.
         let (range_start, range_end) = if self.timesheet.weekly {
-            let anchor_date =
-                NaiveDate::parse_from_str(anchor, "%Y-%m-%d").unwrap_or_else(|_| {
-                    NaiveDate::parse_from_str(self.today(), "%Y-%m-%d")
-                        .unwrap_or_default()
-                });
+            let anchor_date = NaiveDate::parse_from_str(anchor, "%Y-%m-%d").unwrap_or_else(|_| {
+                NaiveDate::parse_from_str(self.today(), "%Y-%m-%d").unwrap_or_default()
+            });
             let target_weekday = match self.week_start {
                 WeekStart::Monday => Weekday::Mon,
                 WeekStart::Sunday => Weekday::Sun,
@@ -211,47 +207,48 @@ impl App {
         // each day's entries in separate groups.
         let mut groups: BTreeMap<(String, String, bool), TimesheetGroup> = BTreeMap::new();
 
-        let mut process =
-            |tasks: &[crate::todo::Task], make_ref: fn(usize) -> TimesheetTaskRef| {
-                for (idx, t) in
-                    tasks.iter().enumerate().filter(|(_, t)| t.dur.is_some_and(|d| d > 0))
-                {
-                    let Some(ref cd) = t.created_date else {
-                        continue;
-                    };
-                    let in_range =
-                        cd.as_str() >= range_start.as_str() && cd.as_str() <= range_end.as_str();
-                    if !in_range {
-                        continue;
-                    }
-                    let body = crate::todo::body_only(&t.raw);
-                    if !search.is_empty() && !body.to_lowercase().contains(&search) {
-                        continue;
-                    }
-                    let proj = t
-                        .projects
-                        .first()
-                        .map(|p| format!("+{p}"))
-                        .unwrap_or_default();
-                    let act = t
-                        .contexts
-                        .first()
-                        .map(|a| format!("@{a}"))
-                        .unwrap_or_default();
-                    let key = if proj.is_empty() && act.is_empty() {
-                        "(no project/activity)".to_string()
-                    } else {
-                        format!("{proj} {act}").trim().to_string()
-                    };
-                    let billable = t.bill.as_deref() != Some("n");
-                    let entry = groups
-                        .entry((cd.clone(), key.clone(), billable))
-                        .or_insert_with(|| (0, Vec::new(), Vec::new()));
-                    entry.0 += t.dur.unwrap_or(0);
-                    entry.1.push(body);
-                    entry.2.push(make_ref(idx));
+        let mut process = |tasks: &[crate::todo::Task], make_ref: fn(usize) -> TimesheetTaskRef| {
+            for (idx, t) in tasks
+                .iter()
+                .enumerate()
+                .filter(|(_, t)| t.dur.is_some_and(|d| d > 0))
+            {
+                let Some(ref cd) = t.created_date else {
+                    continue;
+                };
+                let in_range =
+                    cd.as_str() >= range_start.as_str() && cd.as_str() <= range_end.as_str();
+                if !in_range {
+                    continue;
                 }
-            };
+                let body = crate::todo::body_only(&t.raw);
+                if !search.is_empty() && !body.to_lowercase().contains(&search) {
+                    continue;
+                }
+                let proj = t
+                    .projects
+                    .first()
+                    .map(|p| format!("+{p}"))
+                    .unwrap_or_default();
+                let act = t
+                    .contexts
+                    .first()
+                    .map(|a| format!("@{a}"))
+                    .unwrap_or_default();
+                let key = if proj.is_empty() && act.is_empty() {
+                    "(no project/activity)".to_string()
+                } else {
+                    format!("{proj} {act}").trim().to_string()
+                };
+                let billable = t.bill.as_deref() != Some("n");
+                let entry = groups
+                    .entry((cd.clone(), key.clone(), billable))
+                    .or_insert_with(|| (0, Vec::new(), Vec::new()));
+                entry.0 += t.dur.unwrap_or(0);
+                entry.1.push(body);
+                entry.2.push(make_ref(idx));
+            }
+        };
 
         process(self.tasks(), TimesheetTaskRef::Active);
         process(self.store.archive().tasks(), TimesheetTaskRef::Archived);
@@ -369,11 +366,8 @@ impl App {
     /// focus. Invalid typed dates flash an error and stay in the picker.
     pub fn timesheet_calendar_accept(&mut self) {
         if self.timesheet.date_input.is_empty() {
-            self.timesheet.date =
-                self.timesheet.calendar_focus.format("%Y-%m-%d").to_string();
-        } else if let Ok(d) =
-            NaiveDate::parse_from_str(&self.timesheet.date_input, "%Y-%m-%d")
-        {
+            self.timesheet.date = self.timesheet.calendar_focus.format("%Y-%m-%d").to_string();
+        } else if let Ok(d) = NaiveDate::parse_from_str(&self.timesheet.date_input, "%Y-%m-%d") {
             self.timesheet.date = d.format("%Y-%m-%d").to_string();
         } else {
             self.flash(format!("invalid date: {}", self.timesheet.date_input));

@@ -39,7 +39,7 @@ impl Chord {
     }
 
     /// Currently armed leader, or None if expired or absent.
-    #[must_use] 
+    #[must_use]
     pub fn active(&self) -> Option<char> {
         self.pending
             .filter(|(_, t)| t.elapsed() < LEADER_WINDOW)
@@ -47,14 +47,14 @@ impl Chord {
     }
 
     /// When the current leader (if any) goes stale.
-    #[must_use] 
+    #[must_use]
     pub fn deadline(&self) -> Option<Instant> {
         self.pending.map(|(_, t)| t + LEADER_WINDOW)
     }
 
     /// True when a leader is set but has expired — the event loop uses this
     /// to trigger a redraw so the status-bar indicator clears.
-    #[must_use] 
+    #[must_use]
     pub fn should_clear(&self) -> bool {
         self.pending
             .as_ref()

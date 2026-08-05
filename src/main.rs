@@ -10,11 +10,11 @@ use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, Ke
 
 use std::io::Write;
 
-use tuxtime::app::{App, Mode};
 #[cfg(test)]
 use tuxtime::action::Action;
 #[cfg(test)]
 use tuxtime::app::View;
+use tuxtime::app::{App, Mode};
 use tuxtime::cli;
 use tuxtime::config::Config;
 use tuxtime::config_watcher;
@@ -24,9 +24,9 @@ use tuxtime::ui::hyperlinks;
 use tuxtime::{ui, update};
 
 mod insert;
-pub(crate) use insert::{apply_to_draft, DraftEffect};
+pub(crate) use insert::{DraftEffect, apply_to_draft};
 #[cfg(test)]
-pub(crate) use insert::{resolve_edit_key, EditAction};
+pub(crate) use insert::{EditAction, resolve_edit_key};
 
 mod key_resolve;
 use key_resolve::resolve_builtin_single_key;
@@ -50,13 +50,13 @@ pub(crate) use timesheet_handler::handle_timesheet_keys;
 // handler entry points so the test module can call them without reaching
 // into private modules.
 #[cfg(test)]
+pub(crate) use insert::handle_insert;
+#[cfg(test)]
 pub(crate) use overlays::{
-    handle_command_palette, handle_help, handle_idle_nudge, handle_manual_entry_choice,
-    handle_manage_projects, handle_pick, handle_pick_theme, handle_pick_timesheet_date,
+    handle_command_palette, handle_help, handle_idle_nudge, handle_manage_projects,
+    handle_manual_entry_choice, handle_pick, handle_pick_theme, handle_pick_timesheet_date,
     handle_prompt, handle_search, handle_settings, handle_share, handle_welcome,
 };
-#[cfg(test)]
-pub(crate) use insert::handle_insert;
 
 const EVENT_POLL: Duration = Duration::from_millis(250);
 fn main() -> Result<()> {
@@ -375,9 +375,7 @@ fn next_timeout(app: &App) -> Duration {
         (a, b) => a.or(b),
     };
     match earliest {
-        Some(deadline) => deadline
-            .saturating_duration_since(Instant::now())
-            .min(base),
+        Some(deadline) => deadline.saturating_duration_since(Instant::now()).min(base),
         None => base,
     }
 }
@@ -385,8 +383,6 @@ fn next_timeout(app: &App) -> Duration {
 fn handle_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
     ModeDispatcher::new(keybinds).dispatch(app, key);
 }
-
-
 
 #[cfg(test)]
 #[path = "main_tests.rs"]

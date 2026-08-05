@@ -31,7 +31,7 @@ pub(crate) fn ascii_rows() -> Vec<String> {
         .collect()
 }
 
-#[must_use] 
+#[must_use]
 pub fn centered_lines(theme: &Theme, inner_width: u16) -> Vec<Line<'static>> {
     let pad_w = inner_width.saturating_sub(WIDTH) / 2;
     let pad = " ".repeat(pad_w as usize);

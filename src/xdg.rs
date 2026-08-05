@@ -6,7 +6,7 @@ use std::path::PathBuf;
 /// `XDG_CONFIG_HOME` MUST be an absolute path; relative values are ignored.
 /// We warn once so users debugging path resolution can see why their relative
 /// override didn't take effect.
-#[must_use] 
+#[must_use]
 pub fn config_home() -> Option<PathBuf> {
     if let Some(v) = std::env::var_os("XDG_CONFIG_HOME")
         && !v.is_empty()

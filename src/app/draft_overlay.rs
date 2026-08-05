@@ -199,8 +199,8 @@ pub enum OverlayKind {
 }
 
 impl DraftOverlay {
-    #[must_use] 
-    pub    fn kind(&self) -> OverlayKind {
+    #[must_use]
+    pub fn kind(&self) -> OverlayKind {
         match self {
             DraftOverlay::SlashMenu(_) => OverlayKind::SlashMenu,
             DraftOverlay::Calendar(_) => OverlayKind::Calendar,
@@ -266,7 +266,12 @@ impl App {
         }
         let colon_pos = cursor - 1;
         // Try longest keys first so `rec` doesn't shadow a hypothetical `re`.
-        for (key, kind) in [("rec", KvKind::Rec), ("due", KvKind::Due), ("t", KvKind::T), ("dur", KvKind::Dur)] {
+        for (key, kind) in [
+            ("rec", KvKind::Rec),
+            ("due", KvKind::Due),
+            ("t", KvKind::T),
+            ("dur", KvKind::Dur),
+        ] {
             if let Some(key_start) = match_key_before(text, colon_pos, key) {
                 match kind {
                     KvKind::Due => {
@@ -1026,7 +1031,7 @@ fn find_priority(text: &str) -> Option<char> {
 
 /// Format a builder state as the value portion of a `rec:` token (e.g. `1w`,
 /// `+2m`). Used by `recurrence_accept` and by the live preview line.
-#[must_use] 
+#[must_use]
 pub fn format_rec_value(state: &RecurrenceBuilderState) -> String {
     let prefix = if state.strict { "+" } else { "" };
     let unit = match state.unit {
@@ -1043,7 +1048,7 @@ pub fn format_rec_value(state: &RecurrenceBuilderState) -> String {
 /// the same `recurrence::advance` used by the completion-spawn path, anchored
 /// on the app's `today` so the value is identical to what the user would see
 /// after marking a task done now.
-#[must_use] 
+#[must_use]
 pub fn recurrence_next_preview(state: &RecurrenceBuilderState, today: &str) -> Option<NaiveDate> {
     let spec = RecSpec {
         strict: state.strict,

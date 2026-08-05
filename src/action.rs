@@ -85,7 +85,7 @@ pub enum Action {
 }
 
 impl Action {
-    #[must_use] 
+    #[must_use]
     pub fn from_keybind_name(s: &str) -> Option<Self> {
         let normalized = s.trim().replace('-', "_").to_ascii_lowercase();
         match normalized.as_str() {

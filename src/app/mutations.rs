@@ -562,13 +562,9 @@ mod tests {
         app.add_time_to_current_from_input("15"); // add 15 minutes (900 s)
 
         let raw = &app.tasks()[0].raw;
+        assert!(raw.contains("dur:900"), "dur should be 900, got: {raw}");
         assert!(
-            raw.contains("dur:900"),
-            "dur should be 900, got: {raw}"
-        );
-        assert!(
-            app.flash_active()
-                .is_some_and(|m| m.contains("added 15m")),
+            app.flash_active().is_some_and(|m| m.contains("added 15m")),
             "flash should confirm addition"
         );
     }
@@ -688,9 +684,7 @@ mod tests {
 
     #[test]
     fn toggle_billable_preserves_other_tags() {
-        let mut app = build_app(
-            "(A) Draft motion +Smith @drafting due:2026-08-15 dur:3600\n",
-        );
+        let mut app = build_app("(A) Draft motion +Smith @drafting due:2026-08-15 dur:3600\n");
         app.nav.cursor = 0;
         app.recompute_visible();
 
@@ -719,7 +713,10 @@ mod tests {
 
         // Ctrl+Enter: now start the timer on the newly created task.
         app.toggle_timer();
-        assert!(app.timer_running(), "timer should be running after toggle_timer");
+        assert!(
+            app.timer_running(),
+            "timer should be running after toggle_timer"
+        );
         let active = app.active_timer_task().expect("active timer task");
         assert!(
             active.raw.contains("Buy milk"),

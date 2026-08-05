@@ -42,7 +42,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 
     let config_path = app
         .config_path
-        .as_ref().map_or_else(|| "(unavailable)".into(), |p| p.display().to_string());
+        .as_ref()
+        .map_or_else(|| "(unavailable)".into(), |p| p.display().to_string());
 
     let items: &[(&str, Option<String>)] = &[
         ("FILES", None),

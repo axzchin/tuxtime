@@ -33,15 +33,9 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
     };
     let sort_label = Span::styled(
         format!(" {} ", app.timesheet.sort.label()),
-        Style::default()
-            .fg(theme.dim)
-            .bg(theme.panel),
+        Style::default().fg(theme.dim).bg(theme.panel),
     );
-    let title = Line::from(vec![
-        Span::raw(" Timesheet "),
-        view_label,
-        sort_label,
-    ]);
+    let title = Line::from(vec![Span::raw(" Timesheet "), view_label, sort_label]);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.border).bg(theme.panel))
@@ -90,19 +84,22 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                 // Flush the previous day's subtotal before the new header.
                 if last_date.is_some() {
                     lines.push(Line::from(Span::styled(
-                        format!("    ──  {} ({})", crate::app::format_duration(day_total), crate::app::format_billable_tenths(day_billable_tenths)),
-                        Style::default()
-                            .fg(theme.dim)
-                            .bg(theme.panel),
+                        format!(
+                            "    ──  {} ({})",
+                            crate::app::format_duration(day_total),
+                            crate::app::format_billable_tenths(day_billable_tenths)
+                        ),
+                        Style::default().fg(theme.dim).bg(theme.panel),
                     )));
                     lines.push(Line::raw(""));
                     day_total = 0;
                     day_billable_tenths = 0;
                 }
-                let date_dow = chrono::NaiveDate::parse_from_str(
-                    &entry.date,
-                    "%Y-%m-%d",
-                ).map_or_else(|_| entry.date.clone(), |d| d.format("%a %Y-%m-%d").to_string());
+                let date_dow = chrono::NaiveDate::parse_from_str(&entry.date, "%Y-%m-%d")
+                    .map_or_else(
+                        |_| entry.date.clone(),
+                        |d| d.format("%a %Y-%m-%d").to_string(),
+                    );
                 lines.push(Line::from(Span::styled(
                     format!("  {date_dow}"),
                     Style::default()
@@ -117,7 +114,8 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
             let billable_str = crate::app::format_billable(entry.total_secs);
             // Copy-flash: briefly highlight the entire group white after copy.
             let copy_flash_active = app
-                .timesheet.copy_flash
+                .timesheet
+                .copy_flash
                 .is_some_and(|(gi, t)| gi == i && t.elapsed() < crate::app::FLASH_TTL);
             let group_style = if copy_flash_active {
                 Style::default()
@@ -139,21 +137,25 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
             };
             let dnb_suffix = if entry.billable { "" } else { " (DNB)" };
             lines.push(Line::from(Span::styled(
-                format!("  {}  —  {} ({billable_str}){dnb_suffix}", entry.key, formatted),
+                format!(
+                    "  {}  —  {} ({billable_str}){dnb_suffix}",
+                    entry.key, formatted
+                ),
                 group_style,
             )));
 
             for (ni, n) in entry.narratives.iter().enumerate() {
                 let is_narr_cursor = is_selected && selected_narrative == Some(ni);
-                let (is_done, is_archived) = entry
-                    .task_indices
-                    .get(ni)
-                    .map_or((false, false), |r| match r {
-                        crate::app::TimesheetTaskRef::Active(abs) => {
-                            (app.tasks().get(*abs).is_some_and(|t| t.done), false)
-                        }
-                        crate::app::TimesheetTaskRef::Archived(_) => (false, true),
-                    });
+                let (is_done, is_archived) =
+                    entry
+                        .task_indices
+                        .get(ni)
+                        .map_or((false, false), |r| match r {
+                            crate::app::TimesheetTaskRef::Active(abs) => {
+                                (app.tasks().get(*abs).is_some_and(|t| t.done), false)
+                            }
+                            crate::app::TimesheetTaskRef::Archived(_) => (false, true),
+                        });
                 let status_suffix = if is_archived {
                     " (archived)"
                 } else if is_done {
@@ -196,15 +198,16 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
             }
         }
         // Flush the final day's subtotal (if date headers were shown).
-        if (app.timesheet.weekly
-            || matches!(app.timesheet.sort, crate::app::TimesheetSort::Date))
+        if (app.timesheet.weekly || matches!(app.timesheet.sort, crate::app::TimesheetSort::Date))
             && last_date.is_some()
         {
             lines.push(Line::from(Span::styled(
-                format!("    ──  {} ({})", crate::app::format_duration(day_total), crate::app::format_billable_tenths(day_billable_tenths)),
-                Style::default()
-                    .fg(theme.dim)
-                    .bg(theme.panel),
+                format!(
+                    "    ──  {} ({})",
+                    crate::app::format_duration(day_total),
+                    crate::app::format_billable_tenths(day_billable_tenths)
+                ),
+                Style::default().fg(theme.dim).bg(theme.panel),
             )));
             lines.push(Line::raw(""));
         }
@@ -229,7 +232,10 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
         if dnb_total > 0 {
             let dnb_str = crate::app::format_billable_tenths(dnb_billable_tenths);
             lines.push(Line::from(Span::styled(
-                format!("  DNB:      {} ({dnb_str})", crate::app::format_duration(dnb_total)),
+                format!(
+                    "  DNB:      {} ({dnb_str})",
+                    crate::app::format_duration(dnb_total)
+                ),
                 Style::default()
                     .fg(theme.dim)
                     .bg(theme.panel)
@@ -238,7 +244,10 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
         }
         let total_str = crate::app::format_billable_tenths(grand_billable_tenths);
         lines.push(Line::from(Span::styled(
-            format!("  Total:    {} ({total_str}){search_note}", crate::app::format_duration(grand_total)),
+            format!(
+                "  Total:    {} ({total_str}){search_note}",
+                crate::app::format_duration(grand_total)
+            ),
             Style::default()
                 .fg(theme.accent)
                 .bg(theme.panel)
@@ -248,8 +257,7 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
 
     // Scroll if content exceeds space
     let [_pad_top, body_rect] =
-        Layout::vertical([Constraint::Length(1), Constraint::Min(0)])
-            .areas(inner);
+        Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(inner);
     let max_lines = body_rect.height as usize;
     let visible: Vec<Line> = lines.into_iter().take(max_lines).collect();
     frame.render_widget(Paragraph::new(visible), body_rect);
@@ -295,9 +303,7 @@ pub(crate) fn render_timesheet_calendar(frame: &mut Frame, area: Rect, app: &App
             Span::styled("date: ", Style::default().fg(theme.dim)),
             Span::styled(
                 input_text,
-                Style::default()
-                    .fg(theme.fg)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(theme.fg).add_modifier(Modifier::BOLD),
             ),
         ])
         .style(Style::default().bg(theme.panel)),
@@ -371,4 +377,3 @@ pub(crate) fn render_timesheet_calendar(frame: &mut Frame, area: Rect, app: &App
         inner,
     );
 }
-

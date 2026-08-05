@@ -5,13 +5,12 @@
 //! for timer operations, `flash()` for user feedback, and `prefs` for
 //! nudge thresholds.
 
-use std::time::Instant;
+use super::{App, Mode, format_duration, parse_duration_input};
 use crate::core::outcome::{TimerOutcome, TimerQuitOutcome};
 use crate::todo::Task;
-use super::{App, Mode, parse_duration_input, format_duration};
+use std::time::Instant;
 
 impl App {
-
     // ---- timer helpers ----
 
     pub fn timer_running(&self) -> bool {
@@ -129,13 +128,25 @@ impl App {
     /// Used by `interrupt_timer` and `add_from_draft` auto-start.
     pub fn toggle_timer_at(&mut self, abs: usize) {
         match self.store.timer_toggle(abs) {
-            TimerOutcome::Started { project, activity, body, .. } => {
+            TimerOutcome::Started {
+                project,
+                activity,
+                body,
+                ..
+            } => {
                 let proj = project.map(|p| format!("+{p} ")).unwrap_or_default();
                 let act = activity.map(|a| format!("@{a} ")).unwrap_or_default();
                 self.flash(format!("▶ {proj}{act}— {body}"));
                 self.session.last_timer_activity = Instant::now();
             }
-            TimerOutcome::Stopped { elapsed_secs, total_secs, project, activity, body, .. } => {
+            TimerOutcome::Stopped {
+                elapsed_secs,
+                total_secs,
+                project,
+                activity,
+                body,
+                ..
+            } => {
                 let elapsed = format_duration(elapsed_secs);
                 let total = format_duration(total_secs);
                 let proj = project.map(|p| format!("+{p} ")).unwrap_or_default();
@@ -143,7 +154,16 @@ impl App {
                 self.flash(format!("■ {proj}{act}{body} — {elapsed} (total {total})"));
                 self.session.last_timer_activity = Instant::now();
             }
-            TimerOutcome::Switched { from_elapsed_secs, from_total_secs, from_project, from_activity, to_project, to_activity, to_body, .. } => {
+            TimerOutcome::Switched {
+                from_elapsed_secs,
+                from_total_secs,
+                from_project,
+                from_activity,
+                to_project,
+                to_activity,
+                to_body,
+                ..
+            } => {
                 let from_elapsed = format_duration(from_elapsed_secs);
                 let from_total = format_duration(from_total_secs);
                 let to_proj = to_project.map(|p| format!("+{p} ")).unwrap_or_default();
@@ -172,11 +192,19 @@ impl App {
             return;
         };
         match self.store.timer_toggle(active_abs) {
-            TimerOutcome::Stopped { elapsed_secs, project, activity, body, .. } => {
+            TimerOutcome::Stopped {
+                elapsed_secs,
+                project,
+                activity,
+                body,
+                ..
+            } => {
                 let elapsed = format_duration(elapsed_secs);
                 let proj = project.map(|p| format!("+{p} ")).unwrap_or_default();
                 let act = activity.map(|a| format!("@{a} ")).unwrap_or_default();
-                self.flash(format!("interrupted {proj}{act}{body} ({elapsed}) — enter new task"));
+                self.flash(format!(
+                    "interrupted {proj}{act}{body} ({elapsed}) — enter new task"
+                ));
                 self.session.last_timer_activity = Instant::now();
                 // Open a blank Insert dialog for the interruption entry.
                 self.session.manual_time_entry = true;
@@ -284,7 +312,10 @@ impl App {
     pub fn stop_timer_on_quit(&mut self) {
         match self.store.stop_timer_on_quit() {
             TimerQuitOutcome::Stopped { total_secs, .. } => {
-                self.flash(format!("timer stopped ({} total)", format_duration(total_secs)));
+                self.flash(format!(
+                    "timer stopped ({} total)",
+                    format_duration(total_secs)
+                ));
             }
             TimerQuitOutcome::NoTimer => {}
             TimerQuitOutcome::Error(e) => {
@@ -292,5 +323,4 @@ impl App {
             }
         }
     }
-
 }

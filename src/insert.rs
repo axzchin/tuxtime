@@ -10,9 +10,9 @@
 //! the draft buffer — callers like search and the command palette reuse
 //! [`apply_to_draft`] to share the same text-editing behavior.
 
+use crate::handle_autocomplete_keys;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tuxtime::app::{AddOutcome, App, DialogInputMode, OverlayKind};
-use crate::handle_autocomplete_keys;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DraftEffect {

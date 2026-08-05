@@ -199,7 +199,9 @@ pub fn draw(frame: &mut Frame, app: &App) {
             frame.render_widget(Clear, r);
             dialog::render_prompt(frame, r, app);
         }
-        Mode::PromptProject | Mode::PromptContext | Mode::PromptSaveFilter
+        Mode::PromptProject
+        | Mode::PromptContext
+        | Mode::PromptSaveFilter
         | Mode::PromptAddTime => {
             let w: u16 = PROMPT_MAX_W.min(area.width.saturating_sub(4));
             let r = centered_in(area, w, PROMPT_H);
@@ -255,7 +257,10 @@ pub fn draw(frame: &mut Frame, app: &App) {
             let lines = vec![
                 Line::from(Span::styled(
                     "No timer running!",
-                    Style::default().fg(theme.fg).bg(theme.panel).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(theme.fg)
+                        .bg(theme.panel)
+                        .add_modifier(Modifier::BOLD),
                 )),
                 Line::raw(""),
                 Line::from(Span::styled(
@@ -279,7 +284,10 @@ pub fn draw(frame: &mut Frame, app: &App) {
             let lines = vec![
                 Line::from(Span::styled(
                     "How would you like to describe this entry?",
-                    Style::default().fg(theme.fg).bg(theme.panel).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(theme.fg)
+                        .bg(theme.panel)
+                        .add_modifier(Modifier::BOLD),
                 )),
                 Line::raw(""),
                 Line::from(Span::styled(
@@ -302,7 +310,6 @@ pub fn draw(frame: &mut Frame, app: &App) {
 
 /// Render the timesheet inline in the center area so sidebars remain fully
 /// visible.
-
 use crate::ui::timesheet_render::{render_timesheet, render_timesheet_calendar};
 
 fn render_manage_projects(frame: &mut Frame, area: Rect, app: &App) {
@@ -311,10 +318,7 @@ fn render_manage_projects(frame: &mut Frame, area: Rect, app: &App) {
         format!(" {} ", app.project_manager.project_sort.label()),
         Style::default().fg(theme.dim).bg(theme.panel),
     );
-    let title = Line::from(vec![
-        Span::raw(" Project Management "),
-        sort_label,
-    ]);
+    let title = Line::from(vec![Span::raw(" Project Management "), sort_label]);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.border).bg(theme.panel))

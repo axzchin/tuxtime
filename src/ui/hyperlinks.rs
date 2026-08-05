@@ -37,7 +37,7 @@ pub struct UrlRun {
 /// the only thing that carries the underline modifier in this codebase, so the
 /// run text *is* the URL. Style comes from the run's first cell; spans of one
 /// URL token share a single style by construction.
-#[must_use] 
+#[must_use]
 pub fn collect(buf: &Buffer) -> Vec<UrlRun> {
     let area = buf.area;
     let mut runs = Vec::new();
@@ -56,7 +56,9 @@ pub fn collect(buf: &Buffer) -> Vec<UrlRun> {
             // belong to the same span, so they share fg/bg/modifier.
             let (fg, bg, modifier) = buf
                 .cell((start, y))
-                .map_or((Color::Reset, Color::Reset, Modifier::empty()), |c| (c.fg, c.bg, c.modifier));
+                .map_or((Color::Reset, Color::Reset, Modifier::empty()), |c| {
+                    (c.fg, c.bg, c.modifier)
+                });
             let mut text = String::new();
             while x < area.right()
                 && buf

@@ -89,10 +89,7 @@ const TIMESHEET: Section = (
 
 const PROJECTS: Section = (
     "PROJECTS & MORE",
-    &[
-        ("P", "project manager"),
-        ("W", "cycle week start"),
-    ],
+    &[("P", "project manager"), ("W", "cycle week start")],
 );
 
 const SYSTEM: Section = (
@@ -143,7 +140,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     // Keybindings (top, two columns) — divider — Format (bottom, two columns).
     // Each half splits sections across left/right; the last section in each
     // column drops its trailing blank so the divider lands tight.
-    let kb_lines = two_columns(theme, inner.width, &[NAVIGATION, EDITING, TIMER], &[VIEW, TIMESHEET, PROJECTS, SYSTEM]);
+    let kb_lines = two_columns(
+        theme,
+        inner.width,
+        &[NAVIGATION, EDITING, TIMER],
+        &[VIEW, TIMESHEET, PROJECTS, SYSTEM],
+    );
     let kb_height = u16::try_from(kb_lines.len()).unwrap_or(u16::MAX);
 
     let (fmt_left, fmt_right) = FORMAT.1.split_at(FORMAT.1.len().div_ceil(2));

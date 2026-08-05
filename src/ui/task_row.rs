@@ -54,11 +54,7 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
     } else {
         "  "
     };
-    let glyph_color = if task.done {
-        theme.done
-    } else {
-        theme.accent
-    };
+    let glyph_color = if task.done { theme.done } else { theme.accent };
     let mut glyph_style = Style::default().fg(glyph_color);
     if opts.cursor {
         glyph_style = glyph_style.add_modifier(Modifier::BOLD);
@@ -149,14 +145,12 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
     if opts.timer_running
         && let Some(elapsed) = opts.timer_elapsed
     {
-            let h = elapsed / 3600;
-            let m = (elapsed % 3600) / 60;
-            let s = elapsed % 60;
-            let timer_text = format!(" [{h:02}:{m:02}:{s:02}]");
-            line.spans.push(Span::styled(
-                timer_text,
-                Style::default().fg(theme.accent),
-            ));
+        let h = elapsed / 3600;
+        let m = (elapsed % 3600) / 60;
+        let s = elapsed % 60;
+        let timer_text = format!(" [{h:02}:{m:02}:{s:02}]");
+        line.spans
+            .push(Span::styled(timer_text, Style::default().fg(theme.accent)));
     }
     line
 }
@@ -355,7 +349,7 @@ pub(crate) fn due_token_style(task_done: bool, due: &str, today: &str, theme: &T
     style
 }
 
-#[must_use] 
+#[must_use]
 pub fn due_label(due: &str, today: &str) -> String {
     if let Some(d) = day_diff(due, today) {
         if d < 0 {

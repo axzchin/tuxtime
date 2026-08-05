@@ -22,21 +22,22 @@ pub struct Archive {
 
 fn done_path(todo_path: &Path) -> PathBuf {
     todo_path
-        .parent().map_or_else(|| PathBuf::from("done.txt"), |p| p.join("done.txt"))
+        .parent()
+        .map_or_else(|| PathBuf::from("done.txt"), |p| p.join("done.txt"))
 }
 
 impl Archive {
     /// Construct an `Archive` for the sibling `done.txt` of `todo_path` and
     /// spawn a worker thread to read+parse it. The first frame can render
     /// `todo.txt` immediately while the loader runs in the background.
-    #[must_use] 
+    #[must_use]
     pub fn spawn(todo_path: &Path) -> Self {
         Self::spawn_at(done_path(todo_path))
     }
 
     /// Like [`Archive::spawn`] but for an explicit `done.txt` path (e.g. a
     /// `DONE_FILE` that isn't a sibling of the todo file).
-    #[must_use] 
+    #[must_use]
     pub fn spawn_at(path: PathBuf) -> Self {
         let loader_path = path.clone();
         let (tx, rx) = mpsc::sync_channel::<(String, Vec<Task>)>(1);
@@ -55,13 +56,13 @@ impl Archive {
 
     /// Read and parse the sibling `done.txt` inline (no background thread).
     /// Used by the one-shot CLI, where spawning a loader would be wasteful.
-    #[must_use] 
+    #[must_use]
     pub fn load_sync(todo_path: &Path) -> Self {
         Self::load_sync_at(done_path(todo_path))
     }
 
     /// Like [`Archive::load_sync`] but for an explicit `done.txt` path.
-    #[must_use] 
+    #[must_use]
     pub fn load_sync_at(path: PathBuf) -> Self {
         let body = std::fs::read_to_string(&path).unwrap_or_default();
         let tasks = todo::parse_file(&body);
@@ -85,22 +86,22 @@ impl Archive {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn tasks(&self) -> &[Task] {
         &self.tasks
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn len(&self) -> usize {
         self.tasks.len()
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.tasks.is_empty()
     }

@@ -73,7 +73,7 @@ pub enum View {
 impl View {
     /// Stable slot index for keying per-view state arrays. Don't reorder the
     /// `View` variants without updating this together.
-    #[must_use] 
+    #[must_use]
     pub fn idx(self) -> usize {
         match self {
             View::List => 0,
@@ -91,7 +91,7 @@ pub enum Sort {
 }
 
 impl Sort {
-    #[must_use] 
+    #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             Sort::Priority => "priority",
@@ -131,7 +131,7 @@ pub enum TimesheetSort {
 }
 
 impl TimesheetSort {
-    #[must_use] 
+    #[must_use]
     pub fn next(self) -> Self {
         match self {
             TimesheetSort::ProjectActivity => TimesheetSort::Date,
@@ -140,7 +140,7 @@ impl TimesheetSort {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn label(self) -> &'static str {
         match self {
             TimesheetSort::ProjectActivity => "by project",
@@ -185,7 +185,7 @@ pub enum Density {
 }
 
 impl Density {
-    #[must_use] 
+    #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             Density::Compact => "compact",
@@ -222,7 +222,7 @@ pub struct Filter {
 
 impl Filter {
     /// True when at least one of project / context / search is non-empty.
-    #[must_use] 
+    #[must_use]
     pub fn has_any(&self) -> bool {
         self.project.is_some() || self.context.is_some() || !self.search.is_empty()
     }
@@ -256,7 +256,7 @@ pub enum ProjectSort {
 }
 
 impl ProjectSort {
-    #[must_use] 
+    #[must_use]
     pub fn next(self) -> Self {
         match self {
             ProjectSort::Name => ProjectSort::StatusArchivedLast,
@@ -265,7 +265,7 @@ impl ProjectSort {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn label(self) -> &'static str {
         match self {
             ProjectSort::Name => "by name",

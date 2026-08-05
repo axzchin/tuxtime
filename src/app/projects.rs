@@ -5,8 +5,8 @@
 //! Archived projects are persisted to `~/.config/tuxtime/archived-projects.txt`
 //! and hidden from the picker and autocomplete.
 
-use std::path::PathBuf;
 use super::{App, ProjectSort};
+use std::path::PathBuf;
 
 impl App {
     fn archived_projects_path() -> Option<PathBuf> {
@@ -21,7 +21,11 @@ impl App {
             return Vec::new();
         };
         match std::fs::read_to_string(&path) {
-            Ok(s) => s.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect(),
+            Ok(s) => s
+                .lines()
+                .map(|l| l.trim().to_string())
+                .filter(|l| !l.is_empty())
+                .collect(),
             Err(_) => Vec::new(),
         }
     }
@@ -43,11 +47,18 @@ impl App {
     /// Toggle whether a project is archived. Archived projects are hidden
     /// from the `fp` picker and autocomplete popup.
     pub fn toggle_archive_project(&mut self, name: &str) {
-        if let Some(pos) = self.project_manager.archived_projects.iter().position(|p| p == name) {
+        if let Some(pos) = self
+            .project_manager
+            .archived_projects
+            .iter()
+            .position(|p| p == name)
+        {
             self.project_manager.archived_projects.remove(pos);
             self.flash(format!("unarchived +{name}"));
         } else {
-            self.project_manager.archived_projects.push(name.to_string());
+            self.project_manager
+                .archived_projects
+                .push(name.to_string());
             self.flash(format!("archived +{name}"));
         }
         self.save_archived_projects();
@@ -58,9 +69,19 @@ impl App {
     pub fn rename_project(&mut self, old: &str, new: &str) {
         use crate::core::outcome::RenameOutcome;
         match self.store.rename_project(old, new) {
-            RenameOutcome::Renamed { old, new, active_count, archived_count } => {
+            RenameOutcome::Renamed {
+                old,
+                new,
+                active_count,
+                archived_count,
+            } => {
                 // Update the archived-projects list if the renamed project was archived.
-                if let Some(pos) = self.project_manager.archived_projects.iter().position(|p| p == &old) {
+                if let Some(pos) = self
+                    .project_manager
+                    .archived_projects
+                    .iter()
+                    .position(|p| p == &old)
+                {
                     self.project_manager.archived_projects[pos] = new.clone();
                     self.save_archived_projects();
                 }
@@ -127,7 +148,9 @@ impl App {
         if needle.is_empty() {
             all
         } else {
-            all.into_iter().filter(|n| n.to_lowercase().contains(&needle)).collect()
+            all.into_iter()
+                .filter(|n| n.to_lowercase().contains(&needle))
+                .collect()
         }
     }
 
@@ -135,13 +158,17 @@ impl App {
     pub fn cycle_project_sort(&mut self) {
         self.project_manager.project_sort = self.project_manager.project_sort.next();
         self.nav.cursor = 0;
-        self.flash(format!("sort: {}", self.project_manager.project_sort.label()));
+        self.flash(format!(
+            "sort: {}",
+            self.project_manager.project_sort.label()
+        ));
     }
 
     /// Whether a project is archived.
     pub fn is_project_archived(&self, name: &str) -> bool {
-        self.project_manager.archived_projects.iter().any(|p| p == name)
+        self.project_manager
+            .archived_projects
+            .iter()
+            .any(|p| p == name)
     }
 }
-
-

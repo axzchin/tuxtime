@@ -264,8 +264,10 @@ mod tests {
 
     #[test]
     fn tasks_view_handles_missing_inbox() {
-        let dir =
-            std::env::temp_dir().join(format!("tuxtime-serve-tasks-missing-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "tuxtime-serve-tasks-missing-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let todo_path = dir.join("todo.txt");

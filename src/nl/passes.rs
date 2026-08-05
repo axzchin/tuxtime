@@ -628,6 +628,10 @@ pub(super) fn pass_priority(scratch: &mut Scratch, p: &mut ParsedNl) {
     }
 }
 
-pub(super) fn next_lc<'a>(scratch: &'a Scratch, words: &[(usize, usize)], i: usize) -> Option<&'a str> {
+pub(super) fn next_lc<'a>(
+    scratch: &'a Scratch,
+    words: &[(usize, usize)],
+    i: usize,
+) -> Option<&'a str> {
     words.get(i).map(|r| scratch.word_lc(*r))
 }

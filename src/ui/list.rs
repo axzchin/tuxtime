@@ -70,7 +70,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             let task = &app.tasks()[abs];
             let opts = task_row::RowOpts {
                 idx_label: i,
-                cursor: i == app.nav.cursor && app.nav.mode != Mode::Help && app.nav.mode != Mode::Settings,
+                cursor: i == app.nav.cursor
+                    && app.nav.mode != Mode::Help
+                    && app.nav.mode != Mode::Settings,
                 multi_mode: app.effective_mode() == Mode::Visual,
                 multi_checked: app.selection.is_selected(abs),
                 selected: app.selection.is_selected(abs),

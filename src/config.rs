@@ -56,7 +56,7 @@ pub struct Config {
 }
 
 impl Config {
-    #[must_use] 
+    #[must_use]
     pub fn load() -> Self {
         let Some(path) = Self::path() else {
             return Self::default();
@@ -73,7 +73,7 @@ impl Config {
     /// Read a config file from an explicit path. Missing or unreadable files
     /// fall back to defaults so callers don't need to distinguish first-run
     /// from corrupt files.
-    #[must_use] 
+    #[must_use]
     pub fn load_from(path: &Path) -> Self {
         match fs::read_to_string(path) {
             Ok(s) => parse(&s),
@@ -96,12 +96,15 @@ impl Config {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let stem = path
-            .file_name().map_or_else(|| "config".to_string(), |n| n.to_string_lossy().into_owned());
+        let stem = path.file_name().map_or_else(
+            || "config".to_string(),
+            |n| n.to_string_lossy().into_owned(),
+        );
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
         let tmp_name = format!(".{stem}.tmp.{}.{}", std::process::id(), n);
         let tmp = path
-            .parent().map_or_else(|| PathBuf::from(&tmp_name), |p| p.join(&tmp_name));
+            .parent()
+            .map_or_else(|| PathBuf::from(&tmp_name), |p| p.join(&tmp_name));
         fs::write(&tmp, body)?;
         fs::rename(&tmp, path)?;
         Ok(())
@@ -109,7 +112,7 @@ impl Config {
 
     /// Resolve `${XDG_CONFIG_HOME:-$HOME/.config}/tuxtime/config.toml`.
     /// Returns None only when neither `XDG_CONFIG_HOME` nor HOME is set.
-    #[must_use] 
+    #[must_use]
     pub fn path() -> Option<PathBuf> {
         let base = crate::xdg::config_home()?;
         Some(Self::path_in(&base))
@@ -125,7 +128,7 @@ impl Config {
 
     /// Construct the config path under an explicit XDG-style base directory.
     /// Used by tests to avoid mutating process env.
-    #[must_use] 
+    #[must_use]
     pub fn path_in(xdg_base: &Path) -> PathBuf {
         xdg_base.join("tuxtime").join("config.toml")
     }

@@ -35,7 +35,7 @@ fn try_arboard(content: &str) -> bool {
 /// alacritty, wezterm, iTerm2, foot, modern xterm) honor this directly;
 /// tmux forwards it when `set-clipboard on` is configured. Older terminals
 /// silently ignore the sequence.
-#[must_use] 
+#[must_use]
 pub fn format_osc52(content: &str) -> String {
     let encoded = base64_encode(content.as_bytes());
     format!("\x1b]52;c;{encoded}\x1b\\")

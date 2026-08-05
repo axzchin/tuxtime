@@ -27,7 +27,7 @@ pub enum ListDueBucket {
 }
 
 impl ListDueBucket {
-    #[must_use] 
+    #[must_use]
     pub fn label(self) -> &'static str {
         match self {
             ListDueBucket::Overdue => "OVERDUE",
@@ -40,7 +40,7 @@ impl ListDueBucket {
     }
 }
 
-#[must_use] 
+#[must_use]
 pub fn get_week_cutoff(today: &str, week_start: &WeekStart) -> Option<(String, String)> {
     let today = NaiveDate::parse_from_str(today, "%Y-%m-%d").ok()?;
     let weekday = today.weekday();
@@ -59,7 +59,7 @@ pub fn get_week_cutoff(today: &str, week_start: &WeekStart) -> Option<(String, S
 }
 
 /// If the date cannot be parsed we assign to Later
-#[must_use] 
+#[must_use]
 pub fn due_bucket(task: &Task, today: &str, week_start: &WeekStart) -> ListDueBucket {
     match task.due.as_deref() {
         None => ListDueBucket::NoDue,
@@ -90,7 +90,7 @@ pub fn sort_by_prefs(idxs: &mut [usize], tasks: &[Task], sort: Sort) {
 /// Project / context / search predicate, shared by every view that honors
 /// user filters. `needle` matches as a case-insensitive subsequence of the
 /// task body — chars must appear in order, gaps allowed.
-#[must_use] 
+#[must_use]
 pub fn passes_user_filter(t: &Task, filter: &Filter, needle: Option<&str>) -> bool {
     if let Some(p) = &filter.project
         && !t.projects.iter().any(|x| x == p)
@@ -111,7 +111,7 @@ pub fn passes_user_filter(t: &Task, filter: &Filter, needle: Option<&str>) -> bo
     true
 }
 
-#[must_use] 
+#[must_use]
 pub fn list_predicate(
     t: &Task,
     show_done: bool,
@@ -133,7 +133,7 @@ pub fn list_predicate(
 /// after `today`. Malformed values, missing anchors for relative offsets,
 /// and arithmetic overflow all leave the task visible — better to surface a
 /// task the user might miss than to hide it because of a bad threshold.
-#[must_use] 
+#[must_use]
 pub fn is_future_threshold(t: &Task, today: &str) -> bool {
     let Some(raw) = t.threshold.as_deref() else {
         return false;

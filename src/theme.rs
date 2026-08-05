@@ -36,7 +36,7 @@ pub struct Theme {
 }
 
 impl Theme {
-    #[must_use] 
+    #[must_use]
     pub fn priority_color(&self, p: char) -> Color {
         match p {
             'A' => self.pri_a,
@@ -226,7 +226,7 @@ pub fn all() -> &'static [&'static Theme] {
 
 /// Resolve `${XDG_CONFIG_HOME:-$HOME/.config}/tuxtime/themes`. Returns None
 /// only when neither `XDG_CONFIG_HOME` nor HOME is set.
-#[must_use] 
+#[must_use]
 pub fn themes_dir() -> Option<PathBuf> {
     Some(crate::xdg::config_home()?.join("tuxtime").join("themes"))
 }
@@ -242,7 +242,7 @@ pub fn themes_dir() -> Option<PathBuf> {
 ///
 /// A non-existent directory is treated as "no themes" (no warning) — this is
 /// the first-run case.
-#[must_use] 
+#[must_use]
 pub fn load_user_themes(dir: &Path) -> (Vec<Theme>, Vec<String>) {
     let mut themes = Vec::new();
     let mut warnings = Vec::new();
@@ -266,8 +266,10 @@ pub fn load_user_themes(dir: &Path) -> (Vec<Theme>, Vec<String>) {
     let mut seen_names: Vec<String> = BUILT_IN.iter().map(|t| t.name.to_string()).collect();
 
     for path in files {
-        let display = path
-            .file_name().map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().into_owned());
+        let display = path.file_name().map_or_else(
+            || path.display().to_string(),
+            |n| n.to_string_lossy().into_owned(),
+        );
         let body = match fs::read_to_string(&path) {
             Ok(s) => s,
             Err(e) => {
