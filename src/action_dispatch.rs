@@ -80,22 +80,14 @@ fn apply_cursor_actions(app: &mut App, action: Action) {
     match action {
         Action::Quit => {
             app.stop_timer_on_quit();
-            app.nav.should_quit = true;
+            app.nav.quit();
         }
-        Action::CursorDown => {
-            if len > 0 {
-                app.nav.cursor = (app.nav.cursor + 1).min(len - 1);
-            }
-        }
-        Action::CursorUp => app.nav.cursor = app.nav.cursor.saturating_sub(1),
-        Action::CursorTop => app.nav.cursor = 0,
-        Action::CursorBottom => {
-            if len > 0 {
-                app.nav.cursor = len - 1;
-            }
-        }
-        Action::HalfPageDown => app.nav.cursor = (app.nav.cursor + 10).min(len.saturating_sub(1)),
-        Action::HalfPageUp => app.nav.cursor = app.nav.cursor.saturating_sub(10),
+        Action::CursorDown => app.nav.move_down(len.saturating_sub(1)),
+        Action::CursorUp => app.nav.move_up(),
+        Action::CursorTop => app.nav.move_top(),
+        Action::CursorBottom => app.nav.move_bottom(len.saturating_sub(1)),
+        Action::HalfPageDown => app.nav.move_down_by(10, len),
+        Action::HalfPageUp => app.nav.move_up_by(10),
         Action::GoList => app.set_view(View::List),
         Action::ToggleArchiveView => {
             let next = if app.view() == View::Archive {
@@ -116,8 +108,8 @@ fn apply_cursor_actions(app: &mut App, action: Action) {
                 app.clear_search();
             } else if !app.selection.is_empty() {
                 app.selection.clear();
-            } else if app.nav.mode == Mode::Visual {
-                app.nav.mode = Mode::Normal;
+            } else if app.nav.is_visual() {
+                app.nav.enter_normal();
             } else if app.view() != View::List {
                 app.set_view(View::List);
             }
@@ -149,19 +141,19 @@ fn apply_cursor_actions(app: &mut App, action: Action) {
         }
         Action::ToggleShowDone => {
             app.prefs.toggle_show_done();
-            app.nav.cursor = 0;
+            app.nav.move_top();
             app.recompute_visible();
             app.save_prefs();
         }
         Action::ToggleShowFuture => {
             app.prefs.toggle_show_future();
-            app.nav.cursor = 0;
+            app.nav.move_top();
             app.recompute_visible();
             app.save_prefs();
         }
         Action::ChangeWeekStart => app.cycle_week_start(),
         Action::DismissNudge => {
-            app.nav.mode = Mode::Normal;
+            app.nav.enter_normal();
             app.session.last_timer_activity = std::time::Instant::now();
         }
         _ => {}
@@ -175,14 +167,14 @@ fn apply_cursor_actions(app: &mut App, action: Action) {
 fn apply_mutation_actions(app: &mut App, action: Action) {
     match action {
         Action::ToggleComplete => {
-            if app.nav.mode == Mode::Visual && !app.selection.is_empty() {
+            if app.nav.is_visual() && !app.selection.is_empty() {
                 app.complete_selected();
             } else if let Some(abs) = app.cur_abs() {
                 app.toggle_complete(abs);
             }
         }
         Action::Delete => {
-            if app.nav.mode == Mode::Visual && !app.selection.is_empty() {
+            if app.nav.is_visual() && !app.selection.is_empty() {
                 app.delete_selected();
             } else if let Some(abs) = app.cur_abs() {
                 app.delete(abs);
@@ -195,7 +187,7 @@ fn apply_mutation_actions(app: &mut App, action: Action) {
         }
         Action::Undo => app.undo(),
         Action::ToggleSelected => {
-            if app.nav.mode == Mode::Visual
+            if app.nav.is_visual()
                 && let Some(abs) = app.cur_abs()
             {
                 app.selection.toggle(abs);
@@ -212,13 +204,7 @@ fn apply_mutation_actions(app: &mut App, action: Action) {
         }
         Action::ToggleBillable => app.toggle_billable(),
         Action::QuickInterrupt => app.interrupt_timer(),
-        Action::ToggleVisual => {
-            app.nav.mode = if app.nav.mode == Mode::Visual {
-                Mode::Normal
-            } else {
-                Mode::Visual
-            };
-        }
+        Action::ToggleVisual => app.nav.toggle_visual(),
         _ => {}
     }
 }
@@ -230,7 +216,7 @@ fn apply_mutation_actions(app: &mut App, action: Action) {
 fn apply_overlay_actions(app: &mut App, action: Action) {
     match action {
         Action::BeginAdd => {
-            app.nav.mode = Mode::Insert;
+            app.nav.set_mode(Mode::Insert);
             app.draft_clear();
             app.selection.exit_edit();
             app.session.manual_time_entry = false;
@@ -241,7 +227,7 @@ fn apply_overlay_actions(app: &mut App, action: Action) {
             {
                 app.selection.enter_edit(abs);
                 app.draft_set(raw);
-                app.nav.mode = Mode::Insert;
+                app.nav.set_mode(Mode::Insert);
             }
         }
         Action::BeginEditInsert => {
@@ -250,7 +236,7 @@ fn apply_overlay_actions(app: &mut App, action: Action) {
             {
                 app.selection.enter_edit(abs);
                 app.draft_set_insert(raw);
-                app.nav.mode = Mode::Insert;
+                app.nav.set_mode(Mode::Insert);
             }
         }
         Action::Reschedule => {
@@ -259,21 +245,21 @@ fn apply_overlay_actions(app: &mut App, action: Action) {
             {
                 app.selection.enter_edit(abs);
                 app.draft_set_insert(raw);
-                app.nav.mode = Mode::Insert;
+                app.nav.set_mode(Mode::Insert);
                 app.open_calendar(CalendarTarget::Due);
             }
         }
         Action::BeginSearch => {
-            app.nav.mode = Mode::Search;
+            app.nav.set_mode(Mode::Search);
             app.draft_clear();
             app.clear_search();
         }
-        Action::OpenHelp => app.nav.mode = Mode::Help,
-        Action::OpenSettings => app.nav.mode = Mode::Settings,
+        Action::OpenHelp => app.nav.set_mode(Mode::Help),
+        Action::OpenSettings => app.nav.set_mode(Mode::Settings),
         Action::OpenCommandPalette => {
-            let prior = app.nav.mode;
+            let prior = app.nav.mode();
             app.command_palette.open(prior);
-            app.nav.mode = Mode::CommandPalette;
+            app.nav.set_mode(Mode::CommandPalette);
             app.draft_clear();
         }
         Action::OpenThemePicker => {
@@ -284,34 +270,34 @@ fn apply_overlay_actions(app: &mut App, action: Action) {
             }
         }
         Action::TimerStartStop => app.toggle_timer(),
-        Action::ManualTimeEntry => app.nav.mode = Mode::ManualEntryChoice,
+        Action::ManualTimeEntry => app.nav.set_mode(Mode::ManualEntryChoice),
         Action::BeginSessionFromCurrent => {
             if let Some(t) = app.cur_task() {
                 let body = todo::body_only(&t.raw);
                 app.draft_clear();
                 app.draft_set_insert(format!("{body} dur:"));
                 app.session.manual_time_entry = true;
-                app.nav.mode = Mode::Insert;
+                app.nav.set_mode(Mode::Insert);
                 app.selection.exit_edit();
             } else {
                 app.flash("no task to start session from");
             }
         }
-        Action::OpenProjectManager => app.nav.mode = Mode::ManageProjects,
+        Action::OpenProjectManager => app.nav.set_mode(Mode::ManageProjects),
         Action::ConfigureIdleNudge => {
             let mins = app.idle_nudge_seconds() / 60;
             app.draft_clear();
             app.draft_set_insert(mins.to_string());
-            app.nav.mode = Mode::PromptIdleNudge;
+            app.nav.set_mode(Mode::PromptIdleNudge);
         }
         Action::ConfigureLongTimerNudge => {
             let mins = app.long_timer_nudge_seconds() / 60;
             app.draft_clear();
             app.draft_set_insert(mins.to_string());
-            app.nav.mode = Mode::PromptLongTimerNudge;
+            app.nav.set_mode(Mode::PromptLongTimerNudge);
         }
         Action::OpenShare => match app.ensure_share_started() {
-            Ok(_) => app.nav.mode = Mode::Share,
+            Ok(_) => app.nav.set_mode(Mode::Share),
             Err(e) => app.flash(format!("share unavailable: {e}")),
         },
         Action::ArmF => app.chord.arm('f'),
@@ -322,16 +308,16 @@ fn apply_overlay_actions(app: &mut App, action: Action) {
             if app.filter().search.is_empty() {
                 app.flash("no active search to save");
             } else {
-                app.nav.mode = Mode::PromptSaveFilter;
+                app.nav.set_mode(Mode::PromptSaveFilter);
                 app.draft_clear();
             }
         }
         Action::BeginPromptProject => {
-            app.nav.mode = Mode::PromptProject;
+            app.nav.set_mode(Mode::PromptProject);
             app.draft_clear();
         }
         Action::BeginPromptContext => {
-            app.nav.mode = Mode::PromptContext;
+            app.nav.set_mode(Mode::PromptContext);
             app.draft_clear();
         }
         Action::CopyLine => copy_current_task(app, false),

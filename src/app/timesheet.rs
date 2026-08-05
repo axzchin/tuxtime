@@ -358,7 +358,7 @@ impl App {
             .timesheet
             .calendar_focus
             .day()
-            .min(crate::ui::dialog::days_in_month(y, m as u32));
+            .min(crate::ui::calendar_utils::days_in_month(y, m as u32));
         if let Some(d) = NaiveDate::from_ymd_opt(y, m as u32, day) {
             self.timesheet.calendar_focus = d;
         }

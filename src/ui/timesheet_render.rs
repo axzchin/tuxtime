@@ -9,7 +9,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
 use crate::app::{App, TimesheetSort, TimesheetTaskRef, FLASH_TTL, WeekStart};
 use crate::app::{format_billable, format_billable_tenths, format_duration};
-use crate::ui::dialog::{calendar_cells, calendar_footer, format_focused, month_name};
+use crate::ui::calendar_utils::{calendar_cells, calendar_footer, format_focused, month_name};
 use crate::ui::centered_in;
 
 pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {

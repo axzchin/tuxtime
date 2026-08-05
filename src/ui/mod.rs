@@ -7,6 +7,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 use crate::app::{App, Mode, View};
 
 pub mod archive;
+pub mod calendar_utils;
 pub mod command_palette;
 pub mod detail;
 pub mod dialog;

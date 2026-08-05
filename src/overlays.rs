@@ -22,7 +22,7 @@ use super::{apply_action, apply_to_draft, DraftEffect};
 pub(crate) fn handle_welcome(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Char('c') => match cli::ensure_file(app.file_path.clone()) {
-            Ok(_) => app.nav.mode = Mode::Normal,
+            Ok(_) => app.nav.enter_normal(),
             Err(e) => app.flash(format!("could not create {}: {e}", app.file_path.display())),
         },
         KeyCode::Char('s') => match cli::sample_path() {
@@ -30,11 +30,11 @@ pub(crate) fn handle_welcome(app: &mut App, key: KeyEvent) {
                 let done = cli::done_path(&sample);
                 let body = std::fs::read_to_string(&sample).unwrap_or_default();
                 app.open_file(sample, done, body);
-                app.nav.mode = Mode::Normal;
+                app.nav.enter_normal();
             }
             Err(e) => app.flash(format!("could not open sample: {e}")),
         },
-        KeyCode::Char('q') | KeyCode::Esc => app.nav.should_quit = true,
+        KeyCode::Char('q') | KeyCode::Esc => app.nav.quit(),
         _ => {}
     }
 }
@@ -42,7 +42,7 @@ pub(crate) fn handle_welcome(app: &mut App, key: KeyEvent) {
 /// Share overlay: any key dismisses, returning to Normal. The server
 /// keeps running in the background.
 pub(crate) fn handle_share(app: &mut App, _key: KeyEvent) {
-    app.nav.mode = Mode::Normal;
+    app.nav.enter_normal();
 }
 
 // ---------------------------------------------------------------------------
@@ -53,13 +53,13 @@ pub(crate) fn handle_search(app: &mut App, key: KeyEvent) {
     let return_mode = app.nav.pre_search_mode.take().unwrap_or(Mode::Normal);
     match key.code {
         KeyCode::Esc => {
-            app.nav.mode = return_mode;
+            app.nav.set_mode(return_mode);
             app.draft_clear();
             app.clear_search();
         }
         KeyCode::Enter => {
-            app.nav.mode = return_mode;
-            app.nav.cursor = 0;
+            app.nav.set_mode(return_mode);
+            app.nav.move_top();
         }
         _ => {
             app.nav.pre_search_mode = Some(return_mode);
@@ -75,7 +75,7 @@ pub(crate) fn handle_help(app: &mut App, key: KeyEvent) {
         key.code,
         KeyCode::Esc | KeyCode::Char('?' | 'q')
     ) {
-        app.nav.mode = Mode::Normal;
+        app.nav.enter_normal();
     }
 }
 
@@ -84,7 +84,7 @@ pub(crate) fn handle_settings(app: &mut App, key: KeyEvent) {
         key.code,
         KeyCode::Esc | KeyCode::Char(',' | 'q')
     ) {
-        app.nav.mode = Mode::Normal;
+        app.nav.enter_normal();
         return;
     }
     match key.code {
@@ -93,14 +93,14 @@ pub(crate) fn handle_settings(app: &mut App, key: KeyEvent) {
             app.draft_clear();
             app.draft_set_insert(mins.to_string());
             app.nav.nudge_prompt_return = Some(Mode::Settings);
-            app.nav.mode = Mode::PromptIdleNudge;
+            app.nav.set_mode(Mode::PromptIdleNudge);
         }
         KeyCode::Char('l') => {
             let mins = app.long_timer_nudge_seconds() / 60;
             app.draft_clear();
             app.draft_set_insert(mins.to_string());
             app.nav.nudge_prompt_return = Some(Mode::Settings);
-            app.nav.mode = Mode::PromptLongTimerNudge;
+            app.nav.set_mode(Mode::PromptLongTimerNudge);
         }
         _ => {}
     }
@@ -138,13 +138,13 @@ pub(crate) fn handle_command_palette(app: &mut App, key: KeyEvent) {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
     match key.code {
         KeyCode::Esc => {
-            app.nav.mode = app.command_palette.take_prior();
+            app.nav.set_mode(app.command_palette.take_prior());
             app.draft_clear();
             return;
         }
         KeyCode::Enter => {
             let chosen = app.command_palette.current_action();
-            app.nav.mode = app.command_palette.take_prior();
+            app.nav.set_mode(app.command_palette.take_prior());
             app.draft_clear();
             if let Some(action) = chosen {
                 apply_action(app, action);
@@ -227,28 +227,30 @@ pub(crate) fn handle_prompt(app: &mut App, key: KeyEvent) {
 
     match key.code {
         KeyCode::Esc => {
-            app.nav.mode = if matches!(app.nav.mode, Mode::PromptIdleNudge | Mode::PromptLongTimerNudge) {
+            let return_mode = if matches!(app.nav.mode(), Mode::PromptIdleNudge | Mode::PromptLongTimerNudge) {
                 app.nav.nudge_prompt_return.take().unwrap_or(Mode::Normal)
-            } else if app.nav.mode == Mode::PromptRenameProject {
+            } else if app.nav.mode() == Mode::PromptRenameProject {
                 Mode::ManageProjects
             } else {
                 Mode::Normal
             };
+            app.nav.set_mode(return_mode);
             app.draft_clear();
         }
         KeyCode::Enter => {
-            let prev_mode = app.nav.mode;
+            let prev_mode = app.nav.mode();
             let value = app.draft.text().to_string();
             app.draft_clear();
             let is_nudge = matches!(prev_mode, Mode::PromptIdleNudge | Mode::PromptLongTimerNudge);
             let is_rename = prev_mode == Mode::PromptRenameProject;
-            app.nav.mode = if is_nudge {
+            let return_mode = if is_nudge {
                 app.nav.nudge_prompt_return.take().unwrap_or(Mode::Normal)
             } else if is_rename {
                 Mode::ManageProjects
             } else {
                 Mode::Normal
             };
+            app.nav.set_mode(return_mode);
             match prev_mode {
                 Mode::PromptProject => app.add_project_to_current(&value),
                 Mode::PromptContext => app.toggle_context_on_current(&value),
@@ -301,17 +303,11 @@ pub(crate) fn handle_manage_projects(app: &mut App, key: KeyEvent) {
     let flen = filtered.len();
     match key.code {
         KeyCode::Esc | KeyCode::Char('q' | 'P') => {
-            app.nav.mode = Mode::Normal;
+            app.nav.enter_normal();
             app.clear_search();
         }
-        KeyCode::Char('j') | KeyCode::Down => {
-            if flen > 0 {
-                app.nav.cursor = (app.nav.cursor + 1).min(flen - 1);
-            }
-        }
-        KeyCode::Char('k') | KeyCode::Up => {
-            app.nav.cursor = app.nav.cursor.saturating_sub(1);
-        }
+        KeyCode::Char('j') | KeyCode::Down => app.nav.move_down(flen.saturating_sub(1)),
+        KeyCode::Char('k') | KeyCode::Up => app.nav.move_up(),
         KeyCode::Char('x') => {
             if let Some(name) = filtered.get(app.nav.cursor) {
                 app.toggle_archive_project(name);
@@ -322,7 +318,7 @@ pub(crate) fn handle_manage_projects(app: &mut App, key: KeyEvent) {
                 app.project_manager.rename_project_old = Some(name.clone());
                 app.draft_clear();
                 app.draft_set_insert(name);
-                app.nav.mode = Mode::PromptRenameProject;
+                app.nav.set_mode(Mode::PromptRenameProject);
             }
         }
         KeyCode::Char('s') => {
@@ -331,7 +327,7 @@ pub(crate) fn handle_manage_projects(app: &mut App, key: KeyEvent) {
         KeyCode::Char('/') => {
             app.nav.pre_search_mode = Some(Mode::ManageProjects);
             app.draft_clear();
-            app.nav.mode = Mode::Search;
+            app.nav.set_mode(Mode::Search);
         }
         _ => {}
     }
@@ -347,12 +343,12 @@ pub(crate) fn handle_idle_nudge(app: &mut App, key: KeyEvent) {
             app.set_view(View::List);
             app.draft_clear();
             app.session.manual_time_entry = false;
-            app.nav.mode = Mode::Insert;
+            app.nav.set_mode(Mode::Insert);
             app.selection.exit_edit();
             app.session.last_timer_activity = std::time::Instant::now();
         }
         KeyCode::Char('D') | KeyCode::Esc => {
-            app.nav.mode = Mode::Normal;
+            app.nav.enter_normal();
             if let Some(v) = app.session.pre_nudge_view.take() {
                 app.set_view(v);
             }
@@ -371,23 +367,23 @@ pub(crate) fn handle_manual_entry_choice(app: &mut App, key: KeyEvent) {
         KeyCode::Char('n' | 'N') => {
             app.draft_clear();
             app.session.manual_time_entry = false;
-            app.nav.mode = Mode::Insert;
+            app.nav.set_mode(Mode::Insert);
             app.selection.exit_edit();
         }
         KeyCode::Char('a' | 'A') => {
             if let Some(t) = app.cur_task() {
                 let body = todo::body_only(&t.raw);
-                app.nav.mode = Mode::PromptAddTime;
+                app.nav.set_mode(Mode::PromptAddTime);
                 app.draft_clear();
                 app.flash(format!("add time to: {body}"));
             } else {
-                app.nav.mode = Mode::Normal;
+                app.nav.enter_normal();
                 app.flash("no task selected — navigate and press M A");
                 app.session.last_timer_activity = std::time::Instant::now();
             }
         }
         KeyCode::Esc => {
-            app.nav.mode = Mode::Normal;
+            app.nav.enter_normal();
         }
         _ => {}
     }

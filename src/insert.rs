@@ -185,7 +185,7 @@ fn commit_draft(app: &mut App) -> AddOutcome {
 
 /// Transition out of Insert mode back to Normal, clearing transient state.
 fn exit_insert(app: &mut App) {
-    app.nav.mode = Mode::Normal;
+    app.nav.enter_normal();
     app.draft_clear();
     app.selection.exit_edit();
     app.session.manual_time_entry = false;

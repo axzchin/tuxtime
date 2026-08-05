@@ -204,7 +204,7 @@ impl App {
         let today = self.store.today().to_string();
         self.store = Store::new_with_done(file_path.clone(), done_path, body, today);
         self.file_path = file_path;
-        self.nav.cursor = 0;
+        self.nav.move_top();
         self.recompute_visible();
     }
 
@@ -310,8 +310,8 @@ impl App {
     /// palette mid-Visual hides the multi-select checkboxes and similar
     /// mode-driven affordances.
     pub fn effective_mode(&self) -> Mode {
-        match self.nav.mode {
-            Mode::CommandPalette => self.command_palette.prior().unwrap_or(self.nav.mode),
+        match self.nav.mode() {
+            Mode::CommandPalette => self.command_palette.prior().unwrap_or(self.nav.mode()),
             m => m,
         }
     }
@@ -342,7 +342,7 @@ impl App {
     pub fn enter_pick_theme(&mut self) {
         self.theme_picker.orig = self.prefs.theme_idx();
         self.theme_picker.cursor = self.theme_picker.orig;
-        self.nav.mode = Mode::PickTheme;
+        self.nav.set_mode(Mode::PickTheme);
     }
 
     /// Step through themes in `forward` (true = next) direction with
@@ -368,7 +368,7 @@ impl App {
     /// Accept the previewed theme and persist to config.
     pub fn pick_theme_accept(&mut self) {
         self.prefs.set_theme_idx(self.theme_picker.cursor);
-        self.nav.mode = Mode::Normal;
+        self.nav.enter_normal();
         self.save_prefs();
         self.flash(format!("theme: {}", self.theme().name));
     }
@@ -377,7 +377,7 @@ impl App {
     /// the picker opened.
     pub fn pick_theme_cancel(&mut self) {
         self.prefs.set_theme_idx(self.theme_picker.orig);
-        self.nav.mode = Mode::Normal;
+        self.nav.enter_normal();
     }
 
     pub fn cycle_density(&mut self) {
@@ -525,10 +525,8 @@ impl App {
         if self.nav.view == view {
             return;
         }
-        self.nav.view_cursor[self.nav.view.idx()] = self.nav.cursor;
-        self.nav.view = view;
+        self.nav.switch_view(self.nav.view, view);
         self.recompute_visible();
-        self.nav.cursor = self.nav.view_cursor[view.idx()];
         self.clamp_cursor();
     }
 
@@ -536,7 +534,7 @@ impl App {
     /// Typing into the search prompt calls this on every keystroke.
     pub fn set_search(&mut self, search: String) {
         self.filter.search = search;
-        self.nav.cursor = 0;
+        self.nav.move_top();
         self.recompute_visible();
     }
 
@@ -546,21 +544,21 @@ impl App {
             return;
         }
         self.filter.search.clear();
-        self.nav.cursor = 0;
+        self.nav.move_top();
         self.recompute_visible();
     }
 
     /// Set or clear the active project filter. `None` removes it.
     pub fn set_project_filter(&mut self, project: Option<String>) {
         self.filter.project = project;
-        self.nav.cursor = 0;
+        self.nav.move_top();
         self.recompute_visible();
     }
 
     /// Set or clear the active context filter. `None` removes it.
     pub fn set_context_filter(&mut self, context: Option<String>) {
         self.filter.context = context;
-        self.nav.cursor = 0;
+        self.nav.move_top();
         self.recompute_visible();
     }
 
@@ -584,7 +582,7 @@ impl App {
             return;
         }
         self.filter.clear();
-        self.nav.cursor = 0;
+        self.nav.move_top();
         self.recompute_visible();
     }
 

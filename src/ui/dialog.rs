@@ -9,6 +9,7 @@ use crate::app::{
     DURATION_PRESETS,
 };
 use crate::theme::Theme;
+use super::calendar_utils::{calendar_cells, calendar_footer, format_focused, month_name};
 
 /// Classifier output: byte range + what kind of token lives there. Segments
 /// cover the input contiguously and don't overlap.
@@ -854,28 +855,6 @@ fn render_calendar(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
     );
 }
 
-pub(crate) fn calendar_footer<'a>(theme: &Theme) -> Line<'a> {
-    let chip = |k: &'static str, label: &'static str| -> Vec<Span<'a>> {
-        vec![
-            Span::styled(
-                k,
-                Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(format!(" {label} "), Style::default().fg(theme.dim)),
-        ]
-    };
-    let mut spans = vec![Span::raw("  ")];
-    spans.extend(chip("t", "today"));
-    spans.push(Span::styled("· ", Style::default().fg(theme.dim)));
-    spans.extend(chip("T", "tmw"));
-    spans.push(Span::styled("· ", Style::default().fg(theme.dim)));
-    spans.extend(chip("w", "+1w"));
-    spans.push(Span::styled("· ", Style::default().fg(theme.dim)));
-    spans.extend(chip("m", "+1mo"));
-    spans.push(Span::styled("· ", Style::default().fg(theme.dim)));
-    spans.extend(chip("x", "clear"));
-    Line::from(spans).style(Style::default().bg(theme.panel))
-}
 
 fn render_recurrence_builder(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
     let theme = app.theme();
@@ -1228,100 +1207,9 @@ fn render_duration_picker(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App)
     );
 }
 
-pub(crate) fn days_in_month(year: i32, month: u32) -> u32 {
-    use chrono::NaiveDate;
-    let (ny, nm) = if month == 12 {
-        (year + 1, 1)
-    } else {
-        (year, month + 1)
-    };
-    let first_next = NaiveDate::from_ymd_opt(ny, nm, 1);
-    let first_this = NaiveDate::from_ymd_opt(year, month, 1);
-    match (first_next, first_this) {
-        (Some(n), Some(t)) => (n - t).num_days() as u32,
-        _ => 30,
-    }
-}
 
-/// Build the calendar grid for `first_of_month`'s month as rows of 7 columns.
-/// Each cell is `Some(day)` for a real day-of-month or `None` for a blank
-/// leading/trailing cell. Column 0 is the configured week-start weekday.
-pub(crate) fn calendar_cells(
-    first_of_month: chrono::NaiveDate,
-    week_start: WeekStart,
-) -> Vec<[Option<u32>; 7]> {
-    use chrono::Datelike;
-    // Leading blank cells before day 1, measured from the configured week start.
-    let lead = i64::from(match week_start {
-        WeekStart::Sunday => first_of_month.weekday().num_days_from_sunday(),
-        WeekStart::Monday => first_of_month.weekday().num_days_from_monday(),
-    });
-    let days = i64::from(days_in_month(first_of_month.year(), first_of_month.month()));
 
-    let mut weeks = Vec::new();
-    // Day index (0-based) at column 0 of the current week; starts negative so the
-    // first `lead` cells fall outside 0..days and render blank.
-    let mut start = -lead;
-    while start < days {
-        let mut row = [None; 7];
-        for (col, cell) in row.iter_mut().enumerate() {
-            let idx = start + col as i64;
-            if (0..days).contains(&idx) {
-                *cell = Some((idx + 1) as u32);
-            }
-        }
-        weeks.push(row);
-        start += 7;
-    }
-    weeks
-}
 
-pub(crate) fn month_name(m: u32) -> &'static str {
-    match m {
-        1 => "January",
-        2 => "February",
-        3 => "March",
-        4 => "April",
-        5 => "May",
-        6 => "June",
-        7 => "July",
-        8 => "August",
-        9 => "September",
-        10 => "October",
-        11 => "November",
-        12 => "December",
-        _ => "?",
-    }
-}
-
-pub(crate) fn format_focused(d: chrono::NaiveDate) -> String {
-    use chrono::Datelike;
-    let dow = match d.weekday() {
-        chrono::Weekday::Mon => "Mon",
-        chrono::Weekday::Tue => "Tue",
-        chrono::Weekday::Wed => "Wed",
-        chrono::Weekday::Thu => "Thu",
-        chrono::Weekday::Fri => "Fri",
-        chrono::Weekday::Sat => "Sat",
-        chrono::Weekday::Sun => "Sun",
-    };
-    let mon = match d.month() {
-        1 => "Jan",
-        2 => "Feb",
-        3 => "Mar",
-        4 => "Apr",
-        5 => "May",
-        6 => "Jun",
-        7 => "Jul",
-        8 => "Aug",
-        9 => "Sep",
-        10 => "Oct",
-        11 => "Nov",
-        12 => "Dec",
-        _ => "?",
-    };
-    format!("{dow} {mon} {}", d.day())
-}
 
 fn hint_line<'a>(theme: &Theme) -> Line<'a> {
     let mut spans = vec![
@@ -1387,7 +1275,7 @@ mod tests {
         use crate::app::WeekStart;
         // May 2026: the 1st is a Friday (weekday index 5 in a Sunday-leading grid).
         let first = chrono::NaiveDate::from_ymd_opt(2026, 5, 1).unwrap();
-        let grid = super::calendar_cells(first, WeekStart::Sunday);
+        let grid = crate::ui::calendar_utils::calendar_cells(first, WeekStart::Sunday);
 
         // Leading blanks Sun..Thu, then day 1 under Friday, day 2 under Saturday.
         assert_eq!(
@@ -1406,7 +1294,7 @@ mod tests {
         use crate::app::WeekStart;
         // May 2026, 1st = Friday. In a Monday-leading grid Friday is column 4.
         let first = chrono::NaiveDate::from_ymd_opt(2026, 5, 1).unwrap();
-        let grid = super::calendar_cells(first, WeekStart::Monday);
+        let grid = crate::ui::calendar_utils::calendar_cells(first, WeekStart::Monday);
 
         assert_eq!(grid[0], [None, None, None, None, Some(1), Some(2), Some(3)]);
         let days: Vec<u32> = grid.iter().flatten().flatten().copied().collect();

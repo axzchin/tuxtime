@@ -26,7 +26,7 @@ expression: buffer_to_text(&buf)
                                   │                                                          │      
                                   │  every  1    day  business  week  month  year            │      
                                   │                                                          │      
-                                  │  mode   strict   after-complete        next: Wed May 13  │      
+                                  │  mode   strict   after-complete    next: Wed 2026-05-13  │      
                                   │                                                          │      
                                   │  → writes rec:+1w                                        │      
                                   │                                                          │      

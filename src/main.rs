@@ -125,10 +125,14 @@ fn main() -> Result<()> {
     // Surface theme-load problems on the first frame. Flash is single-line,
     // so collapse multiple warnings to a count and let the user investigate
     // their themes directory.
-    match theme_warnings.len() {
+    let n = theme_warnings.len();
+    match n {
         0 => {}
-        1 => app_state.flash(theme_warnings.into_iter().next().expect("len==1")),
-        n => app_state.flash(format!(
+        1 => {
+            // SAFETY: n == 1, so into_iter().next() always returns Some.
+            app_state.flash(theme_warnings.into_iter().next().unwrap_or_default());
+        }
+        _ => app_state.flash(format!(
             "{n} theme(s) skipped — check ~/.config/tuxtime/themes/"
         )),
     }
