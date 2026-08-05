@@ -11,7 +11,7 @@
 //! [`apply_to_draft`] to share the same text-editing behavior.
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use tuxtime::app::{AddOutcome, App, DialogInputMode, Mode, OverlayKind};
+use tuxtime::app::{AddOutcome, App, DialogInputMode, OverlayKind};
 use crate::handle_autocomplete_keys;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

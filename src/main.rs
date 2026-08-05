@@ -24,7 +24,6 @@ use tuxtime::ui::hyperlinks;
 use tuxtime::{ui, update};
 
 mod insert;
-use insert::handle_insert;
 pub(crate) use insert::{apply_to_draft, DraftEffect};
 #[cfg(test)]
 pub(crate) use insert::{resolve_edit_key, EditAction};
@@ -36,20 +35,28 @@ pub(crate) use key_resolve::resolve_normal_key;
 
 mod action_dispatch;
 pub(crate) use action_dispatch::apply_action;
-use action_dispatch::handle_normal;
+
+mod dispatch;
+use dispatch::ModeDispatcher;
 
 mod overlays;
-use overlays::{
-    handle_command_palette, handle_help, handle_idle_nudge,
-    handle_manual_entry_choice, handle_manage_projects, handle_pick, handle_pick_theme,
-    handle_pick_timesheet_date, handle_prompt, handle_search, handle_settings, handle_share,
-    handle_welcome,
-};
 pub(crate) use overlays::handle_autocomplete_keys;
 
 mod timesheet_handler;
 #[cfg(test)]
 pub(crate) use timesheet_handler::handle_timesheet_keys;
+
+// The main_tests.rs integration tests drive handlers directly; re-export the
+// handler entry points so the test module can call them without reaching
+// into private modules.
+#[cfg(test)]
+pub(crate) use overlays::{
+    handle_command_palette, handle_help, handle_idle_nudge, handle_manual_entry_choice,
+    handle_manage_projects, handle_pick, handle_pick_theme, handle_pick_timesheet_date,
+    handle_prompt, handle_search, handle_settings, handle_share, handle_welcome,
+};
+#[cfg(test)]
+pub(crate) use insert::handle_insert;
 
 const EVENT_POLL: Duration = Duration::from_millis(250);
 fn main() -> Result<()> {
@@ -376,33 +383,7 @@ fn next_timeout(app: &App) -> Duration {
 }
 
 fn handle_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
-    // Detect external edits before processing the key. On detection the
-    // file is reloaded, the keystroke is consumed (re-press to act on the
-    // new state), and the per-mutator checks become no-ops downstream.
-    if !app.check_external_changes() {
-        return;
-    }
-    match app.nav.mode {
-        Mode::Insert => handle_insert(app, key),
-        Mode::Search => handle_search(app, key),
-        Mode::Help => handle_help(app, key),
-        Mode::Settings => handle_settings(app, key),
-        Mode::PromptProject | Mode::PromptContext | Mode::PromptSaveFilter
-        | Mode::PromptAddTime | Mode::PromptIdleNudge | Mode::PromptLongTimerNudge
-        | Mode::PromptRenameProject => {
-            handle_prompt(app, key);
-        }
-        Mode::PickTimesheetDate => handle_pick_timesheet_date(app, key),
-        Mode::PickProject | Mode::PickContext | Mode::PickSavedFilter => handle_pick(app, key),
-        Mode::PickTheme => handle_pick_theme(app, key),
-        Mode::CommandPalette => handle_command_palette(app, key),
-        Mode::Share => handle_share(app, key),
-        Mode::Welcome => handle_welcome(app, key),
-        Mode::Normal | Mode::Visual => handle_normal(app, key, keybinds),
-        Mode::IdleNudge => handle_idle_nudge(app, key),
-        Mode::ManualEntryChoice => handle_manual_entry_choice(app, key),
-        Mode::ManageProjects => handle_manage_projects(app, key),
-    }
+    ModeDispatcher::new(keybinds).dispatch(app, key);
 }
 
 

@@ -1,14 +1,12 @@
 //! Timesheet view renderer and date-picker overlay. Extracted from [`super::mod`].
 
-use chrono::{Datelike, NaiveDate};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
-use crate::app::{App, TimesheetSort, TimesheetTaskRef, FLASH_TTL, WeekStart};
-use crate::app::{format_billable, format_billable_tenths, format_duration};
+use crate::app::App;
 use crate::ui::calendar_utils::{calendar_cells, calendar_footer, format_focused, month_name};
 use crate::ui::centered_in;
 
