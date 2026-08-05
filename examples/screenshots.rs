@@ -56,7 +56,7 @@ fn main() -> std::io::Result<()> {
 
     // 3. Help overlay.
     let mut app = make();
-    app.mode = Mode::Help;
+    app.nav.mode = Mode::Help;
     save(&app, &out.join("help.svg"))?;
 
     // 4. List with an active project filter — sidebar shows the selection.
@@ -69,7 +69,7 @@ fn main() -> std::io::Result<()> {
     // then mid-word.
     let mut app = make();
     app.command_palette.open(Mode::Normal);
-    app.mode = Mode::CommandPalette;
+    app.nav.mode = Mode::CommandPalette;
     app.draft_set("arch".to_string());
     app.command_palette.refresh("arch");
     save(&app, &out.join("command-palette.svg"))?;

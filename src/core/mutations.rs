@@ -3,7 +3,7 @@ use std::time::Instant;
 use super::Store;
 use super::outcome::{
     AddOutcome, BulkCompleteOutcome, BulkDeleteOutcome, CompleteOutcome, DeleteOutcome,
-    EditOutcome, PriorityOutcome, Reconcile, StoreError, TagOutcome, TimerOutcome,
+    EditOutcome, PriorityOutcome, Reconcile, RenameOutcome, StoreError, TagOutcome, TimerOutcome,
     TimerQuitOutcome,
 };
 use crate::recurrence::{self, RecSpec};
@@ -431,7 +431,7 @@ impl Store {
             return self.timer_stop();
         }
         if self.active_timer.is_some() {
-            let from_abs = self.active_timer.as_ref().map(|ts| ts.task_abs).unwrap_or(0);
+            let from_abs = self.active_timer.as_ref().map_or(0, |ts| ts.task_abs);
             let old = self.timer_stop_inner();
             self.push_history();
             if let TimerOutcome::Stopped { elapsed_secs, total_secs, project, activity, .. } = old {
@@ -481,22 +481,7 @@ impl Store {
     fn timer_start_inner(&mut self, abs: usize) -> TimerOutcome {
         let now = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
         let task = &self.tasks[abs];
-        let body = todo::body_after_priority(&task.raw);
-        let prefix = &task.raw[..task.raw.len() - body.len()];
-        let mut new_tokens: Vec<String> = Vec::new();
-        let mut has_start = false;
-        for tok in body.split_whitespace() {
-            if tok.starts_with("start:") {
-                new_tokens.push(format!("start:{now}"));
-                has_start = true;
-            } else {
-                new_tokens.push(tok.to_string());
-            }
-        }
-        if !has_start {
-            new_tokens.push(format!("start:{now}"));
-        }
-        let new_raw = if prefix.is_empty() { new_tokens.join(" ") } else { format!("{}{}", prefix, new_tokens.join(" ")) };
+        let new_raw = rebuild_token_line(&task.raw, "start:", None, &format!("start:{now}"));
         match todo::parse_line(&new_raw) {
             Ok(parsed) => {
                 self.tasks[abs] = parsed;
@@ -521,21 +506,7 @@ impl Store {
         let task = &self.tasks[abs];
         let existing_dur = task.dur.unwrap_or(0);
         let new_total = existing_dur + elapsed;
-        let body = todo::body_after_priority(&task.raw);
-        let prefix = &task.raw[..task.raw.len() - body.len()];
-        let mut new_tokens: Vec<String> = Vec::new();
-        let mut has_dur = false;
-        for tok in body.split_whitespace() {
-            if tok.starts_with("start:") { continue; }
-            if tok.starts_with("dur:") {
-                new_tokens.push(format!("dur:{new_total}"));
-                has_dur = true;
-            } else {
-                new_tokens.push(tok.to_string());
-            }
-        }
-        if !has_dur { new_tokens.push(format!("dur:{new_total}")); }
-        let new_raw = if prefix.is_empty() { new_tokens.join(" ") } else { format!("{}{}", prefix, new_tokens.join(" ")) };
+        let new_raw = rebuild_token_line(&task.raw, "dur:", Some("start:"), &format!("dur:{new_total}"));
         match todo::parse_line(&new_raw) {
             Ok(parsed) => {
                 let project = parsed.projects.first().cloned();
@@ -548,13 +519,145 @@ impl Store {
         }
     }
 
-    fn timer_stop(&mut self) -> TimerOutcome {
+fn timer_stop(&mut self) -> TimerOutcome {
         let outcome = self.timer_stop_inner();
         if matches!(outcome, TimerOutcome::Stopped { .. }) {
             self.push_history();
             if let Err(e) = self.persist() { return TimerOutcome::Error(e); }
         }
         outcome
+    }
+
+    /// Rename a project across all active and archived tasks. Replaces every
+    /// occurrence of `+old` with `+new` (exact token match, not substring).
+    /// One undo entry for the entire batch. Does NOT check archived-projects
+    /// list — the App layer handles that.
+    pub fn rename_project(&mut self, old: &str, new: &str) -> RenameOutcome {
+        let old = old.trim();
+        let new = new.trim();
+        if new.is_empty() || !todo::is_valid_tag_name(new) {
+            return RenameOutcome::InvalidName;
+        }
+        if new == old {
+            return RenameOutcome::NoTasks;
+        }
+        match self.reconcile() {
+            Reconcile::Unchanged => {}
+            other => return RenameOutcome::Aborted(other),
+        }
+
+        let needle = format!("+{old}");
+        let replacement = format!("+{new}");
+        let mut active_count = 0usize;
+        let mut archived_count = 0usize;
+
+        // Rename in active tasks.
+        for i in 0..self.tasks.len() {
+            if self.tasks[i].projects.iter().any(|p| p == old) {
+                let new_raw = self.tasks[i]
+                    .raw
+                    .split_whitespace()
+                    .map(|tok| {
+                        if tok == needle {
+                            replacement.as_str()
+                        } else {
+                            tok
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                if let Ok(parsed) = todo::parse_line(&new_raw) {
+                    self.tasks[i] = parsed;
+                    active_count += 1;
+                }
+            }
+        }
+
+        // Rename in archived tasks.
+        let mut archive_modified = false;
+        for i in 0..self.archive.tasks.len() {
+            if self.archive.tasks[i].projects.iter().any(|p| p == old) {
+                let new_raw = self.archive.tasks[i]
+                    .raw
+                    .split_whitespace()
+                    .map(|tok| {
+                        if tok == needle {
+                            replacement.as_str()
+                        } else {
+                            tok
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                if let Ok(parsed) = todo::parse_line(&new_raw) {
+                    self.archive.tasks[i] = parsed;
+                    archived_count += 1;
+                    archive_modified = true;
+                }
+            }
+        }
+
+        if active_count == 0 && archived_count == 0 {
+            return RenameOutcome::NoTasks;
+        }
+
+        self.push_history();
+        if let Err(e) = self.persist() {
+            return RenameOutcome::Error(e);
+        }
+        if archive_modified {
+            let archive_body = todo::serialize(&self.archive.tasks);
+            if let Err(e) = todo::write_atomic(&self.archive.path, &archive_body) {
+                return RenameOutcome::Error(StoreError::ArchiveIo(e));
+            }
+            self.archive.last_disk = archive_body;
+        }
+        RenameOutcome::Renamed {
+            old: old.to_string(),
+            new: new.to_string(),
+            active_count,
+            archived_count,
+        }
+    }
+}
+
+/// Rebuild a task's raw line by replacing or adding a specific token in the
+/// body portion (after priority + creation date). `replace_prefix` is the
+/// token prefix to replace (e.g. "start:", "dur:"). If `drop_prefix` is
+/// `Some(p)`, tokens starting with `p` are dropped instead of being carried
+/// forward (e.g. drop `start:` when stopping a timer). `new_token` is the
+/// full replacement token value (e.g. "start:2026-05-07T12:00:00" or
+/// "dur:5400").
+fn rebuild_token_line(
+    raw: &str,
+    replace_prefix: &str,
+    drop_prefix: Option<&str>,
+    new_token: &str,
+) -> String {
+    let body = crate::todo::body_after_priority(raw);
+    let prefix = &raw[..raw.len() - body.len()];
+    let mut new_tokens: Vec<String> = Vec::new();
+    let mut has_token = false;
+    for tok in body.split_whitespace() {
+        if let Some(dp) = drop_prefix
+            && tok.starts_with(dp)
+        {
+            continue;
+        }
+        if tok.starts_with(replace_prefix) {
+            new_tokens.push(new_token.to_string());
+            has_token = true;
+        } else {
+            new_tokens.push(tok.to_string());
+        }
+    }
+    if !has_token {
+        new_tokens.push(new_token.to_string());
+    }
+    if prefix.is_empty() {
+        new_tokens.join(" ")
+    } else {
+        format!("{prefix}{}", new_tokens.join(" "))
     }
 }
 

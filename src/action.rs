@@ -69,9 +69,23 @@ pub enum Action {
     OpenTimesheet,
     /// Dismiss the idle-nudge popup.
     DismissNudge,
+    /// `N` — begin a new session from the current task (copy body, fresh
+    /// date, pre-filled `dur:`). For multi-day task tracking.
+    BeginSessionFromCurrent,
+    /// Open the idle-nudge threshold prompt (minutes).
+    ConfigureIdleNudge,
+    /// Open the long-timer-nudge threshold prompt (minutes).
+    ConfigureLongTimerNudge,
+    /// `b` — toggle billable/non-billable (`bill:n`) on the current task.
+    ToggleBillable,
+    /// `T` — quick interruption: stop running timer, open blank entry.
+    QuickInterrupt,
+    /// `<P>` — open the project management view (archive/rename projects).
+    OpenProjectManager,
 }
 
 impl Action {
+    #[must_use] 
     pub fn from_keybind_name(s: &str) -> Option<Self> {
         let normalized = s.trim().replace('-', "_").to_ascii_lowercase();
         match normalized.as_str() {
@@ -127,6 +141,18 @@ impl Action {
             "copy_narratives" | "copy_time" => Some(Self::CopyNarratives),
             "open_timesheet" | "timesheet" => Some(Self::OpenTimesheet),
             "dismiss_nudge" => Some(Self::DismissNudge),
+            "begin_session_from_current" | "new_session" | "session" => {
+                Some(Self::BeginSessionFromCurrent)
+            }
+            "configure_idle_nudge" | "idle_nudge" => Some(Self::ConfigureIdleNudge),
+            "configure_long_timer_nudge" | "long_timer_nudge" => {
+                Some(Self::ConfigureLongTimerNudge)
+            }
+            "toggle_billable" | "billable" => Some(Self::ToggleBillable),
+            "quick_interrupt" | "interrupt" => Some(Self::QuickInterrupt),
+            "open_project_manager" | "project_manager" | "manage_projects" => {
+                Some(Self::OpenProjectManager)
+            }
             _ => None,
         }
     }

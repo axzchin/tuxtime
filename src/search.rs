@@ -7,6 +7,7 @@
 ///
 /// Offsets are into the original `haystack` (not a lowercased copy), so they
 /// land on `char_indices` boundaries and are safe to slice.
+#[must_use] 
 pub fn subseq_match_ci(haystack: &str, needle: &str) -> Option<Vec<usize>> {
     if needle.is_empty() {
         return None;

@@ -1,35 +1,41 @@
-use std::collections::BTreeMap;
-use std::time::Instant;
-
-use chrono::Timelike;
-use core::fmt;
-use std::cell::Cell;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
 use crate::config::Config;
 use crate::core::Store;
-use crate::core::outcome::{DrainReport, Reconcile, TimerOutcome, TimerQuitOutcome};
+use crate::core::outcome::{DrainReport, Reconcile};
 use crate::note;
 use crate::serve::{self, ShareInfo};
 use crate::theme::{self, Theme};
 use crate::todo::Task;
 
+mod archive_cache;
 mod autocomplete;
 mod bulk;
 mod chord;
 mod draft;
 mod draft_overlay;
+mod duration;
 mod flash;
 mod mutations;
+mod navigation;
 pub mod palette;
 mod picker;
 mod prefs;
+mod project_manager;
+mod projects;
 mod saved;
+mod saved_filter_picker;
 mod selection;
+mod session;
+mod share_state;
+mod theme_picker_state;
+mod timer;
+mod timesheet;
 mod types;
+mod update_checker;
 mod visibility;
+mod week_start;
 
 #[cfg(test)]
 pub(crate) mod test_support;
@@ -50,42 +56,22 @@ pub use palette::CommandPaletteState;
 pub use prefs::{Layout, Prefs};
 pub use selection::Selection;
 pub use types::{
-    AUTOCOMPLETE_CAP, AddOutcome, Density, FLASH_TTL, Filter, LEADER_WINDOW, Mode, SavedFilter,
-    Sort, UNDO_LIMIT, View,
+    AUTOCOMPLETE_CAP, AddOutcome, Density, FLASH_TTL, Filter, LEADER_WINDOW, Mode, ProjectSort,
+    SavedFilter, Sort, TimesheetEntry, TimesheetSort, TimesheetTaskRef, UNDO_LIMIT, View,
 };
 pub use visibility::GroupKey;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WeekStart {
-    Sunday,
-    Monday,
-}
-
-impl WeekStart {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            WeekStart::Sunday => "sunday",
-            WeekStart::Monday => "monday",
-        }
-    }
-}
-
-impl fmt::Display for WeekStart {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-impl FromStr for WeekStart {
-    type Err = ();
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "sunday" => Ok(WeekStart::Sunday),
-            "monday" => Ok(WeekStart::Monday),
-            _ => Err(()),
-        }
-    }
-}
+pub use archive_cache::ArchiveCache;
+pub use navigation::Navigation;
+pub use project_manager::ProjectManager;
+pub use saved_filter_picker::SavedFilterPicker;
+pub use session::Session;
+pub use share_state::ShareState;
+pub use theme_picker_state::ThemePicker;
+pub use update_checker::UpdateChecker;
+pub use week_start::WeekStart;
+pub(crate) use duration::{format_duration, parse_duration_input};
+pub use duration::{format_billable, format_billable_tenths};
+pub use timesheet::TimesheetState;
 
 pub struct App {
     /// The headless durable store: tasks, archive, history, persistence, and
@@ -93,18 +79,15 @@ pub struct App {
     /// flash messages and refresh the visible cache); read via `tasks()`,
     /// `archive()`, `task_raw()`, etc.
     pub(crate) store: Store,
-    /// Crate-private: writing here would not invalidate `visible_cache`.
-    /// Read via `view()`; mutate via `set_view()`.
-    pub(crate) view: View,
-    pub mode: Mode,
+    /// Navigation state bundle: view, mode, cursor, per-view cursors/scroll,
+    /// quit flag, and overlay return-path tracking. Handlers mutate fields
+    /// through `app.nav`; [`App`] provides thin facade methods (`view()`,
+    /// `set_view()`, `effective_mode()`) that bridge to `recompute_visible`
+    /// and other store-level concerns.
+    pub nav: Navigation,
     pub prefs: Prefs,
-    pub cursor: usize,
-    /// Per-view saved cursor, indexed by `View::idx()`. `set_view` snapshots
-    /// the outgoing view's cursor here and restores the incoming view's, so
-    /// each view remembers where the user last was.
-    pub(crate) view_cursor: [usize; 2],
-    /// Crate-private: same reason as `view` — `visible_cache` would drift.
-    /// Read via `filter()`; mutate via `set_search`/`set_project`/etc.
+    /// Active filter (search text, project, context). Crate-private: writing
+    /// here would not invalidate `visible_cache`.
     pub(crate) filter: Filter,
     pub draft: DraftState,
     pub selection: Selection,
@@ -116,74 +99,47 @@ pub struct App {
     /// without the renderer having to reach into the environment itself.
     /// `None` in tests/examples that don't care about the value.
     pub config_path: Option<PathBuf>,
-    pub should_quit: bool,
+    /// Theme picker state: cursor and original selection.
+    pub theme_picker: ThemePicker,
+    /// Project management state: archive, rename, sort.
+    pub project_manager: ProjectManager,
+    /// Share/capture server state.
+    pub share_state: ShareState,
+    /// Archive autocomplete cache (projects and contexts from done.txt).
+    pub archive_cache: ArchiveCache,
+    /// Saved-filter picker state for the `ff` picker.
+    pub saved_picker: SavedFilterPicker,
+    /// Update checker: latest release tag and background receiver.
+    pub update_checker: UpdateChecker,
+
     visible_cache: Vec<usize>,
     /// Parallel to `visible_cache`: `visible_groups[i]` is the group key for
     /// the row at `visible_cache[i]`. `GroupKey::None` for List under
     /// `Sort::File`; priority/due bucket keys under other List sorts; date
     /// keys for Archive. Renderers read this to draw section headers.
     visible_groups: Vec<crate::app::visibility::GroupKey>,
-    /// Latest known release tag, populated asynchronously by the update
-    /// checker. `None` while we haven't heard back (or the check is disabled,
-    /// e.g. in tests). The UI compares this against `CARGO_PKG_VERSION` to
-    /// decide whether to surface an "update available" hint.
-    pub(crate) latest_version: Option<String>,
-    /// Receiver for the background update check. Drained each tick; cleared
-    /// once a result has been received or the sender hung up.
-    update_check: Option<Receiver<Option<String>>>,
     /// User-named saved searches, loaded from config at startup and
     /// upserted via `fs`. Recalled with the `ff` picker.
     pub saved_filters: Vec<SavedFilter>,
-    /// The search string that was active when the `ff` picker opened, so
-    /// cancelling (`Esc`) restores it instead of leaving the previewed
-    /// filter applied. `None` outside `Mode::PickSavedFilter`.
-    saved_pick_restore: Option<String>,
-    /// Index into `saved_filters` of the row the `ff` picker currently
-    /// previews. Tracked explicitly rather than re-derived from
-    /// `filter.search` so duplicate queries don't strand j/k. Only
-    /// meaningful while `Mode::PickSavedFilter`; re-seeded on each open.
-    saved_pick_idx: usize,
     pub command_palette: CommandPaletteState,
-    /// Vertical scroll offset (rows from the top of the line list) for each
-    /// view, keyed by `View::idx()`. Updated at render time via `Cell` so the
-    /// renderer can keep the cursor row visible without taking `&mut self`.
-    pub(crate) view_scroll: [Cell<u16>; 2],
-    /// Handle to the in-TUI capture server. `None` until the first time
-    /// the user presses `s` (or invokes "show capture QR" from the
-    /// palette). Once bound, the entry stays for the rest of the
-    /// session and the overlay just re-displays the saved QR.
-    share: Option<ShareInfo>,
-    /// Base directory used by note actions. Relative `note:<path>` tokens are
-    /// resolved under this directory, and generated notes are created below it.
-    pub(crate) notes_dir: PathBuf,
-    /// Path queued for opening in the user's editor after the TUI temporarily
-    /// restores the terminal. Set by OpenNote and drained by the run loop.
-    pending_editor_path: Option<PathBuf>,
-    /// Theme index captured when the theme picker opened, so cancel
-    /// can restore it.
-    theme_pick_orig: usize,
     pub week_start: WeekStart,
-    /// Timestamp of the last timer activity (start or stop). Used for idle nudge detection.
-    pub last_timer_activity: Instant,
-    /// True when the running timer has exceeded the long-timer nudge threshold.
-    pub long_timer_nudge_active: bool,
-    /// Timesheet mode: true = weekly view, false = daily (default).
-    pub timesheet_weekly: bool,
-    /// Timesheet cursor: index into the project+activity group list.
-    pub timesheet_cursor: usize,
-    /// True when the current Insert session was entered via `M` (manual time
-    /// entry). Drives `dur:` value conversion on save.
-    pub manual_time_entry: bool,
+    /// Timesheet state bundle: anchor date, cursor, sort, calendar picker,
+    /// groups cache, copy flash.
+    pub timesheet: TimesheetState,
+    /// Session state: timer activity, nudge flags, transient insert flags.
+    pub session: Session,
 }
 
 impl App {
     /// Construct an App whose archive is the sibling `done.txt` of `file_path`.
+    #[must_use] 
     pub fn new(file_path: PathBuf, body: String, today: String, cfg: Config) -> Self {
         let store = Store::new(file_path.clone(), body, today);
         Self::from_store(store, file_path, cfg)
     }
 
     /// Like [`App::new`] but with an explicit `done.txt` path (e.g. `DONE_FILE`).
+    #[must_use] 
     pub fn new_with_done(
         file_path: PathBuf,
         done_path: PathBuf,
@@ -207,13 +163,11 @@ impl App {
             })
             .collect();
         let week_start = cfg.week_start.unwrap_or(WeekStart::Sunday);
+        let today = store.today().to_string();
         let mut app = Self {
             store,
-            view: View::List,
-            mode: Mode::Normal,
+            nav: Navigation::new(),
             prefs: Prefs::from_config(cfg),
-            cursor: 0,
-            view_cursor: [0; 2],
             filter: Filter::default(),
             draft: DraftState::default(),
             selection: Selection::default(),
@@ -221,27 +175,21 @@ impl App {
             chord: Chord::default(),
             file_path,
             config_path: None,
-            should_quit: false,
+            theme_picker: ThemePicker::new(0),
+            project_manager: ProjectManager::new(Self::load_archived_projects()),
+            share_state: ShareState::new(note_dir),
+            archive_cache: ArchiveCache::default(),
+            saved_picker: SavedFilterPicker::default(),
+            update_checker: UpdateChecker::default(),
             visible_cache: Vec::new(),
             visible_groups: Vec::new(),
-            latest_version: None,
-            update_check: None,
             saved_filters,
-            saved_pick_restore: None,
-            saved_pick_idx: 0,
             command_palette: CommandPaletteState::default(),
-            view_scroll: [Cell::new(0), Cell::new(0)],
-            share: None,
-            notes_dir: note_dir,
-            pending_editor_path: None,
-            theme_pick_orig: 0,
             week_start,
-            last_timer_activity: Instant::now(),
-            long_timer_nudge_active: false,
-            timesheet_weekly: false,
-            timesheet_cursor: 0,
-            manual_time_entry: false,
+            timesheet: TimesheetState::new(&today),
+            session: Session::new(),
         };
+        app.rebuild_archive_autocomplete_cache();
         app.recompute_visible();
         app
     }
@@ -256,7 +204,7 @@ impl App {
         let today = self.store.today().to_string();
         self.store = Store::new_with_done(file_path.clone(), done_path, body, today);
         self.file_path = file_path;
-        self.cursor = 0;
+        self.nav.cursor = 0;
         self.recompute_visible();
     }
 
@@ -274,12 +222,12 @@ impl App {
         // Two-step to dodge stable's lack of Polonius: do the bind work
         // first (which needs `&mut self`), then the unconditional final
         // borrow returns the now-present `ShareInfo`.
-        if self.share.is_none() {
+        if self.share_state.share.is_none() {
             let info = self.bind_share()?;
-            self.share = Some(info);
+            self.share_state.share = Some(info);
         }
         Ok(self
-            .share
+            .share_state.share
             .as_ref()
             .expect("share is Some after the bind branch"))
     }
@@ -312,33 +260,29 @@ impl App {
         Ok(info)
     }
 
-    pub fn share_info(&self) -> Option<&ShareInfo> {
-        self.share.as_ref()
-    }
-
     /// Install the receiver from [`update::spawn_check`](crate::update::spawn_check).
     /// `main` calls this; tests leave it unset so the App stays inert and
     /// doesn't spawn network work as a side effect of construction.
     pub fn set_update_check(&mut self, rx: Receiver<Option<String>>) {
-        self.update_check = Some(rx);
+        self.update_checker.receiver = Some(rx);
     }
 
     /// Drain the update-check receiver. Returns `true` if a new latest
     /// version was just received — callers use this to trigger a redraw so
     /// the status bar can paint the indicator on the next frame.
     pub fn poll_update_check(&mut self) -> bool {
-        let Some(rx) = &self.update_check else {
+        let Some(rx) = &self.update_checker.receiver else {
             return false;
         };
         match rx.try_recv() {
             Ok(maybe_tag) => {
-                self.latest_version = maybe_tag;
-                self.update_check = None;
-                self.latest_version.is_some()
+                self.update_checker.latest_version = maybe_tag;
+                self.update_checker.receiver = None;
+                self.update_checker.latest_version.is_some()
             }
             Err(TryRecvError::Empty) => false,
             Err(TryRecvError::Disconnected) => {
-                self.update_check = None;
+                self.update_checker.receiver = None;
                 false
             }
         }
@@ -348,7 +292,7 @@ impl App {
     /// the running binary. The status bar uses this to decide whether to
     /// draw an "update available" hint.
     pub fn update_available(&self) -> Option<&str> {
-        let latest = self.latest_version.as_deref()?;
+        let latest = self.update_checker.latest_version.as_deref()?;
         if crate::update::is_newer(latest, env!("CARGO_PKG_VERSION")) {
             Some(latest)
         } else {
@@ -366,8 +310,8 @@ impl App {
     /// palette mid-Visual hides the multi-select checkboxes and similar
     /// mode-driven affordances.
     pub fn effective_mode(&self) -> Mode {
-        match self.mode {
-            Mode::CommandPalette => self.command_palette.prior().unwrap_or(self.mode),
+        match self.nav.mode {
+            Mode::CommandPalette => self.command_palette.prior().unwrap_or(self.nav.mode),
             m => m,
         }
     }
@@ -393,32 +337,38 @@ impl App {
 
     /// Enter theme picker mode. Snapshot the current theme index so
     /// cancel can restore it. j/k live-previews; Enter accepts; Esc
-    /// reverts.
+    /// reverts. Uses `theme_pick_cursor` (on App) so that config reload
+    /// cannot reset the picker position.
     pub fn enter_pick_theme(&mut self) {
-        self.theme_pick_orig = self.prefs.theme_idx();
-        self.mode = Mode::PickTheme;
+        self.theme_picker.orig = self.prefs.theme_idx();
+        self.theme_picker.cursor = self.theme_picker.orig;
+        self.nav.mode = Mode::PickTheme;
     }
 
     /// Step through themes in `forward` (true = next) direction with
-    /// wrap-around. The theme is applied immediately for live preview.
+    /// wrap-around. Uses `theme_pick_cursor` so config reload cannot
+    /// strand the picker. The preview is applied to `prefs` for live
+    /// theme switching; if config reload resets prefs the cursor survives.
     pub fn pick_theme_step(&mut self, forward: bool) {
         let all = theme::all();
         let len = all.len();
         if len <= 1 {
             return;
         }
-        let cur = self.prefs.theme_idx();
+        let cur = self.theme_picker.cursor;
         let next = if forward {
             (cur + 1) % len
         } else {
             (cur + len - 1) % len
         };
-        self.prefs.set_theme_idx(next);
+        self.theme_picker.cursor = next;
+        self.prefs.set_theme_idx(next); // live preview
     }
 
     /// Accept the previewed theme and persist to config.
     pub fn pick_theme_accept(&mut self) {
-        self.mode = Mode::Normal;
+        self.prefs.set_theme_idx(self.theme_picker.cursor);
+        self.nav.mode = Mode::Normal;
         self.save_prefs();
         self.flash(format!("theme: {}", self.theme().name));
     }
@@ -426,8 +376,8 @@ impl App {
     /// Cancel the picker and restore the theme that was active when
     /// the picker opened.
     pub fn pick_theme_cancel(&mut self) {
-        self.prefs.set_theme_idx(self.theme_pick_orig);
-        self.mode = Mode::Normal;
+        self.prefs.set_theme_idx(self.theme_picker.orig);
+        self.nav.mode = Mode::Normal;
     }
 
     pub fn cycle_density(&mut self) {
@@ -476,15 +426,19 @@ impl App {
     }
 
     pub fn queue_editor_path(&mut self, path: PathBuf) {
-        self.pending_editor_path = Some(path);
+        self.share_state.pending_editor_path = Some(path);
     }
 
     pub fn notes_dir(&self) -> &PathBuf {
-        &self.notes_dir
+        &self.share_state.notes_dir
+    }
+
+    pub fn share_info(&self) -> Option<&ShareInfo> {
+        self.share_state.share.as_ref()
     }
 
     pub fn take_pending_editor_path(&mut self) -> Option<PathBuf> {
-        self.pending_editor_path.take()
+        self.share_state.pending_editor_path.take()
     }
 
     /// True when at least one task is marked done. Used by the binary to
@@ -504,7 +458,7 @@ impl App {
     /// `archive.tasks()` in Archive view, `tasks` otherwise.
     pub fn cur_task(&self) -> Option<&Task> {
         let i = self.cur_abs()?;
-        match self.view {
+        match self.nav.view {
             View::Archive => self.store.archive().tasks().get(i),
             _ => self.store.tasks().get(i),
         }
@@ -512,21 +466,43 @@ impl App {
 
     /// Pump archive state (startup loader + external `done.txt` edits). Returns
     /// true when the visible archive changed, so the caller redraws. Refreshes
-    /// the visible cache when the Archive view is active.
+    /// the visible cache when the Archive view is active and rebuilds the
+    /// autocomplete cache so projects/contexts from archived tasks stay
+    /// available.
     pub fn poll_archive(&mut self) -> bool {
         let changed = self.store.poll_archive();
-        if changed && matches!(self.view, View::Archive) {
-            self.recompute_visible();
-            self.clamp_cursor();
+        if changed {
+            self.rebuild_archive_autocomplete_cache();
+            if matches!(self.nav.view, View::Archive) {
+                self.recompute_visible();
+                self.clamp_cursor();
+            }
         }
         changed
+    }
+
+    /// Scan the archive for unique project and context names so autocomplete
+    /// can offer them without re-scanning done.txt on every keystroke.
+    fn rebuild_archive_autocomplete_cache(&mut self) {
+        let mut projs: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        let mut ctxs: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for t in self.store.archive().tasks() {
+            for p in &t.projects {
+                projs.insert(p.clone());
+            }
+            for c in &t.contexts {
+                ctxs.insert(c.clone());
+            }
+        }
+        self.archive_cache.projects = projs.into_iter().collect();
+        self.archive_cache.contexts = ctxs.into_iter().collect();
     }
 
     /// Index of the task under the cursor *into `self.tasks`*. Returns `None`
     /// in Archive view because the cursor there points into `archive.tasks()`.
     /// Use this — not `cur_abs()` — for any write that mutates `self.tasks`.
     pub fn cur_task_index_in_tasks(&self) -> Option<usize> {
-        if matches!(self.view, View::Archive) {
+        if matches!(self.nav.view, View::Archive) {
             return None;
         }
         self.cur_abs()
@@ -539,20 +515,20 @@ impl App {
 
     /// Active top-level view (List/Archive).
     pub fn view(&self) -> View {
-        self.view
+        self.nav.view
     }
 
     /// Switch top-level view. Recomputes the cache so the next frame reflects
     /// the change, snapshots the outgoing view's cursor, and restores the
     /// incoming view's saved cursor (clamped to the new visible length).
     pub fn set_view(&mut self, view: View) {
-        if self.view == view {
+        if self.nav.view == view {
             return;
         }
-        self.view_cursor[self.view.idx()] = self.cursor;
-        self.view = view;
+        self.nav.view_cursor[self.nav.view.idx()] = self.nav.cursor;
+        self.nav.view = view;
         self.recompute_visible();
-        self.cursor = self.view_cursor[view.idx()];
+        self.nav.cursor = self.nav.view_cursor[view.idx()];
         self.clamp_cursor();
     }
 
@@ -560,7 +536,7 @@ impl App {
     /// Typing into the search prompt calls this on every keystroke.
     pub fn set_search(&mut self, search: String) {
         self.filter.search = search;
-        self.cursor = 0;
+        self.nav.cursor = 0;
         self.recompute_visible();
     }
 
@@ -570,21 +546,21 @@ impl App {
             return;
         }
         self.filter.search.clear();
-        self.cursor = 0;
+        self.nav.cursor = 0;
         self.recompute_visible();
     }
 
     /// Set or clear the active project filter. `None` removes it.
     pub fn set_project_filter(&mut self, project: Option<String>) {
         self.filter.project = project;
-        self.cursor = 0;
+        self.nav.cursor = 0;
         self.recompute_visible();
     }
 
     /// Set or clear the active context filter. `None` removes it.
     pub fn set_context_filter(&mut self, context: Option<String>) {
         self.filter.context = context;
-        self.cursor = 0;
+        self.nav.cursor = 0;
         self.recompute_visible();
     }
 
@@ -608,7 +584,7 @@ impl App {
             return;
         }
         self.filter.clear();
-        self.cursor = 0;
+        self.nav.cursor = 0;
         self.recompute_visible();
     }
 
@@ -696,314 +672,4 @@ impl App {
         self.apply_drain(report);
         matches!(reconcile, Reconcile::Unchanged)
     }
-
-    // ---- timer helpers ----
-
-    pub fn timer_running(&self) -> bool {
-        self.store.timer_running()
-    }
-
-    pub fn timer_elapsed_secs(&self) -> Option<u64> {
-        self.store.timer_elapsed_secs()
-    }
-
-    pub fn active_timer_task(&self) -> Option<&Task> {
-        self.store.active_timer_task()
-    }
-
-    /// Idle nudge threshold from prefs.
-    pub fn idle_nudge_seconds(&self) -> u64 {
-        self.prefs.idle_nudge_seconds
-    }
-
-    /// Long-timer nudge threshold from prefs.
-    pub fn long_timer_nudge_seconds(&self) -> u64 {
-        self.prefs.long_timer_nudge_seconds
-    }
-
-    /// Check nudge conditions on each tick. Call from the event loop.
-    /// - If no timer running and idle > threshold → enter IdleNudge mode.
-    /// - If timer running and elapsed > threshold → set long_timer_nudge_active.
-    ///   Returns true when the UI should redraw.
-    pub fn check_nudges(&mut self) -> bool {
-        // Don't nudge while user is in any non-Normal, non-Visual mode
-        // (overlays, dialogs, reading help, etc.).
-        if !matches!(self.mode, Mode::Normal | Mode::Visual) {
-            self.long_timer_nudge_active = false;
-            return false;
-        }
-        let idle_secs = self.last_timer_activity.elapsed().as_secs();
-        if !self.timer_running() && idle_secs >= self.prefs.idle_nudge_seconds {
-            self.mode = Mode::IdleNudge;
-            return true;
-        }
-        let was_active = self.long_timer_nudge_active;
-        if self.timer_running() {
-            let elapsed = self.timer_elapsed_secs().unwrap_or(0);
-            self.long_timer_nudge_active = elapsed >= self.prefs.long_timer_nudge_seconds;
-        } else {
-            self.long_timer_nudge_active = false;
-        }
-        was_active != self.long_timer_nudge_active
-    }
-
-    /// True when the active timer is running on the task at `abs`.
-    pub fn is_timer_running_on(&self, abs: usize) -> bool {
-        self.store.is_timer_running_on(abs)
-    }
-
-    /// Convert a `dur:VALUE` token in `text` from flexible user input (minutes,
-    /// decimal hours, clock time, am/pm shorthand) to raw seconds suitable for
-    /// the on-disk todo.txt format. Used by `add_from_draft` when
-    /// `manual_time_entry` is set.
-    pub fn convert_dur_in_text(&self, text: &str) -> String {
-        let words: Vec<&str> = text.split_whitespace().collect();
-        let mut result: Vec<String> = Vec::with_capacity(words.len());
-        for word in &words {
-            if let Some(rest) = word.strip_prefix("dur:") {
-                if !rest.is_empty() {
-                    let secs = parse_duration_input(rest);
-                    result.push(format!("dur:{secs}"));
-                } else {
-                    result.push((*word).to_string());
-                }
-            } else {
-                result.push((*word).to_string());
-            }
-        }
-        result.join(" ")
-    }
-
-    /// Build the grouped time entries for the timesheet view. Returns a list
-    /// of (key: "+project @activity", total_secs, narratives). The groups are
-    /// sorted alphabetically by key (BTreeMap). Considers the weekly/daily
-    /// toggle from `self.timesheet_weekly`.
-    pub fn build_timesheet_groups(&self) -> Vec<(String, u64, Vec<String>)> {
-        let today = self.today().to_string();
-        let seven_days_ago = chrono::NaiveDate::parse_from_str(&today, "%Y-%m-%d")
-            .ok()                .and_then(|d| d.checked_sub_days(chrono::Days::new(6)))
-            .map(|d| d.format("%Y-%m-%d").to_string())
-            .unwrap_or(today.clone());
-        let mut groups: BTreeMap<String, (u64, Vec<String>)> = BTreeMap::new();
-        for t in self.tasks().iter().filter(|t| t.dur.is_some_and(|d| d > 0)) {
-            let Some(ref cd) = t.created_date else { continue; };
-            let in_range = if self.timesheet_weekly {
-                cd.as_str() >= seven_days_ago.as_str() && cd.as_str() <= today.as_str()
-            } else {
-                cd.as_str() == today.as_str()
-            };
-            if !in_range {
-                continue;
-            }
-            let proj = t.projects.first().map(|p| format!("+{p}")).unwrap_or_default();
-            let act = t.contexts.first().map(|a| format!("@{a}")).unwrap_or_default();
-            let key = if proj.is_empty() && act.is_empty() {
-                "(no project/activity)".to_string()
-            } else {
-                format!("{proj} {act}").trim().to_string()
-            };
-            let body = crate::todo::body_only(&t.raw);
-            let entry = groups.entry(key).or_insert_with(|| (0, Vec::new()));
-            entry.0 += t.dur.unwrap_or(0);
-            entry.1.push(body);
-        }
-        groups.into_iter().map(|(k, (d, n))| (k, d, n)).collect()
-    }
-
-    /// Toggle timer on the task under the cursor (List view only).
-    pub fn toggle_timer(&mut self) {
-        let Some(abs) = self.cur_task_index_in_tasks() else {
-            self.flash("no task selected");
-            return;
-        };
-        match self.store.timer_toggle(abs) {
-            TimerOutcome::Started { project, activity, body, .. } => {
-                let proj = project.map(|p| format!("+{p} ")).unwrap_or_default();
-                let act = activity.map(|a| format!("@{a} ")).unwrap_or_default();
-                self.flash(format!("▶ {proj}{act}— {body}"));
-                self.last_timer_activity = Instant::now();
-            }
-            TimerOutcome::Stopped { elapsed_secs, total_secs, project, activity, body, .. } => {
-                let elapsed = format_duration(elapsed_secs);
-                let total = format_duration(total_secs);
-                let proj = project.map(|p| format!("+{p} ")).unwrap_or_default();
-                let act = activity.map(|a| format!("@{a} ")).unwrap_or_default();
-                self.flash(format!("■ {proj}{act}{body} — {elapsed} (total {total})"));
-                self.last_timer_activity = Instant::now();
-            }
-            TimerOutcome::Switched { from_elapsed_secs, from_total_secs, from_project, from_activity, to_project, to_activity, to_body, .. } => {
-                let from_elapsed = format_duration(from_elapsed_secs);
-                let from_total = format_duration(from_total_secs);
-                let to_proj = to_project.map(|p| format!("+{p} ")).unwrap_or_default();
-                let to_act = to_activity.map(|a| format!("@{a} ")).unwrap_or_default();
-                let from_proj = from_project.map(|p| format!("+{p}")).unwrap_or_default();
-                let from_act = from_activity.map(|a| format!("@{a}")).unwrap_or_default();
-                self.flash(format!("■ {from_proj}{from_act} {from_elapsed} (total {from_total}) · ▶ {to_proj}{to_act} {to_body}"));
-                self.last_timer_activity = Instant::now();
-            }
-            TimerOutcome::OutOfRange => self.flash("no task selected"),
-            TimerOutcome::Aborted(r) => self.handle_reconcile_abort(r),
-            TimerOutcome::Error(e) => self.flash(format!("timer: {e}")),
-        }
-        self.recompute_visible();
-    }
-
-    /// Stop the running timer (if any) on quit.
-    pub fn stop_timer_on_quit(&mut self) {
-        match self.store.stop_timer_on_quit() {
-            TimerQuitOutcome::Stopped { total_secs, .. } => {
-                self.flash(format!("timer stopped ({} total)", format_duration(total_secs)));
-            }
-            TimerQuitOutcome::NoTimer => {}
-            TimerQuitOutcome::Error(e) => {
-                self.flash(format!("timer stop failed: {e}"));
-            }
-        }
-    }
-}
-
-pub(crate) fn format_duration(total_secs: u64) -> String {
-    let hours = total_secs / 3600;
-    let minutes = (total_secs % 3600) / 60;
-    let billable = format_billable(total_secs);
-    if hours > 0 {
-        format!("{}h {}m ({billable})", hours, minutes)
-    } else {
-        format!("{}m ({billable})", minutes)
-    }
-}
-
-/// Format seconds as billable units (0.1h increments, rounded up).
-/// 1 minute = 0.1h, 6 minutes = 0.1h, 30 minutes = 0.5h, etc.
-pub(crate) fn format_billable(total_secs: u64) -> String {
-    // Round up to nearest 0.1 hour (6 minutes / 360 seconds).
-    let tenths = total_secs.div_ceil(360);
-    let whole = tenths / 10;
-    let frac = tenths % 10;
-    if whole > 0 || frac > 0 {
-        format!("{}.{}h", whole, frac)
-    } else {
-        "0.0h".to_string()
-    }
-}
-
-/// Parse a user-supplied duration string into seconds. Accepts:
-/// - plain minutes (no suffix): `90` → 5400s (90 min)
-/// - explicit minutes: `90m` → 5400s
-/// - decimal hours: `1.5` or `1.5h` → 5400s
-/// - explicit seconds: `5400s` → 5400s
-/// - clock time: `14:30` → duration from that time today to now
-/// - am/pm shorthand: `9am`, `2pm`, `9:30am`, `2:30pm` → duration from then to now
-pub(crate) fn parse_duration_input(s: &str) -> u64 {
-    let s = s.trim();
-    if s.is_empty() {
-        return 0;
-    }
-
-    // Strip unit suffix to determine the base unit.
-    let (num_part, explicit_unit) = if let Some(n) = s.strip_suffix('m') {
-        (n.trim(), Some('m'))
-    } else if let Some(n) = s.strip_suffix('h') {
-        (n.trim(), Some('h'))
-    } else if let Some(n) = s.strip_suffix('s') {
-        (n.trim(), Some('s'))
-    } else {
-        (s, None)
-    };
-
-    // Clock time with am/pm: "9am", "9:30am", "2pm", "2:30pm"
-    if let Some(secs) = parse_ampm_time(s) {
-        return secs;
-    }
-
-    // Clock time: "14:30" or "9:30" (no am/pm)
-    if let Some((h_str, m_str)) = num_part.split_once(':') {
-            if let (Ok(h), Ok(m)) = (h_str.parse::<u32>(), m_str.parse::<u32>()) {
-                let now = chrono::Local::now();
-                let target_secs = h * 3600 + m * 60;
-                let now_secs = now.hour() * 3600 + now.minute() * 60 + now.second();
-                if target_secs <= now_secs {
-                    return (now_secs - target_secs) as u64;
-                }
-                // Target is in the future — assume yesterday.
-                return (now_secs + 24 * 3600 - target_secs) as u64;
-            }
-        return 0;
-    }
-
-    match explicit_unit {
-        // Explicit seconds: "5400s"
-        Some('s') => num_part.parse::<u64>().unwrap_or(0),
-        // Explicit hours: "1.5h"
-        Some('h') => {
-            if let Ok(h) = num_part.parse::<f64>() {
-                (h * 3600.0).max(0.0) as u64
-            } else {
-                0
-            }
-        }
-        // Explicit minutes: "90m"
-        Some('m') => num_part.parse::<u64>().map(|m| m * 60).unwrap_or(0),
-        // No suffix: infer — decimal point → hours, plain integer → minutes
-        None => {
-            if num_part.contains('.') {
-                if let Ok(h) = num_part.parse::<f64>() {
-                    (h * 3600.0).max(0.0) as u64
-                } else {
-                    0
-                }
-            } else {
-                // Plain integer → minutes (default for lawyers)
-                num_part.parse::<u64>().map(|m| m * 60).unwrap_or(0)
-            }
-        }
-        _ => 0,
-    }
-}
-
-/// Parse am/pm clock shorthand like "9am", "2:30pm", "12p".
-/// Returns the duration in seconds from that time (today, or yesterday if
-/// the time is in the future) to now.
-fn parse_ampm_time(s: &str) -> Option<u64> {
-    let lower = s.trim().to_lowercase();
-    let (time_part, is_pm) = if let Some(t) = lower.strip_suffix("am") {
-        (t.trim(), false)
-    } else if let Some(t) = lower.strip_suffix("pm") {
-        (t.trim(), true)
-    } else if let Some(t) = lower.strip_suffix('a') {
-        (t.trim(), false)
-    } else if let Some(t) = lower.strip_suffix('p') {
-        (t.trim(), true)
-    } else {
-        return None;
-    };
-
-    let (hour, minute): (u32, u32) = if let Some((h, m)) = time_part.split_once(':') {
-        (h.parse().ok()?, m.parse().ok()?)
-    } else {
-        (time_part.parse().ok()?, 0)
-    };
-
-    if hour > 12 || minute >= 60 {
-        return None;
-    }
-
-    let hour_24 = match (hour, is_pm) {
-        (12, false) => 0,   // 12am = midnight
-        (12, true) => 12,   // 12pm = noon
-        (h, true) if h < 12 => h + 12,
-        (h, _) => h,
-    };
-
-    let now = chrono::Local::now();
-    let target_secs = hour_24 * 3600 + minute * 60;
-    let now_secs = now.hour() * 3600 + now.minute() * 60 + now.second();
-
-    let diff = if target_secs <= now_secs {
-        now_secs - target_secs
-    } else {
-        // Future — assume yesterday
-        now_secs + 24 * 3600 - target_secs
-    };
-    Some(diff as u64)
 }

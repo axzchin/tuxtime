@@ -8,8 +8,10 @@ use crate::app::App;
 use crate::theme;
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
-    let theme = app.theme();
     let all = theme::all();
+    let cur = app.theme_picker.cursor;
+    // Use the previewed theme for live color feedback.
+    let theme = &all[cur % all.len()];
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -32,8 +34,6 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 
     let [list_area, footer_area] =
         Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(inner);
-
-    let cur = app.prefs.theme_idx();
 
     let lines: Vec<Line> = all
         .iter()
@@ -66,7 +66,15 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         })
         .collect();
 
-    frame.render_widget(Paragraph::new(lines).style(bg), list_area);
+    // Keep the selected theme visible within the viewport.
+    let total = all.len();
+    let offset = super::keep_cursor_visible(0, Some(cur), list_area.height, total);
+    let visible: Vec<Line> = lines
+        .into_iter()
+        .skip(usize::from(offset))
+        .take(usize::from(list_area.height))
+        .collect();
+    frame.render_widget(Paragraph::new(visible).style(bg), list_area);
 
     let footer = Line::from(vec![
         Span::raw("  "),

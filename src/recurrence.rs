@@ -1,6 +1,6 @@
 //! Parsing and date arithmetic for `rec:[+]Nu` recurrence tags.
 //!
-//! Format mirrors topydo / SwiftoDo / sleek / dorecur, the de-facto consensus
+//! Format mirrors topydo / `SwiftoDo` / sleek / dorecur, the de-facto consensus
 //! for todo.txt recurrence:
 //!
 //! ```text
@@ -41,6 +41,7 @@ pub struct RecSpec {
 /// for empty strings, missing or non-positive numbers, and unknown units.
 /// Lone `+` (no digits) and `-` prefixes are also rejected — recurrence only
 /// moves forward.
+#[must_use] 
 pub fn parse_rec_spec(value: &str) -> Option<RecSpec> {
     let bytes = value.as_bytes();
     if bytes.is_empty() {
@@ -77,16 +78,17 @@ pub fn parse_rec_spec(value: &str) -> Option<RecSpec> {
 }
 
 /// Advance `date` by `spec`. Returns `None` only when `chrono` overflows
-/// (year ~262_143) — callers treat that as "skip the spawn, flash a notice"
+/// (year ~`262_143`) — callers treat that as "skip the spawn, flash a notice"
 /// rather than panicking.
 ///
 /// Month/year arithmetic uses `chrono::Months`, which clamps the day component
 /// to the last valid day of the target month (Jan 31 + 1m → Feb 28 or 29 on a
-/// leap year). That matches what topydo, SwiftoDo, and sleek do.
+/// leap year). That matches what topydo, `SwiftoDo`, and sleek do.
 ///
 /// Business days advance one weekday at a time, skipping Sat/Sun. Starting on
 /// a weekend rolls forward to Monday before counting, so "Saturday + 1b"
 /// resolves to Monday — same convention as dorecur.
+#[must_use] 
 pub fn advance(date: NaiveDate, spec: &RecSpec) -> Option<NaiveDate> {
     match spec.unit {
         RecUnit::Day => date.checked_add_days(Days::new(u64::from(spec.n))),
@@ -157,7 +159,7 @@ mod tests {
         for bad in [
             "", "d", "1", "+", "+m", "0d", "-1d", "1z", "abc", "1.5d", "1 d", "1dx", " 1d",
         ] {
-            assert!(parse_rec_spec(bad).is_none(), "expected None for {:?}", bad);
+            assert!(parse_rec_spec(bad).is_none(), "expected None for {bad:?}");
         }
     }
 

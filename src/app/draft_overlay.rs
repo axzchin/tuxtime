@@ -199,6 +199,7 @@ pub enum OverlayKind {
 }
 
 impl DraftOverlay {
+    #[must_use] 
     pub    fn kind(&self) -> OverlayKind {
         match self {
             DraftOverlay::SlashMenu(_) => OverlayKind::SlashMenu,
@@ -485,7 +486,7 @@ impl App {
             s.focused.checked_add_days(Days::new(total_days as u64))
         } else {
             s.focused
-                .checked_sub_days(Days::new(total_days.unsigned_abs() as u64))
+                .checked_sub_days(Days::new(u64::from(total_days.unsigned_abs())))
         };
         if let Some(d) = next {
             s.focused = d;
@@ -628,8 +629,7 @@ fn strip_trigger_literal(app: &mut App, key: &str, anchor: usize) {
     // Extend past any value the user typed (up to next whitespace or EOL).
     let end = text[key_colon_end..]
         .find(|c: char| c.is_ascii_whitespace())
-        .map(|i| key_colon_end + i)
-        .unwrap_or(text.len());
+        .map_or(text.len(), |i| key_colon_end + i);
     let strip_start = if anchor > 0
         && text
             .as_bytes()
@@ -772,7 +772,7 @@ impl App {
             return;
         };
         let n: i32 = 4; // A, B, C, clear
-        let cur = s.selected as i32;
+        let cur = i32::from(s.selected);
         let next = (cur + if forward { 1 } else { -1 }).rem_euclid(n);
         s.selected = next as u8;
     }
@@ -1026,6 +1026,7 @@ fn find_priority(text: &str) -> Option<char> {
 
 /// Format a builder state as the value portion of a `rec:` token (e.g. `1w`,
 /// `+2m`). Used by `recurrence_accept` and by the live preview line.
+#[must_use] 
 pub fn format_rec_value(state: &RecurrenceBuilderState) -> String {
     let prefix = if state.strict { "+" } else { "" };
     let unit = match state.unit {
@@ -1042,6 +1043,7 @@ pub fn format_rec_value(state: &RecurrenceBuilderState) -> String {
 /// the same `recurrence::advance` used by the completion-spawn path, anchored
 /// on the app's `today` so the value is identical to what the user would see
 /// after marking a task done now.
+#[must_use] 
 pub fn recurrence_next_preview(state: &RecurrenceBuilderState, today: &str) -> Option<NaiveDate> {
     let spec = RecSpec {
         strict: state.strict,
@@ -1186,7 +1188,7 @@ mod tests {
     #[test]
     fn slash_menu_opens_at_bol() {
         let mut app = build_app("");
-        app.mode = crate::app::Mode::Insert;
+        app.nav.mode = crate::app::Mode::Insert;
         app.draft_insert_char('/');
         app.maybe_open_slash_menu();
         assert!(matches!(
@@ -1610,7 +1612,7 @@ mod tests {
         // The final task line must round-trip through `parse_line` with the
         // expected metadata fields populated.
         let mut app = build_app("");
-        app.mode = crate::app::Mode::Insert;
+        app.nav.mode = crate::app::Mode::Insert;
         for c in "Schedule team offsite".chars() {
             app.draft_insert_char(c);
         }

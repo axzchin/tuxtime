@@ -2,7 +2,7 @@
 //!
 //! Path: `${XDG_CONFIG_HOME:-$HOME/.config}/tuxtime/keybinds.toml`
 //!
-//! Format: a `[normal]` table whose keys are `Action` names in snake_case and
+//! Format: a `[normal]` table whose keys are `Action` names in `snake_case` and
 //! whose values are a string or array of strings, for example:
 //! `open_help = "F1"` or `begin_add = ["N", "Ctrl-n"]`.
 
@@ -26,6 +26,7 @@ pub struct KeyBindings {
 }
 
 impl KeyBindings {
+    #[must_use] 
     pub fn load() -> Self {
         let Some(path) = Self::path() else {
             return Self::default();
@@ -33,6 +34,7 @@ impl KeyBindings {
         Self::load_from(&path)
     }
 
+    #[must_use] 
     pub fn load_from(path: &Path) -> Self {
         match fs::read_to_string(path) {
             Ok(s) => Self::parse(&s),
@@ -40,6 +42,7 @@ impl KeyBindings {
         }
     }
 
+    #[must_use] 
     pub fn parse(s: &str) -> Self {
         let mut bindings = Self::default();
         let mut section: Option<String> = None;
@@ -82,13 +85,13 @@ impl KeyBindings {
                 continue;
             };
             if chord.active() == Some(leader) && second.matches(key) {
-                chord.clear();
+                let _ = chord.clear();
                 return Some(ResolvedKey::Action(binding.action));
             }
         }
         for binding in &self.normal {
             if binding.second.is_none() && binding.first.matches(key) {
-                chord.clear();
+                let _ = chord.clear();
                 return Some(ResolvedKey::Action(binding.action));
             }
         }
@@ -104,11 +107,13 @@ impl KeyBindings {
         None
     }
 
+    #[must_use] 
     pub fn path() -> Option<PathBuf> {
         let base = crate::xdg::config_home()?;
         Some(Self::path_in(&base))
     }
 
+    #[must_use] 
     pub fn path_in(xdg_base: &Path) -> PathBuf {
         xdg_base.join("tuxtime").join("keybinds.toml")
     }

@@ -20,6 +20,7 @@ pub const LOCK_FILENAME: &str = "inbox.txt.tuxtime-lock";
 
 /// Sibling `inbox.txt` next to the given todo.txt path. Falls back to
 /// the current directory if `todo_path` has no parent.
+#[must_use] 
 pub fn path_for(todo_path: &Path) -> PathBuf {
     sibling(todo_path, FILENAME)
 }
@@ -31,6 +32,7 @@ pub fn path_for(todo_path: &Path) -> PathBuf {
 /// after the merged `todo.txt` has been written atomically; if tuxtime
 /// crashes between, the next drain picks the staging file up and merges
 /// it as if it were a regular inbox.
+#[must_use] 
 pub fn staging_path_for(todo_path: &Path) -> PathBuf {
     sibling(todo_path, STAGING_FILENAME)
 }
@@ -42,6 +44,7 @@ pub fn staging_path_for(todo_path: &Path) -> PathBuf {
 /// drain reads the still-empty staging, deletes it, and the writer's
 /// subsequent `write` is silently lost when the unlinked inode is
 /// reclaimed.
+#[must_use] 
 pub fn lock_path_for(todo_path: &Path) -> PathBuf {
     sibling(todo_path, LOCK_FILENAME)
 }
@@ -68,9 +71,7 @@ pub fn acquire_lock(todo_path: &Path) -> std::io::Result<std::fs::File> {
 
 fn sibling(todo_path: &Path, name: &str) -> PathBuf {
     todo_path
-        .parent()
-        .map(|p| p.join(name))
-        .unwrap_or_else(|| PathBuf::from(name))
+        .parent().map_or_else(|| PathBuf::from(name), |p| p.join(name))
 }
 
 /// Full save pipeline for one free-text line: natural-language rewrite,

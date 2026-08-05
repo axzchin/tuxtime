@@ -20,6 +20,8 @@ expression: buffer_to_text(&buf)
                                                                                                     
  BEHAVIOR                                                                                           
    default sort                priority (s to cycle)                                                
+   idle nudge                  15 min  (i to change)                                                
+   long timer nudge            120 min  (l to change)                                               
                                                                                                     
  KEYBINDINGS                                                                                        
                                press ? for the full list                                            
@@ -31,6 +33,4 @@ expression: buffer_to_text(&buf)
                                                                                                     
                                                                                                     
                                                                                                     
-                                                                                                    
-                                                                                                    
- SETTINGS   Esc back                                        15 open · 2026-05-06 · tuxtime 2026.7.1
+ SETTINGS   Esc/ ,/ q dismiss  ·  i idle nudge  ·  l long ti15 open · 2026-05-06 · tuxtime 2026.7.1

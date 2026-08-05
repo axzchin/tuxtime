@@ -10,6 +10,7 @@ use crate::theme::Theme;
 /// Build the human-readable filter chip shown in the header. `+project` /
 /// `@context` / `/search` precedence matches what the sidebar shows. Returns
 /// `None` when no filter is active.
+#[must_use] 
 pub fn filter_label(filter: &Filter) -> Option<String> {
     if let Some(p) = &filter.project {
         Some(format!("+{p}"))
@@ -67,7 +68,7 @@ pub fn render(frame: &mut Frame, area: Rect, theme: &Theme, props: HeaderProps<'
     if let Some(f) = props.filter {
         spans.push(Span::raw("   "));
         spans.push(Span::styled(
-            format!("filter:{}", f),
+            format!("filter:{f}"),
             Style::default().fg(theme.context),
         ));
     }

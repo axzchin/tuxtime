@@ -277,7 +277,7 @@ pub struct CommandPaletteState {
     pub cursor: usize,
     /// Mode the user was in when they opened the palette. Restored on close
     /// so that opening the palette from Visual mode (with a selection) and
-    /// cancelling — or running a visual-aware action like ToggleComplete —
+    /// cancelling — or running a visual-aware action like `ToggleComplete` —
     /// keeps the selection meaningful instead of silently dropping into
     /// Normal.
     prior_mode: Option<Mode>,
@@ -308,12 +308,14 @@ impl CommandPaletteState {
 
     /// Read the snapshot without consuming it. Renderers use this to keep
     /// the underlying UI looking the same while the palette overlay is open.
+    #[must_use] 
     pub fn prior(&self) -> Option<Mode> {
         self.prior_mode
     }
 
     /// Currently visible hits, in rank order. Computed at most once per
     /// `refresh` call.
+    #[must_use] 
     pub fn hits(&self) -> &[PaletteHit] {
         &self.cached_hits
     }
@@ -345,6 +347,7 @@ impl CommandPaletteState {
 
     /// Action under the highlight, if any. Returns `None` when the filter
     /// produced no matches.
+    #[must_use] 
     pub fn current_action(&self) -> Option<Action> {
         let hit = self.cached_hits.get(self.cursor)?;
         ENTRIES.get(hit.entry_idx).map(|e| e.action)
@@ -367,6 +370,7 @@ pub struct PaletteHit {
 ///      before "fuzzy search".)
 ///   2. tightness of the run (smaller span first).
 ///   3. declaration order, via the stable sort.
+#[must_use] 
 pub fn filtered(needle: &str) -> Vec<PaletteHit> {
     if needle.is_empty() {
         return ENTRIES

@@ -32,14 +32,25 @@ const EDITING: Section = (
         ("p", "cycle priority A→B→C→·"),
         ("c", "add/remove context"),
         ("+", "add project"),
-        ("yy", "copy line to clipboard"),
-        ("yb", "copy body only"),
+        ("b", "toggle billable"),
+        ("yy / yb", "copy line / body"),
         ("u", "undo"),
+        ("o / O", "open / create note"),
+    ],
+);
+
+const TIMER: Section = (
+    "TIMER",
+    &[
+        ("t", "start / stop timer"),
+        ("M", "manual time entry"),
+        ("T", "quick interrupt"),
+        ("N", "new session from task"),
     ],
 );
 
 const VIEW: Section = (
-    "VIEW",
+    "VIEW & FILTERS",
     &[
         ("/", "fuzzy search"),
         ("fp / fc", "filter project/context"),
@@ -52,9 +63,35 @@ const VIEW: Section = (
         ("H", "show done in list"),
         ("F", "show future in list"),
         ("[ / ]", "toggle filter / detail"),
-        ("T", "cycle theme"),
         ("D", "cycle density"),
         ("L", "toggle line numbers"),
+        ("Z", "theme picker"),
+    ],
+);
+
+const TIMESHEET: Section = (
+    "TIMESHEET (V to open)",
+    &[
+        ("w / d", "weekly / daily view"),
+        ("s", "cycle sort"),
+        ("h / l", "day back / forward"),
+        ("H / L", "week back / forward"),
+        ("t", "jump to today"),
+        ("g", "calendar date picker"),
+        ("j / k", "next / prev narrative"),
+        ("Enter", "edit narrative"),
+        ("b", "toggle billable"),
+        ("a", "unarchive entry (from done.txt)"),
+        ("c / y / C", "copy text / time / both"),
+        ("/", "search narratives"),
+    ],
+);
+
+const PROJECTS: Section = (
+    "PROJECTS & MORE",
+    &[
+        ("P", "project manager"),
+        ("W", "cycle week start"),
     ],
 );
 
@@ -106,7 +143,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     // Keybindings (top, two columns) — divider — Format (bottom, two columns).
     // Each half splits sections across left/right; the last section in each
     // column drops its trailing blank so the divider lands tight.
-    let kb_lines = two_columns(theme, inner.width, &[NAVIGATION, EDITING], &[VIEW, SYSTEM]);
+    let kb_lines = two_columns(theme, inner.width, &[NAVIGATION, EDITING, TIMER], &[VIEW, TIMESHEET, PROJECTS, SYSTEM]);
     let kb_height = u16::try_from(kb_lines.len()).unwrap_or(u16::MAX);
 
     let (fmt_left, fmt_right) = FORMAT.1.split_at(FORMAT.1.len().div_ceil(2));

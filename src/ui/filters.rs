@@ -101,7 +101,7 @@ fn filter_row<'a>(
 ) -> Line<'a> {
     let bg = if active { theme.selected } else { theme.panel };
     let prefix = if active { "▸ " } else { "  " };
-    let mut padded = format!("{}{}", sigil, name);
+    let mut padded = format!("{sigil}{name}");
     if padded.chars().count() < 16 {
         let pad = 16 - padded.chars().count();
         padded.push_str(&" ".repeat(pad));
@@ -110,7 +110,7 @@ fn filter_row<'a>(
         Span::raw(" "),
         Span::styled(prefix.to_string(), Style::default().fg(theme.accent)),
         Span::styled(padded, Style::default().fg(sigil_color)),
-        Span::styled(format!("{:>3}", count), Style::default().fg(theme.dim)),
+        Span::styled(format!("{count:>3}"), Style::default().fg(theme.dim)),
     ])
     .style(Style::default().bg(bg))
 }

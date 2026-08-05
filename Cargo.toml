@@ -23,3 +23,32 @@ lto = true
 codegen-units = 1
 panic = "abort"
 opt-level = "z"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Intentional: TUI list indices (usize→i32) are bounded by terminal height.
+cast_possible_truncation = "allow"
+cast_possible_wrap = "allow"
+# Intentional: known-non-negative i32 used as u64/u32 for date math.
+cast_sign_loss = "allow"
+# Pre-existing style preferences — not indicative of bugs.
+format_collect = "allow"
+too_many_lines = "allow"
+many_single_char_names = "allow"
+similar_names = "allow"
+struct_excessive_bools = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+items_after_statements = "allow"
+assigning_clones = "allow"
+match_wildcard_for_single_variants = "allow"
+trivially_copy_pass_by_ref = "allow"
+needless_pass_by_value = "allow"
+format_push_string = "allow"
+uninlined_format_args = "allow"
+manual_let_else = "allow"
+match_same_arms = "allow"
+doc_markdown = "allow"
+ref_option = "allow"
+unnested_or_patterns = "allow"
+unchecked_time_subtraction = "allow"

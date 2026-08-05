@@ -284,7 +284,7 @@ fn cmd_pri(store: &mut Store, pos: &[String], json: bool) -> i32 {
                 let new = priority.unwrap_or(c);
                 match old {
                     Some(o) if o != new => {
-                        println!("{prefix}: {n} re-prioritized from ({o}) to ({new}).")
+                        println!("{prefix}: {n} re-prioritized from ({o}) to ({new}).");
                     }
                     _ => println!("{prefix}: {n} prioritized ({new})."),
                 }
@@ -704,7 +704,7 @@ fn cmd_listtags(store: &Store, json: bool, kind: TagKind) -> i32 {
             set.insert(v.as_str());
         }
     }
-    let names: Vec<String> = set.into_iter().map(|s| s.to_string()).collect();
+    let names: Vec<String> = set.into_iter().map(std::string::ToString::to_string).collect();
     if json {
         println!(
             "{{\"ok\":true,\"action\":\"{action}\",\"tags\":{}}}",
@@ -724,7 +724,7 @@ mod tests {
     use super::*;
 
     fn argv(parts: &[&str]) -> Vec<String> {
-        parts.iter().map(|s| s.to_string()).collect()
+        parts.iter().map(std::string::ToString::to_string).collect()
     }
 
     #[test]

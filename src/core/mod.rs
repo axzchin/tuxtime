@@ -22,9 +22,10 @@ pub(crate) mod test_support;
 pub use archive::Archive;
 pub use history::History;
 pub use outcome::{
-    AddOutcome, ArchiveDeleteOutcome, ArchiveOutcome, BulkCompleteOutcome, BulkDeleteOutcome,
-    CompleteOutcome, DeleteOutcome, DrainReport, EditOutcome, PriorityOutcome, Reconcile,
-    StoreError, TagOutcome, TimerOutcome, TimerQuitOutcome, UnarchiveOutcome, UndoOutcome,
+    AddOutcome, ArchiveDeleteOutcome, ArchiveOneOutcome, ArchiveOutcome, BulkCompleteOutcome,
+    BulkDeleteOutcome, CompleteOutcome, DeleteOutcome, DrainReport, EditOutcome,
+    PriorityOutcome, Reconcile, StoreError, TagOutcome, TimerOutcome, TimerQuitOutcome,
+    UnarchiveOutcome, UndoOutcome,
 };
 
 /// The durable task store. Owns the live task list, the sibling `done.txt`
@@ -57,6 +58,7 @@ impl Store {
     /// Construct a store, loading the archive (`done.txt`) off-thread from the
     /// sibling of `file_path`. Used by the TUI so the first frame doesn't wait
     /// on the archive read.
+    #[must_use] 
     pub fn new(file_path: PathBuf, body: String, today: String) -> Self {
         let archive = Archive::spawn(&file_path);
         Self::assemble(file_path, archive, body, today)
@@ -64,6 +66,7 @@ impl Store {
 
     /// Like [`Store::new`] but with an explicit `done.txt` path (e.g. from a
     /// `DONE_FILE` env var that isn't a sibling of the todo file).
+    #[must_use] 
     pub fn new_with_done(
         file_path: PathBuf,
         done_path: PathBuf,
@@ -76,12 +79,14 @@ impl Store {
 
     /// Construct a store, loading the sibling archive synchronously (no
     /// background thread). Used by the one-shot CLI.
+    #[must_use] 
     pub fn open_sync(file_path: PathBuf, body: String, today: String) -> Self {
         let archive = Archive::load_sync(&file_path);
         Self::assemble(file_path, archive, body, today)
     }
 
     /// Like [`Store::open_sync`] but with an explicit `done.txt` path.
+    #[must_use] 
     pub fn open_sync_with_done(
         file_path: PathBuf,
         done_path: PathBuf,
@@ -111,28 +116,34 @@ impl Store {
         }
     }
 
+    #[must_use] 
     pub fn tasks(&self) -> &[Task] {
         &self.tasks
     }
 
+    #[must_use] 
     pub fn archive(&self) -> &Archive {
         &self.archive
     }
 
+    #[must_use] 
     pub fn today(&self) -> &str {
         &self.today
     }
 
+    #[must_use] 
     pub fn file_path(&self) -> &Path {
         &self.file_path
     }
 
     /// Cloned `raw` for the task at `abs`, or `None` if out of range.
+    #[must_use] 
     pub fn task_raw(&self, abs: usize) -> Option<String> {
         self.tasks.get(abs).map(|t| t.raw.clone())
     }
 
     /// True when at least one live task is marked done.
+    #[must_use] 
     pub fn has_completed(&self) -> bool {
         self.tasks.iter().any(|t| t.done)
     }
@@ -148,12 +159,14 @@ impl Store {
     }
 
     /// True when a timer is currently running.
+    #[must_use] 
     pub fn timer_running(&self) -> bool {
         self.active_timer.is_some()
     }
 
     /// Elapsed wall-clock seconds for the live timer display. `None` when no
     /// timer is active.
+    #[must_use] 
     pub fn timer_elapsed_secs(&self) -> Option<u64> {
         self.active_timer
             .as_ref()
@@ -161,6 +174,7 @@ impl Store {
     }
 
     /// Reference to the task the running timer is on, if any.
+    #[must_use] 
     pub fn active_timer_task(&self) -> Option<&Task> {
         self.active_timer
             .as_ref()
@@ -168,9 +182,16 @@ impl Store {
     }
 
     /// True when a timer is running on the task at absolute index `abs`.
+    #[must_use] 
     pub fn is_timer_running_on(&self, abs: usize) -> bool {
         self.active_timer
             .as_ref()
             .is_some_and(|ts| ts.task_abs == abs)
+    }
+
+    /// Absolute index of the task the active timer is running on, if any.
+    #[must_use] 
+    pub fn active_timer_abs(&self) -> Option<usize> {
+        self.active_timer.as_ref().map(|ts| ts.task_abs)
     }
 }

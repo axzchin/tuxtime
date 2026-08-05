@@ -37,6 +37,7 @@ pub enum ThresholdSpec {
 /// Parse the *value* of a `t:` tag, e.g. `"2026-08-01"`, `"-3d"`, `"+1w"`,
 /// `"7d"`. Returns `None` for unrecognized forms — callers treat that as
 /// "no threshold" rather than as a hard error.
+#[must_use] 
 pub fn parse_threshold(value: &str) -> Option<ThresholdSpec> {
     if value.is_empty() {
         return None;
@@ -81,6 +82,7 @@ fn parse_relative(value: &str) -> Option<ThresholdSpec> {
 /// verbatim; relative thresholds need an anchor — `due` first, falling back
 /// to `created`. Returns `None` when relative + no usable anchor, or when
 /// date arithmetic overflows.
+#[must_use] 
 pub fn resolve(
     spec: &ThresholdSpec,
     due: Option<&str>,
@@ -278,8 +280,7 @@ mod tests {
         ] {
             assert!(
                 parse_threshold(bad).is_none(),
-                "expected None for {:?}",
-                bad
+                "expected None for {bad:?}"
             );
         }
     }

@@ -5,9 +5,12 @@ use crate::core::filter::unique_values;
 impl App {
     /// Enter project-picker mode. Seeds the filter from the cursor task's
     /// first project (falling back to the current filter, then alphabetical
-    /// first). Inside the picker, j/k cycle through projects.
+    /// first). Archived projects are excluded from the picker.
     pub fn enter_pick_project(&mut self) {
-        let all = unique_values(self.store.tasks(), |t| &t.projects);
+        let all: Vec<String> = unique_values(self.store.tasks(), |t| &t.projects)
+            .into_iter()
+            .filter(|p| !self.is_project_archived(p))
+            .collect();
         if all.is_empty() {
             self.flash("no projects");
             return;
@@ -15,13 +18,13 @@ impl App {
         let seed = self
             .cur_abs()
             .and_then(|i| self.store.tasks()[i].projects.first().cloned())
-            .filter(|p| all.contains(p))
+            .filter(|p| all.contains(p) && !self.is_project_archived(p))
             .or_else(|| self.filter.project.clone())
             .filter(|p| all.contains(p))
             .unwrap_or_else(|| all[0].clone());
         self.filter.project = Some(seed);
-        self.cursor = 0;
-        self.mode = Mode::PickProject;
+        self.nav.cursor = 0;
+        self.nav.mode = Mode::PickProject;
         self.recompute_visible();
         self.flash_pick_project();
     }
@@ -40,8 +43,8 @@ impl App {
             .filter(|c| all.contains(c))
             .unwrap_or_else(|| all[0].clone());
         self.filter.context = Some(seed);
-        self.cursor = 0;
-        self.mode = Mode::PickContext;
+        self.nav.cursor = 0;
+        self.nav.mode = Mode::PickContext;
         self.recompute_visible();
         self.flash_pick_context();
     }
@@ -55,17 +58,17 @@ impl App {
             self.flash("no saved filters");
             return;
         }
-        self.saved_pick_restore = Some(self.filter.search.clone());
+        self.saved_picker.restore = Some(self.filter.search.clone());
         // Highlight the saved filter matching the active search, else the
         // first; track the index so duplicate queries stay distinguishable.
-        self.saved_pick_idx = self
+        self.saved_picker.idx = self
             .saved_filters
             .iter()
             .position(|f| f.query == self.filter.search)
             .unwrap_or(0);
-        self.filter.search = self.saved_filters[self.saved_pick_idx].query.clone();
-        self.cursor = 0;
-        self.mode = Mode::PickSavedFilter;
+        self.filter.search = self.saved_filters[self.saved_picker.idx].query.clone();
+        self.nav.cursor = 0;
+        self.nav.mode = Mode::PickSavedFilter;
         self.recompute_visible();
         self.flash_pick_saved();
     }
@@ -74,10 +77,10 @@ impl App {
     /// Normal. For the saved-filter picker this also drops the revert
     /// snapshot so a later cancel elsewhere can't resurrect it.
     pub fn pick_accept(&mut self) {
-        if self.mode == Mode::PickSavedFilter {
-            self.saved_pick_restore = None;
+        if self.nav.mode == Mode::PickSavedFilter {
+            self.saved_picker.restore = None;
         }
-        self.mode = Mode::Normal;
+        self.nav.mode = Mode::Normal;
     }
 
     /// Cancel an open picker. Clears only the filter that was being picked
@@ -85,29 +88,32 @@ impl App {
     /// the user set independently). The saved-filter picker restores the
     /// search that was active before it opened.
     pub fn pick_cancel(&mut self) {
-        match self.mode {
+        match self.nav.mode {
             Mode::PickProject => self.filter.project = None,
             Mode::PickContext => self.filter.context = None,
             Mode::PickSavedFilter => {
-                self.filter.search = self.saved_pick_restore.take().unwrap_or_default();
+                self.filter.search = self.saved_picker.restore.take().unwrap_or_default();
             }
             _ => {}
         }
-        self.cursor = 0;
-        self.mode = Mode::Normal;
+        self.nav.cursor = 0;
+        self.nav.mode = Mode::Normal;
         self.recompute_visible();
     }
 
     /// Step through projects/contexts within picker mode.
     pub fn pick_step(&mut self, forward: bool) {
-        match self.mode {
+        match self.nav.mode {
             Mode::PickProject => {
-                let all = unique_values(self.store.tasks(), |t| &t.projects);
+                let all: Vec<String> = unique_values(self.store.tasks(), |t| &t.projects)
+                    .into_iter()
+                    .filter(|p| !self.is_project_archived(p))
+                    .collect();
                 if all.is_empty() {
                     return;
                 }
                 self.filter.project = Some(step(&all, self.filter.project.as_deref(), forward));
-                self.cursor = 0;
+                self.nav.cursor = 0;
                 self.recompute_visible();
                 self.flash_pick_project();
             }
@@ -117,7 +123,7 @@ impl App {
                     return;
                 }
                 self.filter.context = Some(step(&all, self.filter.context.as_deref(), forward));
-                self.cursor = 0;
+                self.nav.cursor = 0;
                 self.recompute_visible();
                 self.flash_pick_context();
             }
@@ -126,13 +132,13 @@ impl App {
                 if len == 0 {
                     return;
                 }
-                self.saved_pick_idx = if forward {
-                    (self.saved_pick_idx + 1) % len
+                self.saved_picker.idx = if forward {
+                    (self.saved_picker.idx + 1) % len
                 } else {
-                    (self.saved_pick_idx + len - 1) % len
+                    (self.saved_picker.idx + len - 1) % len
                 };
-                self.filter.search = self.saved_filters[self.saved_pick_idx].query.clone();
-                self.cursor = 0;
+                self.filter.search = self.saved_filters[self.saved_picker.idx].query.clone();
+                self.nav.cursor = 0;
                 self.recompute_visible();
                 self.flash_pick_saved();
             }
@@ -141,7 +147,10 @@ impl App {
     }
 
     fn flash_pick_project(&mut self) {
-        let all = unique_values(self.store.tasks(), |t| &t.projects);
+        let all: Vec<String> = unique_values(self.store.tasks(), |t| &t.projects)
+            .into_iter()
+            .filter(|p| !self.is_project_archived(p))
+            .collect();
         if let Some(cur) = self.filter.project.clone() {
             let pos = position_of(&all, &cur);
             self.flash(format!("+{}  ({}/{})", cur, pos + 1, all.len()));
@@ -158,9 +167,9 @@ impl App {
 
     fn flash_pick_saved(&mut self) {
         let len = self.saved_filters.len();
-        if let Some(f) = self.saved_filters.get(self.saved_pick_idx) {
+        if let Some(f) = self.saved_filters.get(self.saved_picker.idx) {
             let name = f.name.clone();
-            self.flash(format!("{}  ({}/{})", name, self.saved_pick_idx + 1, len));
+            self.flash(format!("{}  ({}/{})", name, self.saved_picker.idx + 1, len));
         }
     }
 }
@@ -224,7 +233,7 @@ mod tests {
         app.pick_cancel();
         assert_eq!(app.filter.project.as_deref(), Some("work"));
         assert!(app.filter.context.is_none());
-        assert_eq!(app.mode, Mode::Normal);
+        assert_eq!(app.nav.mode, Mode::Normal);
     }
 
     #[test]
@@ -243,7 +252,7 @@ mod tests {
         ];
         app.set_search("pre".into()); // an unrelated search active beforehand
         app.enter_pick_saved();
-        assert_eq!(app.mode, Mode::PickSavedFilter);
+        assert_eq!(app.nav.mode, Mode::PickSavedFilter);
         // No saved query equals "pre", so it seeds to the first filter.
         assert_eq!(app.filter().search, "alpha");
         app.pick_step(true);
@@ -251,7 +260,7 @@ mod tests {
         app.pick_step(true); // wraps
         assert_eq!(app.filter().search, "alpha");
         app.pick_cancel();
-        assert_eq!(app.mode, Mode::Normal);
+        assert_eq!(app.nav.mode, Mode::Normal);
         assert_eq!(app.filter().search, "pre"); // reverted to pre-picker search
     }
 
@@ -276,7 +285,7 @@ mod tests {
         app.pick_step(true); // wraps to "a"
         assert_eq!(app.filter().search, "alpha");
         app.pick_accept();
-        assert_eq!(app.mode, Mode::Normal);
+        assert_eq!(app.nav.mode, Mode::Normal);
         assert_eq!(app.filter().search, "alpha"); // commit keeps the preview
     }
 
@@ -284,7 +293,7 @@ mod tests {
     fn enter_pick_saved_empty_flashes_and_stays_normal() {
         let mut app = build_app(crate::sample::TODO_RAW);
         app.enter_pick_saved();
-        assert_eq!(app.mode, Mode::Normal);
+        assert_eq!(app.nav.mode, Mode::Normal);
         assert_eq!(app.flash_active(), Some("no saved filters"));
     }
 
@@ -331,7 +340,7 @@ mod tests {
         // desc, name asc: [work(4), health(3), finance(1), home(1),
         // learning(1), personal(1), travel(1)].
         app.enter_pick_project();
-        assert!(matches!(app.mode, Mode::PickProject));
+        assert!(matches!(app.nav.mode, Mode::PickProject));
         assert_eq!(app.filter.project.as_deref(), Some("work"));
         // Forward: work → health
         app.pick_step(true);

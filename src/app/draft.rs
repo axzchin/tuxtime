@@ -16,6 +16,7 @@ pub struct DraftCursor(usize);
 
 impl DraftCursor {
     /// Clamp to the nearest char boundary at or before `byte` (or to `s.len()`).
+    #[must_use] 
     pub fn clamped(s: &str, byte: usize) -> Self {
         let mut b = byte.min(s.len());
         while b > 0 && !s.is_char_boundary(b) {
@@ -24,14 +25,17 @@ impl DraftCursor {
         Self(b)
     }
 
+    #[must_use] 
     pub fn at_end(s: &str) -> Self {
         Self(s.len())
     }
 
+    #[must_use] 
     pub fn zero() -> Self {
         Self(0)
     }
 
+    #[must_use] 
     pub fn byte(self) -> usize {
         self.0
     }
@@ -51,22 +55,27 @@ pub struct DraftState {
 }
 
 impl DraftState {
+    #[must_use] 
     pub fn text(&self) -> &str {
         &self.text
     }
 
+    #[must_use] 
     pub fn cursor(&self) -> usize {
         self.cursor.byte()
     }
 
+    #[must_use] 
     pub fn autocomplete_index(&self) -> usize {
         self.autocomplete_selected
     }
 
+    #[must_use] 
     pub fn autocomplete_suppressed(&self) -> bool {
         self.autocomplete_suppressed
     }
 
+    #[must_use] 
     pub fn overlay(&self) -> Option<&DraftOverlay> {
         self.overlay.as_ref()
     }
@@ -79,6 +88,7 @@ impl DraftState {
         self.overlay = overlay;
     }
 
+    #[must_use] 
     pub fn input_mode(&self) -> DialogInputMode {
         self.input_mode
     }

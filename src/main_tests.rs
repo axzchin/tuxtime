@@ -1,0 +1,1298 @@
+    use super::*;
+    use chrono::NaiveDate;
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use tuxtime::config::Config;
+
+    fn key(c: char) -> KeyEvent {
+        KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)
+    }
+
+    fn ctrl(c: char) -> KeyEvent {
+        KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)
+    }
+
+    fn alt(c: char) -> KeyEvent {
+        KeyEvent::new(KeyCode::Char(c), KeyModifiers::ALT)
+    }
+
+    fn resolve(app: &mut App, key: KeyEvent) -> Option<Action> {
+        resolve_normal_key(app, key, &KeyBindings::default())
+    }
+
+    fn welcome_app(name: &str) -> (App, std::path::PathBuf) {
+        let path = std::env::temp_dir().join(format!(
+            "tuxtime-welcome-{name}-{}-{:?}.txt",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let mut app = App::new(
+            path.clone(),
+            String::new(),
+            "2026-05-07".into(),
+            Config::default(),
+        );
+        app.nav.mode = Mode::Welcome;
+        (app, path)
+    }
+
+    #[test]
+    fn welcome_c_creates_cwd_file_and_enters_normal() {
+        let (mut app, path) = welcome_app("c");
+        assert!(!path.exists(), "precondition: file must not exist yet");
+        handle_welcome(&mut app, key('c'));
+        assert!(path.exists(), "`c` must create the target file");
+        assert_eq!(app.nav.mode, Mode::Normal);
+        assert_eq!(app.file_path, path, "`c` keeps the cwd target path");
+        assert!(!app.nav.should_quit);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn welcome_s_opens_sample_and_enters_normal() {
+        let (mut app, path) = welcome_app("s");
+        handle_welcome(&mut app, key('s'));
+        assert_eq!(app.nav.mode, Mode::Normal);
+        assert_ne!(app.file_path, path, "`s` rebinds away from the cwd target");
+        assert!(
+            app.file_path.ends_with("tuxtime-sample.txt"),
+            "`s` opens the bundled sample, got {:?}",
+            app.file_path
+        );
+        assert!(!app.tasks().is_empty(), "sample must load tasks");
+        assert!(!path.exists(), "`s` must not create the cwd file");
+    }
+
+    #[test]
+    fn welcome_q_and_esc_quit_without_creating_anything() {
+        let (mut app, path) = welcome_app("q");
+        handle_welcome(&mut app, key('q'));
+        assert!(app.nav.should_quit, "`q` must quit");
+        assert!(!path.exists(), "`q` must not create a file");
+
+        let (mut app, path) = welcome_app("esc");
+        handle_welcome(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(app.nav.should_quit, "Esc must quit");
+        assert!(!path.exists(), "Esc must not create a file");
+    }
+
+    fn build_app() -> App {
+        let path = std::env::temp_dir().join(format!(
+            "tuxtime-bindings-{}-{:?}.txt",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::write(&path, "a\nb\nc\n");
+        App::new(
+            path,
+            "a\nb\nc\n".into(),
+            "2026-05-07".into(),
+            Config::default(),
+        )
+    }
+
+    fn build_app_with_due() -> App {
+        let path = std::env::temp_dir().join(format!(
+            "tuxtime-bindings-{}-{:?}.txt",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::write(&path, "Buy milk due:2026-06-30\n");
+        App::new(
+            path,
+            "Buy milk due:2026-06-30\n".into(),
+            "2026-05-07".into(),
+            Config::default(),
+        )
+    }
+
+    #[test]
+    fn plain_keys_resolve_to_their_actions() {
+        let mut app = build_app();
+        assert_eq!(resolve(&mut app, key('q')), Some(Action::Quit));
+        assert_eq!(resolve(&mut app, key('j')), Some(Action::CursorDown),);
+        assert_eq!(resolve(&mut app, key('?')), Some(Action::OpenHelp));
+        assert_eq!(resolve(&mut app, ctrl('d')), Some(Action::HalfPageDown),);
+        assert_eq!(resolve(&mut app, key('n')), Some(Action::BeginAdd),);
+        assert_eq!(resolve(&mut app, key('a')), Some(Action::ToggleArchiveView),);
+        assert_eq!(resolve(&mut app, key('A')), Some(Action::ArchiveCompleted),);
+        assert_eq!(resolve(&mut app, key('S')), Some(Action::CycleSort),);
+    }
+
+    #[test]
+    fn custom_keybinds_override_builtins() {
+        let mut app = build_app();
+        let keybinds = KeyBindings::parse("[normal]\nopen_help = \"q\"\n");
+        assert_eq!(
+            resolve_normal_key(&mut app, key('q'), &keybinds),
+            Some(Action::OpenHelp)
+        );
+        assert_eq!(
+            resolve_normal_key(&mut app, ctrl('d'), &keybinds),
+            Some(Action::HalfPageDown),
+        );
+        assert_eq!(
+            resolve_normal_key(&mut app, key('n'), &keybinds),
+            Some(Action::BeginAdd),
+        );
+        assert_eq!(
+            resolve_normal_key(&mut app, key('r'), &keybinds),
+            Some(Action::Reschedule),
+        );
+        assert_eq!(
+            resolve_normal_key(&mut app, key('a'), &keybinds),
+            Some(Action::ToggleArchiveView),
+        );
+        assert_eq!(
+            resolve_normal_key(&mut app, key('A'), &keybinds),
+            Some(Action::ArchiveCompleted),
+        );
+        assert_eq!(
+            resolve_normal_key(&mut app, key('S'), &keybinds),
+            Some(Action::CycleSort),
+        );
+    }
+
+    #[test]
+    fn capital_a_archives_only_when_completed_tasks_exist() {
+        // No completed tasks → flash, no archive write.
+        let mut app = build_app_with_archive("a\nb\nc\n", None);
+        apply_action(&mut app, Action::ArchiveCompleted);
+        assert_eq!(app.flash_active(), Some("no completed tasks to archive"));
+        assert_eq!(app.tasks().len(), 3);
+
+        // One completed task → archive_completed runs.
+        let mut app = build_app_with_archive("x 2026-05-08 done one\nb\n", None);
+        apply_action(&mut app, Action::ArchiveCompleted);
+        assert_eq!(app.tasks().len(), 1, "completed task must be archived");
+    }
+
+    #[test]
+    fn lowercase_l_returns_to_list_from_any_view() {
+        let mut app = build_app_with_archive("a\n", Some("x 2026-05-02 2026-04-02 done\n"));
+        app.set_view(View::Archive);
+        apply_action(&mut app, Action::GoList);
+        assert_eq!(app.view(), View::List);
+    }
+
+    #[test]
+    fn lowercase_a_toggles_archive_view() {
+        let mut app = build_app_with_archive("a\n", Some("x 2026-05-02 2026-04-02 done\n"));
+        assert_eq!(app.view(), View::List);
+        apply_action(&mut app, Action::ToggleArchiveView);
+        assert_eq!(app.view(), View::Archive);
+        apply_action(&mut app, Action::ToggleArchiveView);
+        assert_eq!(app.view(), View::List);
+    }
+
+    #[test]
+    fn timesheet_copy_flashes_key_in_message() {
+        // Build an app with a dur task for today so the timesheet is populated.
+        let dir = std::env::temp_dir().join(format!(
+            "tuxtime-timesheet-copy-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("create test dir");
+        let todo_path = dir.join("todo.txt");
+        // Line must have today's date as creation date *and* a dur for
+        // build_timesheet_groups to pick it up.
+        let raw = "2026-05-07 Write code +work @dev dur:3600\n";
+        std::fs::write(&todo_path, raw).expect("write todo.txt");
+        let mut app = App::new(
+            todo_path,
+            raw.into(),
+            "2026-05-07".into(),
+            Config::default(),
+        );
+        app.set_view(View::Timesheet);
+
+        // Verify we are indeed in Timesheet view before copying.
+        assert_eq!(app.view(), View::Timesheet);
+        assert!(app.flash_active().is_none(), "no flash before copy");
+
+        handle_timesheet_keys(&mut app, key('c'));
+
+        // Verify the flash message includes the project+activity key.
+        // The status bar reads flash_active() to build its mode_label as
+        // "TIMESHEET · copied narrative for +work @dev", so this assertion
+        // directly verifies what the status bar will display.
+        let flash = app.flash_active();
+        assert!(
+            flash.is_some_and(|m| m.contains("+work @dev")),
+            "copy in timesheet must flash the project+activity key, got: {flash:?}"
+        );
+    }
+
+    // ── timesheet sort ───────────────────────────────────────────────
+
+    #[test]
+    fn timesheet_sort_cycles_modes() {
+        let mut app = build_timesheet_app();
+        app.set_view(View::Timesheet);
+
+        assert_eq!(app.timesheet.sort, tuxtime::app::TimesheetSort::ProjectActivity);
+        handle_timesheet_keys(&mut app, key('s'));
+        assert_eq!(app.timesheet.sort, tuxtime::app::TimesheetSort::Date);
+        assert_eq!(app.timesheet.cursor, 0, "sort change resets cursor");
+        assert!(app.flash_active().is_some_and(|m| m.contains("by date")));
+
+        handle_timesheet_keys(&mut app, key('s'));
+        assert_eq!(app.timesheet.sort, tuxtime::app::TimesheetSort::Duration);
+        assert!(app.flash_active().is_some_and(|m| m.contains("by duration")));
+
+        handle_timesheet_keys(&mut app, key('s'));
+        assert_eq!(app.timesheet.sort, tuxtime::app::TimesheetSort::ProjectActivity);
+        assert!(app.flash_active().is_some_and(|m| m.contains("by project")));
+    }
+
+    #[test]
+    fn build_timesheet_groups_sorts_by_project() {
+        let mut app = build_timesheet_app();
+        app.set_view(View::Timesheet);
+        app.timesheet.sort = tuxtime::app::TimesheetSort::ProjectActivity;
+        let groups = app.build_timesheet_groups();
+        assert!(!groups.is_empty());
+        // ProjectActivity sort: keys should be in lexicographic order.
+        for w in groups.windows(2) {
+            assert!(w[0].key <= w[1].key, "keys must be sorted by project");
+        }
+    }
+
+    #[test]
+    fn build_timesheet_groups_sorts_by_duration() {
+        let mut app = build_timesheet_app();
+        app.set_view(View::Timesheet);
+        app.timesheet.sort = tuxtime::app::TimesheetSort::Duration;
+        let groups = app.build_timesheet_groups();
+        // Duration sort: descending by total_secs.
+        for w in groups.windows(2) {
+            assert!(w[0].total_secs >= w[1].total_secs, "durations must descend");
+        }
+    }
+
+    #[test]
+    fn build_timesheet_groups_sorts_by_date() {
+        let mut app = build_timesheet_app();
+        app.set_view(View::Timesheet);
+        app.timesheet.weekly = true; // need weekly to see both dates
+        app.timesheet.sort = tuxtime::app::TimesheetSort::Date;
+        let groups = app.build_timesheet_groups();
+        assert!(groups.len() >= 2, "weekly must show at least 2 date groups");
+        // Date sort: entries ordered by date then key.
+        for w in groups.windows(2) {
+            let ord = w[0]
+                .date
+                .cmp(&w[1].date)
+                .then_with(|| w[0].key.cmp(&w[1].key));
+            assert!(
+                ord.is_le(),
+                "date sort must be (date, key): {:?} vs {:?}",
+                (&w[0].date, &w[0].key),
+                (&w[1].date, &w[1].key)
+            );
+        }
+    }
+
+    #[test]
+    fn build_timesheet_groups_filters_by_search() {
+        let mut app = build_timesheet_app();
+        app.set_view(View::Timesheet);
+        // No search → all dur tasks appear.
+        let all = app.build_timesheet_groups();
+        assert!(!all.is_empty());
+        // Search for a narrative substring that exists.
+        app.set_search("Write".into());
+        let filtered = app.build_timesheet_groups();
+        assert!(!filtered.is_empty());
+        // Search for something that doesn't exist.
+        app.set_search("zzz_nonexistent".into());
+        let none = app.build_timesheet_groups();
+        assert!(none.is_empty());
+        // Clear search → all back.
+        app.clear_search();
+        assert_eq!(app.build_timesheet_groups().len(), all.len());
+    }
+
+    #[test]
+    fn build_timesheet_groups_separates_billable_and_dnb() {
+        // Same project+activity on the same day, one billable, one DNB.
+        // They must form separate groups and round independently.
+        let dir = std::env::temp_dir().join(format!(
+            "tuxtime-ts-bill-test-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("create test dir");
+        let todo_path = dir.join("todo.txt");
+        let raw = "2026-05-07 Billable work +work @dev dur:60\n2026-05-07 DNB work +work @dev dur:60 bill:n\n";
+        std::fs::write(&todo_path, raw).expect("write todo.txt");
+        let mut app = App::new(
+            todo_path,
+            raw.into(),
+            "2026-05-07".into(),
+            Config::default(),
+        );
+        app.set_view(View::Timesheet);
+        let groups = app.build_timesheet_groups();
+        // Must produce two distinct groups for the same key.
+        assert_eq!(groups.len(), 2, "billable and DNB must be separate groups");
+        assert_eq!(groups[0].key, "+work @dev");
+        assert_eq!(groups[1].key, "+work @dev");
+        // One group must be billable, the other DNB.
+        assert_ne!(
+            groups[0].billable, groups[1].billable,
+            "groups must have different billable flags"
+        );
+        // Each 60-second group rounds to 0.1h independently.
+        let billable_group = groups.iter().find(|g| g.billable).unwrap();
+        let dnb_group = groups.iter().find(|g| !g.billable).unwrap();
+        assert_eq!(billable_group.total_secs, 60);
+        assert_eq!(dnb_group.total_secs, 60);
+        // Verify the correct narratives landed in each group
+        // (bill:n tag is stripped from body).
+        assert_eq!(billable_group.narratives, vec!["Billable work"]);
+        assert_eq!(dnb_group.narratives, vec!["DNB work"]);
+        let billable_str = tuxtime::app::format_billable(billable_group.total_secs);
+        let dnb_str = tuxtime::app::format_billable(dnb_group.total_secs);
+        assert_eq!(billable_str, "0.1h");
+        assert_eq!(dnb_str, "0.1h");
+        // The sum of per-group tenths (from format_billable_tenths) should be 0.2h.
+        let billable_tenths = billable_group.total_secs.div_ceil(360);
+        let dnb_tenths = dnb_group.total_secs.div_ceil(360);
+        assert_eq!(billable_tenths, 1);
+        assert_eq!(dnb_tenths, 1);
+        let total_tenths_str = tuxtime::app::format_billable_tenths(billable_tenths + dnb_tenths);
+        assert_eq!(total_tenths_str, "0.2h");
+    }
+
+    // ── timesheet date navigation ─────────────────────────────────────
+
+    #[test]
+    fn timesheet_date_navigation_shifts_day() {
+        let mut app = build_timesheet_app();
+        app.set_view(View::Timesheet);
+        let orig = app.timesheet.date.clone();
+
+        handle_timesheet_keys(&mut app, key('l')); // next day
+        assert_ne!(app.timesheet.date, orig);
+        assert_eq!(app.timesheet.cursor, 0, "nav resets cursor");
+        assert!(app.flash_active().is_some_and(|m| m.contains(&app.timesheet.date)));
+
+        handle_timesheet_keys(&mut app, key('h')); // prev day
+        assert_eq!(app.timesheet.date, orig);
+    }
+
+    #[test]
+    fn timesheet_date_navigation_shifts_week() {
+        let mut app = build_timesheet_app();
+        app.set_view(View::Timesheet);
+        let orig = app.timesheet.date.clone();
+
+        handle_timesheet_keys(&mut app, key('L')); // next week
+        assert_ne!(app.timesheet.date, orig);
+        assert_eq!(app.timesheet.cursor, 0);
+
+        handle_timesheet_keys(&mut app, key('H')); // prev week
+        assert_eq!(app.timesheet.date, orig);
+    }
+
+    #[test]
+    fn timesheet_date_t_jumps_to_today() {
+        let mut app = build_timesheet_app();
+        app.set_view(View::Timesheet);
+        let today = app.today().to_string();
+
+        // Navigate away.
+        app.timesheet_shift_days(-5);
+        assert_ne!(app.timesheet.date, today);
+
+        handle_timesheet_keys(&mut app, key('t'));
+        assert_eq!(app.timesheet.date, today);
+        assert_eq!(app.timesheet.cursor, 0);
+        assert!(app.flash_active().is_some_and(|m| m.starts_with("today (")));
+    }
+
+    #[test]
+    fn timesheet_left_right_arrows_also_navigate() {
+        let mut app = build_timesheet_app();
+        app.set_view(View::Timesheet);
+        let orig = app.timesheet.date.clone();
+
+        handle_timesheet_keys(
+            &mut app,
+            KeyEvent::new(KeyCode::Right, KeyModifiers::NONE),
+        );
+        assert_ne!(app.timesheet.date, orig);
+
+        handle_timesheet_keys(
+            &mut app,
+            KeyEvent::new(KeyCode::Left, KeyModifiers::NONE),
+        );
+        assert_eq!(app.timesheet.date, orig);
+    }
+
+    // ── g-key calendar picker ─────────────────────────────────────────
+
+    #[test]
+    fn timesheet_g_key_opens_calendar_picker() {
+        let mut app = build_timesheet_app();
+        app.set_view(View::Timesheet);
+        // Pre-fill input to verify g clears it.
+        app.timesheet.date_input = "2026-01".into();
+        handle_timesheet_keys(&mut app, key('g'));
+        assert_eq!(app.nav.mode, Mode::PickTimesheetDate);
+        // Calendar focus is seeded from the current timesheet.date.
+        assert_eq!(
+            app.timesheet.calendar_focus
+                .format("%Y-%m-%d")
+                .to_string(),
+            app.timesheet.date
+        );
+        // Input buffer is cleared on open.
+        assert!(app.timesheet.date_input.is_empty());
+    }
+
+    #[test]
+    fn pick_timesheet_date_enter_accepts() {
+        let mut app = build_timesheet_app();
+        app.set_view(View::Timesheet);
+        // Open calendar and navigate to select a date, then Enter.
+        handle_timesheet_keys(&mut app, key('g'));
+        assert_eq!(app.nav.mode, Mode::PickTimesheetDate);
+        let orig = app.timesheet.date.clone();
+
+        // Navigate to a different date via the calendar.
+        app.timesheet.calendar_focus =
+            chrono::NaiveDate::from_ymd_opt(2026, 1, 15).expect("valid date");
+        handle_pick_timesheet_date(
+            &mut app,
+            KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        );
+        assert_eq!(app.timesheet.date, "2026-01-15");
+        assert_ne!(app.timesheet.date, orig);
+        assert_eq!(app.timesheet.cursor, 0);
+        assert_eq!(app.nav.mode, Mode::Normal);
+        assert!(app
+            .flash_active()
+            .is_some_and(|m| m.contains("jumped to Thu 2026-01-15")));
+    }
+
+    #[test]
+    fn pick_timesheet_date_esc_cancels() {
+        let mut app = build_timesheet_app();
+        app.set_view(View::Timesheet);
+        let orig = app.timesheet.date.clone();
+
+        handle_timesheet_keys(&mut app, key('g'));
+        // Navigate away, then cancel.
+        app.timesheet.calendar_focus =
+            chrono::NaiveDate::from_ymd_opt(2026, 1, 15).expect("valid date");
+        handle_pick_timesheet_date(
+            &mut app,
+            KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+        );
+        assert_eq!(app.timesheet.date, orig, "Esc must not change date");
+        assert_eq!(app.nav.mode, Mode::Normal);
+    }
+
+    #[test]
+    fn pick_timesheet_date_typing_syncs_focus_and_accepts() {
+        let mut app = build_timesheet_app();
+        app.set_view(View::Timesheet);
+        handle_timesheet_keys(&mut app, key('g'));
+        assert_eq!(app.nav.mode, Mode::PickTimesheetDate);
+        let orig = app.timesheet.date.clone();
+
+        // Type a partial date — calendar focus shouldn't move yet.
+        for c in "2026-".chars() {
+            handle_pick_timesheet_date(&mut app, KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        assert_eq!(app.timesheet.date_input, "2026-");
+
+        // Complete the date — focus should snap.
+        for c in "01-15".chars() {
+            handle_pick_timesheet_date(&mut app, KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        assert_eq!(app.timesheet.date_input, "2026-01-15");
+        assert_eq!(
+            app.timesheet.calendar_focus
+                .format("%Y-%m-%d")
+                .to_string(),
+            "2026-01-15"
+        );
+
+        // Enter accepts the typed date.
+        handle_pick_timesheet_date(
+            &mut app,
+            KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        );
+        assert_eq!(app.timesheet.date, "2026-01-15");
+        assert_ne!(app.timesheet.date, orig);
+        assert_eq!(app.nav.mode, Mode::Normal);
+        assert!(app
+            .flash_active()
+            .is_some_and(|m| m.contains("jumped to Thu 2026-01-15")));
+        // Input is cleared on accept.
+        assert!(app.timesheet.date_input.is_empty());
+    }
+
+    #[test]
+    fn pick_timesheet_date_invalid_typing_flashes_error() {
+        let mut app = build_timesheet_app();
+        app.set_view(View::Timesheet);
+        handle_timesheet_keys(&mut app, key('g'));
+        let orig_date = app.timesheet.date.clone();
+
+        // Type an invalid date.
+        for c in "not-a-date".chars() {
+            handle_pick_timesheet_date(&mut app, KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        handle_pick_timesheet_date(
+            &mut app,
+            KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        );
+        // Date unchanged, mode stays in calendar, error flashed.
+        assert_eq!(app.timesheet.date, orig_date);
+        assert_eq!(app.nav.mode, Mode::PickTimesheetDate);
+        assert!(app
+            .flash_active()
+            .is_some_and(|m| m.contains("invalid date")));
+        // Input is cleared so user can retry.
+        assert!(app.timesheet.date_input.is_empty());
+    }
+
+    #[test]
+    fn pick_timesheet_date_typing_navigation_in_sync() {
+        let mut app = build_timesheet_app();
+        app.set_view(View::Timesheet);
+        handle_timesheet_keys(&mut app, key('g'));
+
+        // Type a complete date.
+        for c in "2026-12-25".chars() {
+            handle_pick_timesheet_date(&mut app, KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        let typed_focus = app.timesheet.calendar_focus;
+
+        // Now navigate the grid.
+        handle_pick_timesheet_date(&mut app, key('l'));
+        assert_ne!(app.timesheet.calendar_focus, typed_focus);
+        // Input buffer is still intact — typing and navigation coexist.
+        assert_eq!(app.timesheet.date_input, "2026-12-25");
+    }
+
+    #[test]
+    fn pick_timesheet_date_navigation_works() {
+        let mut app = build_timesheet_app();
+        app.set_view(View::Timesheet);
+        handle_timesheet_keys(&mut app, key('g'));
+        let orig = app.timesheet.calendar_focus;
+
+        handle_pick_timesheet_date(&mut app, key('l')); // right
+        assert_ne!(app.timesheet.calendar_focus, orig);
+        handle_pick_timesheet_date(&mut app, key('h')); // left
+        assert_eq!(app.timesheet.calendar_focus, orig);
+    }
+
+    // ── timesheet view/date integration ───────────────────────────────
+
+    #[test]
+    fn open_timesheet_resets_date_to_today() {
+        let mut app = build_timesheet_app();
+        let today = app.today().to_string();
+        // Navigate away first.
+        app.timesheet_shift_days(-10);
+        assert_ne!(app.timesheet.date, today);
+        // Open Timesheet via action.
+        apply_action(&mut app, Action::OpenTimesheet);
+        assert_eq!(app.view(), View::Timesheet);
+        assert_eq!(app.timesheet.date, today, "entry resets to today");
+        assert_eq!(app.timesheet.cursor, 0);
+    }
+
+    // ── helpers ───────────────────────────────────────────────────────
+
+    /// Build an app with dur tasks for timesheet testing.
+    /// Produces three groups on 2026-05-07 (two distinct project+activity
+    /// combos) and one on 2026-05-06, giving sort tests real data.
+    fn build_timesheet_app() -> App {
+        let dir = std::env::temp_dir().join(format!(
+            "tuxtime-ts-test-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("create test dir");
+        let todo_path = dir.join("todo.txt");
+        let raw = "2026-05-07 Write code +work @dev dur:3600\n2026-05-07 Review PR +legal @research dur:1800\n2026-05-07 Meeting notes +work @dev dur:600\n2026-05-06 Draft memo +legal @research dur:900\n";
+        std::fs::write(&todo_path, raw).expect("write todo.txt");
+        App::new(todo_path, raw.into(), "2026-05-07".into(), Config::default())
+    }
+
+    #[test]
+    fn gg_chord_only_fires_on_second_press() {
+        let mut app = build_app();
+        // First 'g' arms the chord but produces no action.
+        assert_eq!(resolve(&mut app, key('g')), None);
+        // Second 'g' fires.
+        assert_eq!(resolve(&mut app, key('g')), Some(Action::CursorTop));
+    }
+
+    #[test]
+    fn fp_chord_routes_to_pick_project() {
+        let mut app = build_app();
+        // 'f' arms the leader.
+        assert_eq!(resolve(&mut app, key('f')), Some(Action::ArmF));
+        apply_action(&mut app, Action::ArmF);
+        // 'p' after armed 'f' picks project, not cycles priority.
+        assert_eq!(resolve(&mut app, key('p')), Some(Action::PickProject));
+    }
+
+    #[test]
+    fn p_without_chord_cycles_priority() {
+        let mut app = build_app();
+        assert_eq!(resolve(&mut app, key('p')), Some(Action::CyclePriority),);
+    }
+
+    #[test]
+    fn unknown_key_returns_none() {
+        let mut app = build_app();
+        let k = KeyEvent::new(KeyCode::F(5), KeyModifiers::NONE);
+        assert_eq!(resolve(&mut app, k), None);
+    }
+
+    #[test]
+    fn yy_chord_only_fires_on_second_press() {
+        let mut app = build_app();
+        // First 'y' arms the chord but produces no action.
+        assert_eq!(resolve(&mut app, key('y')), None);
+        // Second 'y' fires the line copy.
+        assert_eq!(resolve(&mut app, key('y')), Some(Action::CopyLine));
+    }
+
+    #[test]
+    fn yb_chord_routes_to_copy_body() {
+        let mut app = build_app();
+        // 'y' arms the leader without firing.
+        assert_eq!(resolve(&mut app, key('y')), None);
+        // 'b' after armed 'y' copies the body.
+        assert_eq!(resolve(&mut app, key('b')), Some(Action::CopyBody));
+    }
+
+    #[test]
+    fn plain_b_toggles_billable() {
+        let mut app = build_app();
+        // Plain 'b' now toggles billable/non-billable.
+        assert_eq!(resolve(&mut app, key('b')), Some(Action::ToggleBillable));
+    }
+
+    #[test]
+    fn cursor_actions_clamp_to_visible_range() {
+        let mut app = build_app();
+        // 3 visible tasks, cursor starts at 0.
+        apply_action(&mut app, Action::CursorBottom);
+        assert_eq!(app.nav.cursor, 2);
+        apply_action(&mut app, Action::CursorDown);
+        assert_eq!(app.nav.cursor, 2);
+        apply_action(&mut app, Action::CursorTop);
+        assert_eq!(app.nav.cursor, 0);
+        apply_action(&mut app, Action::CursorUp);
+        assert_eq!(app.nav.cursor, 0);
+    }
+
+    /// Build an isolated App rooted in a fresh temp dir, optionally seeding
+    /// done.txt and waiting for the startup loader to land.
+    fn build_app_with_archive(todo_raw: &str, done_raw: Option<&str>) -> App {
+        use std::time::{Duration, Instant};
+        static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir =
+            std::env::temp_dir().join(format!("tuxtime-bindings-{}-{}", std::process::id(), n));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("create test dir");
+        let todo_path = dir.join("todo.txt");
+        std::fs::write(&todo_path, todo_raw).expect("write todo.txt");
+        if let Some(body) = done_raw {
+            std::fs::write(dir.join("done.txt"), body).expect("write done.txt");
+        }
+        let mut app = App::new(
+            todo_path,
+            todo_raw.into(),
+            "2026-05-06".into(),
+            Config::default(),
+        );
+        if done_raw.is_some() {
+            // Drain the startup archive loader so app.archive is populated.
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while Instant::now() < deadline {
+                let _ = app.poll_archive();
+                if !app.archive().is_empty() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            assert!(!app.archive().is_empty(), "archive failed to load in time");
+        }
+        app
+    }
+
+    #[test]
+    fn cursor_navigation_works_in_archive() {
+        let mut app = build_app_with_archive(
+            "a due:2026-05-04\nb due:2026-05-06\nc due:2026-05-08\n",
+            Some("x 2026-05-01 2026-04-01 first\nx 2026-05-02 2026-04-02 second\n"),
+        );
+        app.set_view(View::Archive);
+        assert_eq!(app.nav.cursor, 0);
+        apply_action(&mut app, Action::CursorDown);
+        assert_eq!(app.nav.cursor, 1, "Archive view must allow CursorDown");
+        apply_action(&mut app, Action::CursorTop);
+        assert_eq!(app.nav.cursor, 0);
+    }
+
+    #[test]
+    fn archive_x_unarchives_task_under_cursor() {
+        let mut app = build_app_with_archive("a\n", Some("x 2026-05-02 2026-04-02 done one\n"));
+        app.set_view(View::Archive);
+        apply_action(&mut app, Action::ToggleComplete);
+        assert_eq!(app.archive().len(), 0, "task must leave the archive");
+        assert!(
+            app.tasks()
+                .iter()
+                .any(|t| t.raw.contains("done one") && !t.done),
+            "un-completed entry must rejoin live tasks"
+        );
+    }
+
+    #[test]
+    fn archive_dd_permanently_deletes_task_under_cursor() {
+        let mut app = build_app_with_archive("a\n", Some("x 2026-05-02 2026-04-02 done one\n"));
+        app.set_view(View::Archive);
+        apply_action(&mut app, Action::Delete);
+        assert_eq!(app.archive().len(), 0);
+        assert_eq!(app.tasks().len(), 1, "todo.txt must be untouched");
+    }
+
+    #[test]
+    fn archive_e_and_p_flash_readonly() {
+        let mut app = build_app_with_archive("a\n", Some("x 2026-05-02 2026-04-02 done one\n"));
+        app.set_view(View::Archive);
+        apply_action(&mut app, Action::BeginEdit);
+        assert_eq!(app.flash_active(), Some("read-only in archive"));
+        apply_action(&mut app, Action::CyclePriority);
+        assert_eq!(app.flash_active(), Some("read-only in archive"));
+        assert!(app.archive().tasks()[0].done);
+    }
+
+    #[test]
+    fn lowercase_r_reschedules_task_with_due_date() {
+        let mut app = build_app_with_due();
+        assert_eq!(app.tasks().len(), 1);
+        assert_eq!(app.tasks()[0].due.as_deref(), Some("2026-06-30"));
+        assert_eq!(app.nav.mode, Mode::Normal);
+
+        assert_eq!(resolve(&mut app, key('r')), Some(Action::Reschedule),);
+        apply_action(&mut app, Action::Reschedule);
+        assert_eq!(app.nav.mode, Mode::Insert);
+
+        let s = app.calendar_state().expect("calendar should be open");
+        assert_eq!(
+            s.focused,
+            NaiveDate::from_ymd_opt(2026, 6, 30).expect("there should be a date set")
+        );
+
+        app.calendar_add_months(1);
+        app.calendar_accept();
+        assert!(app.draft.overlay().is_none());
+        app.add_from_draft();
+        let task = app.tasks().last().expect("task added");
+        assert_eq!(task.due.as_deref(), Some("2026-07-30"));
+    }
+
+    #[test]
+    fn lowercase_r_reschedules_task_without_due_date() {
+        let mut app = build_app();
+        assert_eq!(app.tasks().len(), 3);
+        assert_eq!(app.tasks()[0].due.as_deref(), None);
+        assert_eq!(app.nav.mode, Mode::Normal);
+
+        assert_eq!(resolve(&mut app, key('r')), Some(Action::Reschedule),);
+        apply_action(&mut app, Action::Reschedule);
+        assert_eq!(app.nav.mode, Mode::Insert);
+
+        let s = app.calendar_state().expect("calendar should be open");
+        assert_eq!(
+            s.focused,
+            NaiveDate::from_ymd_opt(2026, 5, 7).expect("there should be a date set")
+        );
+
+        app.calendar_add_months(1);
+        app.calendar_accept();
+        app.add_from_draft();
+        assert!(app.draft.overlay().is_none());
+        let task = app.tasks().last().expect("task added");
+        assert_eq!(task.due.as_deref(), Some("2026-06-07"));
+    }
+
+    #[test]
+    fn capital_w_toggles_week_start() {
+        let mut app = build_app();
+        assert_eq!(resolve(&mut app, key('W')), Some(Action::ChangeWeekStart));
+    }
+
+    #[test]
+    fn ctrl_emacs_keys_resolve_to_edit_actions() {
+        assert_eq!(resolve_edit_key(ctrl('a')), Some(EditAction::MoveHome));
+        assert_eq!(resolve_edit_key(ctrl('e')), Some(EditAction::MoveEnd));
+        assert_eq!(resolve_edit_key(ctrl('b')), Some(EditAction::MoveLeft));
+        assert_eq!(resolve_edit_key(ctrl('f')), Some(EditAction::MoveRight));
+        assert_eq!(
+            resolve_edit_key(ctrl('h')),
+            Some(EditAction::DeleteBackward)
+        );
+        assert_eq!(resolve_edit_key(ctrl('d')), Some(EditAction::DeleteForward));
+        assert_eq!(
+            resolve_edit_key(ctrl('w')),
+            Some(EditAction::DeleteWordBackward)
+        );
+        assert_eq!(resolve_edit_key(ctrl('u')), Some(EditAction::KillToStart));
+        assert_eq!(resolve_edit_key(ctrl('k')), Some(EditAction::KillToEnd));
+    }
+
+    #[test]
+    fn alt_word_keys_resolve_to_word_actions() {
+        assert_eq!(
+            resolve_edit_key(alt('b')),
+            Some(EditAction::MoveWordBackward)
+        );
+        assert_eq!(
+            resolve_edit_key(alt('f')),
+            Some(EditAction::MoveWordForward)
+        );
+        assert_eq!(
+            resolve_edit_key(alt('d')),
+            Some(EditAction::DeleteWordForward)
+        );
+    }
+
+    #[test]
+    fn unmapped_ctrl_chord_is_swallowed_not_typed() {
+        // The historical bug: Ctrl+H (and friends) inserted a literal letter.
+        // Unmapped control chords must resolve to nothing, never an Insert.
+        assert_eq!(resolve_edit_key(ctrl('g')), None);
+        assert_eq!(resolve_edit_key(ctrl('z')), None);
+    }
+
+    #[test]
+    fn plain_and_shifted_chars_insert() {
+        assert_eq!(resolve_edit_key(key('x')), Some(EditAction::Insert('x')));
+        let shifted = KeyEvent::new(KeyCode::Char('A'), KeyModifiers::SHIFT);
+        assert_eq!(resolve_edit_key(shifted), Some(EditAction::Insert('A')));
+    }
+
+    #[test]
+    fn altgr_char_inserts_not_swallowed() {
+        // AltGr is reported as CONTROL|ALT by crossterm for printable chars on
+        // international layouts. It must insert text, not fire a Ctrl chord —
+        // both a letter that collides with the ctrl table ('e') and one that
+        // doesn't ('€') must reach Insert.
+        let altgr = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL | KeyModifiers::ALT);
+        assert_eq!(resolve_edit_key(altgr('e')), Some(EditAction::Insert('e')));
+        assert_eq!(resolve_edit_key(altgr('€')), Some(EditAction::Insert('€')));
+    }
+
+    #[test]
+    fn ctrl_h_deletes_instead_of_inserting_in_insert_mode() {
+        // End-to-end through handle_insert: Ctrl+H must delete the char before
+        // the cursor rather than typing 'h'.
+        let mut app = build_app();
+        app.nav.mode = Mode::Insert;
+        app.draft_clear();
+        app.draft_insert_char('a');
+        app.draft_insert_char('b');
+        handle_insert(&mut app, ctrl('h'));
+        assert_eq!(app.draft.text(), "a");
+    }
+
+    #[test]
+    fn ctrl_u_clears_to_start_in_search_mode() {
+        // Ctrl+U in the search box wipes back to the start and re-runs the
+        // filter via the TextChanged effect.
+        let mut app = build_app();
+        app.nav.mode = Mode::Search;
+        app.draft_clear();
+        for c in "abc".chars() {
+            app.draft_insert_char(c);
+        }
+        app.set_search("abc".into());
+        handle_search(&mut app, ctrl('u'));
+        assert_eq!(app.draft.text(), "");
+    }
+
+    // ---- timer tests ----
+
+    #[test]
+    fn timer_toggle_starts_on_current_task() {
+        let mut app = build_app();
+        assert!(!app.timer_running());
+        apply_action(&mut app, Action::TimerStartStop);
+        assert!(app.timer_running());
+        // The first task should be the one with the running timer.
+        assert!(app.is_timer_running_on(0));
+    }
+
+    #[test]
+    fn timer_toggle_stops_running_timer() {
+        let mut app = build_app();
+        apply_action(&mut app, Action::TimerStartStop);
+        assert!(app.timer_running());
+        // Second press stops it.
+        apply_action(&mut app, Action::TimerStartStop);
+        assert!(!app.timer_running());
+    }
+
+    #[test]
+    fn timer_toggle_switches_to_new_task() {
+        let mut app = build_app();
+        // Start on first task.
+        apply_action(&mut app, Action::TimerStartStop);
+        assert!(app.is_timer_running_on(0));
+        // Move cursor to second task and toggle.
+        app.nav.cursor = 1;
+        apply_action(&mut app, Action::TimerStartStop);
+        assert!(!app.is_timer_running_on(0));
+        assert!(app.is_timer_running_on(1));
+    }
+
+    #[test]
+    fn timer_toggle_flashes_no_task_when_empty() {
+        let mut app = App::new(
+            std::env::temp_dir().join(format!(
+                "tuxtime-empty-{}-{:?}.txt",
+                std::process::id(),
+                std::thread::current().id()
+            )),
+            String::new(),
+            "2026-05-07".into(),
+            Config::default(),
+        );
+        apply_action(&mut app, Action::TimerStartStop);
+        assert!(!app.timer_running());
+    }
+
+    // ---- billable toggle ----
+
+    #[test]
+    fn toggle_billable_adds_bill_n_tag() {
+        let mut app = build_app();
+        let raw = app.task_raw(0).unwrap();
+        assert!(!raw.contains("bill:n"));
+        app.toggle_billable_at(0);
+        let updated = app.task_raw(0).unwrap();
+        assert!(updated.contains("bill:n"), "expected bill:n tag: {updated}");
+    }
+
+    #[test]
+    fn toggle_billable_removes_bill_n_tag() {
+        let raw = "(A) Write code +work @dev bill:n\n";
+        let path = std::env::temp_dir().join(format!(
+            "tuxtime-bill-{}-{:?}.txt",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::write(&path, raw);
+        let mut app = App::new(path, raw.into(), "2026-05-07".into(), Config::default());
+        app.toggle_billable_at(0);
+        let updated = app.task_raw(0).unwrap();
+        assert!(!updated.contains("bill:n"), "bill:n should be removed: {updated}");
+    }
+
+    // ---- nudge threshold config ----
+
+    #[test]
+    fn idle_nudge_prompt_prefills_default_minutes() {
+        let mut app = build_app();
+        app.nav.mode = Mode::Settings;
+        // Simulate pressing 'i' in settings.
+        handle_settings(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE),
+        );
+        assert_eq!(app.nav.mode, Mode::PromptIdleNudge);
+        // Default idle nudge is 900s = 15 min.
+        assert_eq!(app.draft.text(), "15");
+    }
+
+    #[test]
+    fn long_timer_nudge_prompt_prefills_default_minutes() {
+        let mut app = build_app();
+        app.nav.mode = Mode::Settings;
+        handle_settings(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE),
+        );
+        assert_eq!(app.nav.mode, Mode::PromptLongTimerNudge);
+        // Default long-timer nudge is 7200s = 120 min.
+        assert_eq!(app.draft.text(), "120");
+    }
+
+    #[test]
+    fn idle_nudge_enter_sets_new_threshold() {
+        let mut app = build_app();
+        app.nav.mode = Mode::PromptIdleNudge;
+        app.nav.nudge_prompt_return = Some(Mode::Settings);
+        app.draft_set_insert("30".to_string());
+        handle_prompt(
+            &mut app,
+            KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        );
+        assert_eq!(app.nav.mode, Mode::Settings);
+        assert_eq!(app.idle_nudge_seconds(), 1800); // 30 min
+    }
+
+    #[test]
+    fn idle_nudge_enter_rejects_zero_minutes() {
+        let mut app = build_app();
+        app.nav.mode = Mode::PromptIdleNudge;
+        app.nav.nudge_prompt_return = Some(Mode::Settings);
+        app.draft_set_insert("0".to_string());
+        handle_prompt(
+            &mut app,
+            KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        );
+        assert_eq!(app.nav.mode, Mode::Settings);
+        // Value should not have changed.
+        assert_eq!(app.idle_nudge_seconds(), 900);
+    }
+
+    #[test]
+    fn long_timer_nudge_enter_sets_new_threshold() {
+        let mut app = build_app();
+        app.nav.mode = Mode::PromptLongTimerNudge;
+        app.nav.nudge_prompt_return = Some(Mode::Settings);
+        app.draft_set_insert("60".to_string());
+        handle_prompt(
+            &mut app,
+            KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        );
+        assert_eq!(app.nav.mode, Mode::Settings);
+        assert_eq!(app.long_timer_nudge_seconds(), 3600); // 60 min
+    }
+
+    // ---- prompt mode transitions ----
+
+    #[test]
+    fn idle_nudge_prompt_esc_returns_to_settings() {
+        let mut app = build_app();
+        app.nav.mode = Mode::PromptIdleNudge;
+        app.nav.nudge_prompt_return = Some(Mode::Settings);
+        handle_prompt(
+            &mut app,
+            KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+        );
+        assert_eq!(app.nav.mode, Mode::Settings);
+        assert!(app.draft.text().is_empty());
+    }
+
+    #[test]
+    fn rename_prompt_esc_returns_to_manage_projects() {
+        let mut app = build_app();
+        app.nav.mode = Mode::PromptRenameProject;
+        handle_prompt(
+            &mut app,
+            KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+        );
+        assert_eq!(app.nav.mode, Mode::ManageProjects);
+        assert!(app.draft.text().is_empty());
+    }
+
+    // ---- timesheet 'a' archives single completed task ----
+
+    /// Helper: build an App in Timesheet view with the given raw tasks
+    /// (using "2026-05-07" as today). Ensures the archive loader has been
+    /// drained before returning.
+    fn timesheet_app_with_tasks(raw: &str) -> App {
+        let dir = std::env::temp_dir().join(format!(
+            "tuxtime-ts-archive-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("create test dir");
+        let todo_path = dir.join("todo.txt");
+        std::fs::write(&todo_path, raw).expect("write todo.txt");
+        let mut app = App::new(
+            todo_path,
+            raw.into(),
+            "2026-05-07".into(),
+            Config::default(),
+        );
+        app.set_view(View::Timesheet);
+        app
+    }
+
+    #[test]
+    fn timesheet_a_archives_completed_task() {
+        // Two tasks: one completed with dur, one active without dur.
+        let raw = "x 2026-05-07 2026-05-07 done task +work dur:3600\n2026-05-07 active task +work dur:1800\n";
+        let mut app = timesheet_app_with_tasks(raw);
+        assert_eq!(app.tasks().len(), 2, "both tasks present before archive");
+
+        // Position the timesheet cursor on the completed task (first narrative).
+        app.timesheet.cursor = 0;
+
+        handle_timesheet_keys(&mut app, key('a'));
+
+        // The completed task must have moved to the archive.
+        assert_eq!(app.tasks().len(), 1, "completed task must be archived");
+        assert!(
+            !app.tasks().iter().any(|t| t.raw.contains("done task")),
+            "done task must not remain in live tasks"
+        );
+        assert!(
+            app.archive().tasks().iter().any(|t| t.raw.contains("done task")),
+            "done task must be in archive"
+        );
+        assert!(
+            app.tasks().iter().any(|t| t.raw.contains("active task")),
+            "active task must stay"
+        );
+        assert_eq!(app.flash_active(), Some("archived"));
+        // Cursor must be reclamped (now 1 task → 1 narrative → cursor 0).
+        assert_eq!(app.timesheet.cursor, 0);
+    }
+
+    #[test]
+    fn timesheet_a_on_non_completed_flashes_guidance() {
+        let raw = "2026-05-07 active task +work dur:3600\n";
+        let mut app = timesheet_app_with_tasks(raw);
+        app.timesheet.cursor = 0;
+
+        handle_timesheet_keys(&mut app, key('a'));
+
+        // Non-completed task must not be moved.
+        assert_eq!(app.tasks().len(), 1, "non-completed task must stay");
+        assert_eq!(app.flash_active(), Some("complete task first (x)"));
+    }
+
+    /// Regression: archive_one must invalidate the timesheet groups cache
+    /// immediately, not just the list/archive visible cache. Without this,
+    /// the timesheet would show stale data until another mutation forced a
+    /// recomputation. The timesheet includes both active and archived tasks
+    /// (it's a reporting tool), so the entry persists after archiving — but
+    /// its source moves from Active to Archived. The test verifies the cache
+    /// actually recomputes rather than returning the pre-archive snapshot.
+    #[test]
+    fn timesheet_archive_invalidates_groups_cache() {
+        // Two tasks: one completed, one active. Different projects.
+        let raw = "x 2026-05-07 2026-05-07 done task +alpha dur:3600\n2026-05-07 active task +beta dur:1800\n";
+        let mut app = timesheet_app_with_tasks(raw);
+        assert_eq!(app.tasks().len(), 2);
+
+        // Before archiving: +alpha's task ref is Active, +beta's is Active.
+        let before = app.build_timesheet_groups();
+        assert_eq!(before.len(), 2, "two groups before archive");
+
+        // Archive the completed task (index 0).
+        app.archive_one(0);
+        assert_eq!(app.tasks().len(), 1, "active tasks must decrease");
+        assert_eq!(app.archive().tasks().len(), 1, "archive must grow");
+
+        // After archiving: the cache must reflect the new reality. +alpha
+        // still appears (now from the archive), +beta is still active.
+        let after = app.build_timesheet_groups();
+        assert_eq!(after.len(), 2, "both projects still in timesheet");
+        // +alpha's task ref should now be Archived, not Active.
+        let alpha_entry = after.iter().find(|g| g.key.contains("+alpha")).expect("+alpha must be present");
+        assert!(
+            alpha_entry.task_indices.iter().all(|r| matches!(r, tuxtime::app::TimesheetTaskRef::Archived(_))),
+            "archived task ref must be Archived, not Active"
+        );
+    }
+
+    /// Regression: unarchive must invalidate the timesheet groups cache
+    /// immediately. After unarchiving, the task moves from the archive back
+    /// to active, so its TimesheetTaskRef must change from Archived to Active.
+    #[test]
+    fn timesheet_unarchive_invalidates_groups_cache() {
+        // One completed task with dur, one active task.
+        let raw = "x 2026-05-07 2026-05-07 done task +alpha dur:3600\n2026-05-07 active task +beta dur:1800\n";
+        let mut app = timesheet_app_with_tasks(raw);
+        assert_eq!(app.tasks().len(), 2);
+
+        // Archive the completed +alpha task.
+        app.archive_one(0);
+        assert_eq!(app.tasks().len(), 1);
+        assert_eq!(app.archive().tasks().len(), 1);
+
+        // After archiving: +alpha shows as Archived ref.
+        let archived_groups = app.build_timesheet_groups();
+        let alpha_entry = archived_groups.iter().find(|g| g.key.contains("+alpha")).expect("+alpha must be present");
+        assert!(
+            alpha_entry.task_indices.iter().all(|r| matches!(r, tuxtime::app::TimesheetTaskRef::Archived(_))),
+            "archived task ref must be Archived"
+        );
+
+        // Unarchive: move the task back from archive (index 0) to active.
+        app.unarchive(0);
+        assert_eq!(app.tasks().len(), 2, "task must rejoin active list");
+        assert_eq!(app.archive().tasks().len(), 0, "archive must be empty");
+
+        // After unarchiving: cache must reflect the move. +alpha now Active.
+        let unarchived_groups = app.build_timesheet_groups();
+        let alpha_unarchived = unarchived_groups.iter().find(|g| g.key.contains("+alpha")).expect("+alpha must be present after unarchive");
+        assert!(
+            alpha_unarchived.task_indices.iter().all(|r| matches!(r, tuxtime::app::TimesheetTaskRef::Active(_))),
+            "unarchived task ref must be Active, not Archived"
+        );
+    }
+
+    // ---- project archive / toggle ----
+
+    #[test]
+    fn toggle_archive_project_adds_and_removes() {
+        let mut app = build_app();
+        assert!(!app.is_project_archived("testproj"));
+        app.toggle_archive_project("testproj");
+        assert!(app.is_project_archived("testproj"));
+        app.toggle_archive_project("testproj");
+        assert!(!app.is_project_archived("testproj"));
+    }
+
+    #[test]
+    fn all_projects_collects_from_active_and_archive() {
+        let app = build_app_with_archive(
+            "task +alpha\n",
+            Some("x 2026-05-01 2026-04-01 old +beta\n"),
+        );
+        let projects = app.all_projects();
+        assert!(projects.contains(&"alpha".to_string()));
+        assert!(projects.contains(&"beta".to_string()));
+    }
+
+    // ---- project management key handling ----
+
+    #[test]
+    fn manage_projects_p_returns_to_normal() {
+        let mut app = build_app();
+        app.nav.mode = Mode::ManageProjects;
+        handle_manage_projects(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('P'), KeyModifiers::NONE),
+        );
+        assert_eq!(app.nav.mode, Mode::Normal);
+    }
+
+    #[test]
+    fn manage_projects_s_cycles_sort() {
+        let mut app = build_app();
+        app.nav.mode = Mode::ManageProjects;
+        let original = app.project_manager.project_sort;
+        handle_manage_projects(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE),
+        );
+        assert_ne!(app.project_manager.project_sort, original);
+    }

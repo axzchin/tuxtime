@@ -177,18 +177,20 @@ long_timer_nudge_seconds = 7200
 
 ### 4.5 Copy Narratives
 
-**Keybinding:** `C` (Shift+c) in Normal mode, or via command palette
+Copying narratives is done entirely within the Timesheet view.
 
-**Flow:**
-1. If a project filter is active, copies for that project. Otherwise, prompts or defaults to project of selected task
-2. If an activity filter is active, copies for that activity. Otherwise, copies across all activities for the project
-3. Collects all time entries for **today** matching the project (+activity) filter
-4. Extracts each entry's body text (via `body_only()`)
-5. Joins them with `; ` (semicolon-space)
-6. Copies to system clipboard
-7. Flash: "copied N narratives for +project @activity"
+**Keybinding:** `C` (Shift+c) in Normal mode — flashes a hint to open the
+timesheet; no direct copy occurs in Normal/List mode.
 
-**Example output (clipboard):**
+**In Timesheet (press `V` to open):**
+- `c` — copies narrative text (semicolon-joined body text) for the group
+  under cursor to the system clipboard
+- `y` — copies rounded 0.1h duration (e.g., `"1.5"`) for the group under cursor
+- `C` — copies combined narrative + duration (e.g., `"1.5h — narratives…"`)
+
+Non-billable entries get a `DNB - ` prefix on copy.
+
+**Example output (clipboard, `c` key):**
 ```
 Drafted motion for summary judgment; Reviewed discovery responses; Prepared exhibit list
 ```
@@ -356,10 +358,9 @@ DismissNudge,       // dismiss the idle-nudge popup
 |-----|--------|------|
 | `t` | Start/stop timer on selected task | Normal, Visual |
 | `M` | Manual time entry dialog | Normal |
-| `C` | Copy narratives (today, project+activity) | Normal |
+| `C` | Copy narratives (redirect to Timesheet) | Normal |
 | `V` (or command palette) | Open timesheet view | Normal |
 | `S` (in nudge popup) | Start timer | IdleNudge |
-| `M` (in nudge popup) | Manual entry | IdleNudge |
 | `D` / `Esc` (in nudge popup) | Dismiss nudge | IdleNudge |
 | `Esc` / `q` | Dismiss timesheet/manual-entry | Timesheet, ManualEntry |
 | `w` | Weekly view (in timesheet) | Timesheet |

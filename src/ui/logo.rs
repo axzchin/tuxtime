@@ -31,6 +31,7 @@ pub(crate) fn ascii_rows() -> Vec<String> {
         .collect()
 }
 
+#[must_use] 
 pub fn centered_lines(theme: &Theme, inner_width: u16) -> Vec<Line<'static>> {
     let pad_w = inner_width.saturating_sub(WIDTH) / 2;
     let pad = " ".repeat(pad_w as usize);
@@ -40,7 +41,7 @@ pub fn centered_lines(theme: &Theme, inner_width: u16) -> Vec<Line<'static>> {
         .map(|row| {
             let mut spans: Vec<Span<'static>> = Vec::with_capacity(row.len() + 1);
             spans.push(Span::raw(pad.clone()));
-            for &c in row.iter() {
+            for &c in *row {
                 spans.push(match c {
                     b'b' => Span::styled(BLOCK, body),
                     b'k' => Span::styled(BLOCK, knot),

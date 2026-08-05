@@ -26,10 +26,12 @@ impl History {
         self.stack.clear();
     }
 
+    #[must_use] 
     pub fn is_empty(&self) -> bool {
         self.stack.is_empty()
     }
 
+    #[must_use] 
     pub fn len(&self) -> usize {
         self.stack.len()
     }

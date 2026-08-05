@@ -128,7 +128,7 @@ fn build_lines<'a>(
                         format!("{prefix}{}", chunk.join(" ")),
                         Style::default().fg(theme.fg),
                     )],
-                ))
+                ));
             }
         }
     }
@@ -232,7 +232,7 @@ fn wrap_words(s: &str, width: usize) -> Vec<Vec<&str>> {
     let mut acc_len = 0;
     for word in s.split_whitespace() {
         let wlen = word.chars().count();
-        let extra = if acc.is_empty() { 0 } else { 1 };
+        let extra = usize::from(!acc.is_empty());
         if acc_len + wlen + extra > width && !acc.is_empty() {
             out.push(std::mem::take(&mut acc));
             acc_len = 0;

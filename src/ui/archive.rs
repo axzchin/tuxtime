@@ -34,7 +34,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let visible = app.visible_indices();
     let groups = app.visible_groups();
     let blank = super::density_blank_lines(app.prefs.density);
-    let cursor_active = app.mode != Mode::Help && app.mode != Mode::Settings;
+    let cursor_active = app.nav.mode != Mode::Help && app.nav.mode != Mode::Settings;
 
     if visible.is_empty() {
         let para = Paragraph::new(vec![Line::from(Span::styled(
@@ -80,7 +80,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 ),
                 Span::raw("  "),
                 Span::styled(
-                    format!("{} completed", count),
+                    format!("{count} completed"),
                     Style::default().fg(theme.dim),
                 ),
             ]));
@@ -90,7 +90,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         let task = &app.archive().tasks()[abs];
         let opts = task_row::RowOpts {
             idx_label: i,
-            cursor: i == app.cursor && cursor_active,
+            cursor: i == app.nav.cursor && cursor_active,
             multi_mode: false,
             multi_checked: false,
             selected: false,
@@ -101,13 +101,13 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             timer_running: false,
             timer_elapsed: None,
         };
-        if i == app.cursor {
+        if i == app.nav.cursor {
             cursor_line = Some(lines.len());
         }
         lines.push(task_row::build_line(task, opts, theme));
     }
 
-    let scroll_cell = &app.view_scroll[View::Archive.idx()];
+    let scroll_cell = &app.nav.view_scroll[View::Archive.idx()];
     let scroll = keep_cursor_visible(
         scroll_cell.get(),
         cursor_line,

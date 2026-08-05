@@ -9,7 +9,7 @@ use crate::ui::dialog::draft_cursor_spans;
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
-    let mut mode_label: std::borrow::Cow<'static, str> = match app.mode {
+    let mut mode_label: std::borrow::Cow<'static, str> = match app.nav.mode {
         Mode::Normal => "NORMAL".into(),
         Mode::Insert => match app.draft.input_mode() {
             DialogInputMode::Normal => "NORMAL",
@@ -26,14 +26,23 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         Mode::PickContext => "PICK @CONTEXT".into(),
         Mode::PickSavedFilter => "PICK FILTER".into(),
         Mode::PromptSaveFilter => "SAVE FILTER".into(),
+        Mode::PromptAddTime => "ADD TIME".into(),
+        Mode::PromptIdleNudge => "IDLE NUDGE".into(),
+        Mode::PromptLongTimerNudge => "LONG TIMER NUDGE".into(),
+        Mode::PickTimesheetDate => "JUMP TO DATE".into(),
         Mode::CommandPalette => "COMMAND".into(),
         Mode::Share => "SHARE".into(),
         Mode::PickTheme => "PICK THEME".into(),
         Mode::Welcome => "WELCOME".into(),
-        Mode::Timesheet => "TIMESHEET".into(),
         Mode::IdleNudge => "IDLE NUDGE".into(),
+        Mode::ManualEntryChoice => "MANUAL ENTRY".into(),
+        Mode::ManageProjects => "PROJECTS".into(),
+        Mode::PromptRenameProject => "RENAME PROJECT".into(),
     };
-    if matches!(app.view, View::Archive) {
+    if matches!(app.nav.view, View::Timesheet) {
+        mode_label = "TIMESHEET".into();
+    }
+    if matches!(app.nav.view, View::Archive) {
         mode_label = "ARCHIVE".into();
     }
     if let Some(f) = app.flash_active() {
@@ -50,49 +59,91 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             let act = task.contexts.first().map(|a| format!("@{a} ")).unwrap_or_default();
             let body = crate::todo::body_only(&task.raw);
             let mut time_str = format!("▶ {proj}{act} {h:02}:{m:02}:{s:02}  {body}");
-            if app.long_timer_nudge_active {
-                time_str = format!("⏰ {}  —  timer running long!", time_str);
+            if app.session.long_timer_nudge_active {
+                time_str = format!("⏰ {time_str}  —  timer running long!");
             }
             time_str
         } else {
             "▶ timer running".to_string()
         }
     } else {
-        match app.mode {
+        match app.nav.mode {
             Mode::Insert => match app.draft.input_mode() {
                 DialogInputMode::Normal => {
-                    if app.manual_time_entry {
-                        "h/l navigate · w/b/e word · i/a insert · dur:90 (min) dur:1.5h dur:14:30 dur:9am → Enter save".to_string()
+                    if app.session.manual_time_entry {
+                        "h/l navigate · w/b/e word · i/a insert · dur:90 (min) dur:1.5h dur:14:30 dur:9am → Enter save · C-Enter save+start".to_string()
                     } else {
-                        "h/l navigate · w/b/e word · i/a insert · Enter save · Esc cancel".to_string()
+                        "h/l navigate · w/b/e word · i/a insert · Enter save · C-Enter save+start · Esc cancel".to_string()
                     }
                 }
                 DialogInputMode::Insert => {
-                    if app.manual_time_entry {
-                        "Enter save · Esc normal — type a duration after dur:".to_string()
+                    if app.session.manual_time_entry {
+                        "Enter save · C-Enter save+start · Esc normal — type a duration after dur:".to_string()
                     } else {
-                        "Enter save · Esc normal".to_string()
+                        "Enter save · C-Enter save+start · Esc normal".to_string()
                     }
                 }
             },
             Mode::Visual => "space toggle · x complete · dd delete · Esc cancel".to_string(),
             Mode::Help => "? close help".to_string(),
-            Mode::Settings => "Esc back".to_string(),
+            Mode::Settings => "Esc/ ,/ q dismiss  ·  i idle nudge  ·  l long timer nudge".to_string(),
             Mode::PromptProject => "type +project name · Enter save · Esc cancel".to_string(),
             Mode::PromptContext => "type @context name · Enter toggle · Esc cancel".to_string(),
             Mode::PickProject => "j/k or ↑↓ cycle projects · Enter keep · Esc clear".to_string(),
             Mode::PickContext => "j/k or ↑↓ cycle contexts · Enter keep · Esc clear".to_string(),
             Mode::PickSavedFilter => "j/k or ↑↓ cycle filters · Enter keep · Esc revert".to_string(),
             Mode::PromptSaveFilter => "type a filter name · Enter save · Esc cancel".to_string(),
+            Mode::PromptAddTime => {
+                "type duration (e.g. 30, 1.5, 14:30) · Enter add · Esc cancel".to_string()
+            }
+            Mode::PromptIdleNudge => {
+                "type minutes · Enter save · Esc cancel".to_string()
+            }
+            Mode::PromptLongTimerNudge => {
+                "type minutes · Enter save · Esc cancel".to_string()
+            }
+            Mode::PickTimesheetDate => {
+                "hjkl/arrows navigate  ·  type date  ·  Enter select  ·  Esc cancel  ·  t today"
+                    .to_string()
+            }
             Mode::CommandPalette => "type to filter · Enter run · Esc cancel".to_string(),
             Mode::Share => "scan the QR · any key dismisses".to_string(),
             Mode::Welcome => "c create ./todo.txt · s open sample · q quit".to_string(),
-            _ => "j/k · n new · t timer · x done · / search · ? help · u undo · q quit".to_string(),
+            Mode::ManageProjects => {
+                let all = app.all_projects();
+                let archived_count = all.iter().filter(|n| app.is_project_archived(n)).count();
+                let total = all.len();
+                let needle = app.filter().search.to_lowercase();
+                let filtered: Vec<&String> = if needle.is_empty() {
+                    all.iter().collect()
+                } else {
+                    all.iter().filter(|n| n.to_lowercase().contains(&needle)).collect()
+                };
+                let sort = app.project_manager.project_sort.label();
+                let base = format!("j/k nav · x archive · r rename · s sort ({sort}) · / search · Esc/P back");
+                if needle.is_empty() {
+                    format!("{base}  —  {total} projects{archived}", archived = if archived_count > 0 { format!(", {archived_count} archived") } else { String::new() })
+                } else {
+                    format!("{base}  —  /{needle} ({}/{total})", filtered.len())
+                }
+            }
+            Mode::PromptRenameProject => "type new name · Enter rename · Esc cancel".to_string(),
+            _ => {
+                if matches!(app.nav.view, View::Timesheet) {
+                    "j/k navigate  ·  Enter edit  ·  b billable  ·  a archive toggle  ·  c copy text  ·  y copy time  ·  C copy both  ·  h/l ±day  ·  H/L ±week  ·  w/d view  ·  s sort  ·  / search  ·  g date  ·  t today  ·  Esc/V/q back".to_string()
+                } else {
+                    "j/k · n new · t timer · T interrupt · x done · / search · ? help · u undo · q quit".to_string()
+                }
+            },
         }
     };
 
     let mut right_parts = Vec::new();
-    if matches!(app.view, View::Archive) {
+    if app.nav.mode == Mode::ManageProjects {
+        let all = app.all_projects();
+        let archived = all.iter().filter(|n| app.is_project_archived(n)).count();
+        right_parts.push(format!("{} projects · {} archived", all.len(), archived));
+    } else if matches!(app.nav.view, View::Archive) {
         right_parts.push(format!("{} archived", app.archive().len()));
     } else {
         right_parts.push(format!("{} open", app.visible_indices().len()));
@@ -121,8 +172,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let chip_w = chip_text.chars().count() as u16;
     let update_w = update_suffix
         .as_deref()
-        .map(|s| s.chars().count() as u16)
-        .unwrap_or(0);
+        .map_or(0, |s| s.chars().count() as u16);
     let right_w = right_text.chars().count() as u16 + update_w + 1;
     let middle_w = area.width.saturating_sub(chip_w).saturating_sub(right_w);
 

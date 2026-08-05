@@ -236,18 +236,19 @@ fn next_boundary(s: &str, i: usize) -> usize {
 /// Render `draft` with the insertion point highlighted at byte offset `cursor`.
 /// When the cursor sits past the last char, append a block glyph; otherwise the
 /// character under the cursor is drawn with swapped fg/bg so it stays readable.
-pub fn draft_cursor_spans<'a>(
-    draft: &'a str,
+#[must_use] 
+pub fn draft_cursor_spans(
+    draft: &str,
     cursor: usize,
     fg: Color,
     bg: Color,
-) -> Vec<Span<'a>> {
+) -> Vec<Span<'_>> {
     let cursor = cursor.min(draft.len());
     let before = &draft[..cursor];
     let after = &draft[cursor..];
     let mut iter = after.char_indices();
     if let Some((_, _)) = iter.next() {
-        let next = iter.next().map(|(i, _)| i).unwrap_or(after.len());
+        let next = iter.next().map_or(after.len(), |(i, _)| i);
         let cursor_char = &after[..next];
         let rest = &after[next..];
         vec![
@@ -421,7 +422,7 @@ fn preview_line<'a>(app: &App) -> Line<'a> {
 
 pub fn render_prompt(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
-    let (sigil, label) = match app.mode {
+    let (sigil, label) = match app.nav.mode {
         Mode::PromptProject => ("+", " ADD PROJECT "),
         Mode::PromptContext => ("@", " TOGGLE CONTEXT "),
         Mode::PromptSaveFilter => ("✦", " SAVE FILTER AS "),
@@ -475,6 +476,7 @@ pub fn render_prompt(frame: &mut Frame, area: Rect, app: &App) {
 
 /// Colored example tokens illustrating the todo.txt format.
 /// Used by both the empty state and the add/edit dialog so they stay in sync.
+#[must_use] 
 pub fn format_hint_spans<'a>(theme: &Theme) -> Vec<Span<'a>> {
     use ratatui::style::Modifier;
     vec![
@@ -852,7 +854,7 @@ fn render_calendar(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
     );
 }
 
-fn calendar_footer<'a>(theme: &Theme) -> Line<'a> {
+pub(crate) fn calendar_footer<'a>(theme: &Theme) -> Line<'a> {
     let chip = |k: &'static str, label: &'static str| -> Vec<Span<'a>> {
         vec![
             Span::styled(
@@ -953,10 +955,10 @@ fn render_recurrence_builder(frame: &mut Frame, dlg: Rect, screen: Rect, app: &A
     } else {
         theme.panel
     };
-    let mode_bg_after = if !state.strict {
-        theme.cursor
-    } else {
+    let mode_bg_after = if state.strict {
         theme.panel
+    } else {
+        theme.cursor
     };
     let mode_emph_strict = if mode_focus && state.strict {
         theme.accent
@@ -988,16 +990,14 @@ fn render_recurrence_builder(frame: &mut Frame, dlg: Rect, screen: Rect, app: &A
             Style::default()
                 .fg(theme.fg)
                 .bg(mode_emph_after)
-                .add_modifier(if !state.strict {
-                    Modifier::BOLD
-                } else {
+                .add_modifier(if state.strict {
                     Modifier::empty()
+                } else {
+                    Modifier::BOLD
                 }),
         ),
     ];
-    let next = crate::app::recurrence_next_preview(state, app.today())
-        .map(format_focused)
-        .unwrap_or_else(|| "—".into());
+    let next = crate::app::recurrence_next_preview(state, app.today()).map_or_else(|| "—".into(), format_focused);
     let next_label = format!("next: {next}");
     // Measure the already-built left side instead of hardcoding a width that
     // silently drifts when the mode-line copy changes. The `+ 2` keeps a
@@ -1228,7 +1228,7 @@ fn render_duration_picker(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App)
     );
 }
 
-fn days_in_month(year: i32, month: u32) -> u32 {
+pub(crate) fn days_in_month(year: i32, month: u32) -> u32 {
     use chrono::NaiveDate;
     let (ny, nm) = if month == 12 {
         (year + 1, 1)
@@ -1246,17 +1246,17 @@ fn days_in_month(year: i32, month: u32) -> u32 {
 /// Build the calendar grid for `first_of_month`'s month as rows of 7 columns.
 /// Each cell is `Some(day)` for a real day-of-month or `None` for a blank
 /// leading/trailing cell. Column 0 is the configured week-start weekday.
-fn calendar_cells(
+pub(crate) fn calendar_cells(
     first_of_month: chrono::NaiveDate,
     week_start: WeekStart,
 ) -> Vec<[Option<u32>; 7]> {
     use chrono::Datelike;
     // Leading blank cells before day 1, measured from the configured week start.
-    let lead = match week_start {
+    let lead = i64::from(match week_start {
         WeekStart::Sunday => first_of_month.weekday().num_days_from_sunday(),
         WeekStart::Monday => first_of_month.weekday().num_days_from_monday(),
-    } as i64;
-    let days = days_in_month(first_of_month.year(), first_of_month.month()) as i64;
+    });
+    let days = i64::from(days_in_month(first_of_month.year(), first_of_month.month()));
 
     let mut weeks = Vec::new();
     // Day index (0-based) at column 0 of the current week; starts negative so the
@@ -1276,7 +1276,7 @@ fn calendar_cells(
     weeks
 }
 
-fn month_name(m: u32) -> &'static str {
+pub(crate) fn month_name(m: u32) -> &'static str {
     match m {
         1 => "January",
         2 => "February",
@@ -1294,7 +1294,7 @@ fn month_name(m: u32) -> &'static str {
     }
 }
 
-fn format_focused(d: chrono::NaiveDate) -> String {
+pub(crate) fn format_focused(d: chrono::NaiveDate) -> String {
     use chrono::Datelike;
     let dow = match d.weekday() {
         chrono::Weekday::Mon => "Mon",
@@ -1377,7 +1377,7 @@ mod tests {
             "2026-05-06".to_string(),
             Config::default(),
         );
-        app.mode = Mode::Insert;
+        app.nav.mode = Mode::Insert;
         app.draft_set_insert(draft.to_string());
         app
     }
@@ -1661,7 +1661,7 @@ mod tests {
             "2026-05-06".to_string(),
             Config::default(),
         );
-        app.mode = mode;
+        app.nav.mode = mode;
         app.draft_set(draft.to_string());
         app
     }

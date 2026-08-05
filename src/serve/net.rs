@@ -14,6 +14,7 @@ use crate::inbox;
 /// chosen local address" trick. No packet is actually sent — UDP
 /// `connect` only consults the route table. Falls back to localhost
 /// when nothing is routable (e.g. no network at all).
+#[must_use] 
 pub fn discover_lan_ip() -> IpAddr {
     let try_via = |peer: &str| -> Option<IpAddr> {
         let s = UdpSocket::bind("0.0.0.0:0").ok()?;
@@ -48,6 +49,7 @@ fn hex_nibble(n: u8) -> char {
 
 /// Constant-time string equality. Used to compare path tokens so a
 /// timing attacker on the LAN can't recover the token byte-by-byte.
+#[must_use] 
 pub fn ct_eq(a: &str, b: &str) -> bool {
     if a.len() != b.len() {
         return false;
@@ -63,6 +65,7 @@ pub fn ct_eq(a: &str, b: &str) -> bool {
 /// body. Returns the URL-decoded value with `+` mapped to space. Any
 /// malformed `%XX` sequence is preserved verbatim — the canonicalizer
 /// downstream will reject it if it produces an empty task.
+#[must_use] 
 pub fn parse_form_text(body: &str) -> Option<String> {
     for pair in body.split('&') {
         let Some((k, v)) = pair.split_once('=') else {
@@ -88,15 +91,12 @@ fn url_decode(s: &str) -> String {
             b'%' if i + 2 < bytes.len() => {
                 let hi = hex_value(bytes[i + 1]);
                 let lo = hex_value(bytes[i + 2]);
-                match (hi, lo) {
-                    (Some(h), Some(l)) => {
-                        out.push((h << 4) | l);
-                        i += 3;
-                    }
-                    _ => {
-                        out.push(bytes[i]);
-                        i += 1;
-                    }
+                if let (Some(h), Some(l)) = (hi, lo) {
+                    out.push((h << 4) | l);
+                    i += 3;
+                } else {
+                    out.push(bytes[i]);
+                    i += 1;
                 }
             }
             c => {

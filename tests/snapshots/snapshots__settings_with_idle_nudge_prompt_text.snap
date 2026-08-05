@@ -1,0 +1,36 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(&buf)
+---
+ ▶▮◀ settings  •  19 tasks  •  sort:priority                                                        
+                                                                                                    
+ FILES                                                                                              
+   todo file                   /tmp/tuxtime-snapshot.txt                                            
+   config file                 /tmp/tuxtime-snapshot.toml                                           
+                                                                                                    
+ DISPLAY                                                                                            
+   theme                       Muted Slate ▾  (T to cycle)                                          
+   density                     compact ▾  (D to cycle)                                              
+   line numbers                on  (L to toggle)                                                    
+   status bar                  on                                                                   
+   filter sidebar              on  ([ to toggle)                                                    
+   detail sidebar              on  (] to toggle)                                                    
+   show done in list                                                                                
+   show future in list                                                                              
+                                                                                                    
+ BEHAVIOR                                                                                           
+   default sort                                                                                     
+   idle nudge                  15 min  (i to change)                                                
+   long timer nudge            120 min  (l to change)                                               
+                                                                                                    
+ KEYBINDINGS                                                                                        
+                               press ? for the full list                                            
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+ IDLE NUDGE   type minutes · Enter save · Esc cancel        15 open · 2026-05-06 · tuxtime 2026.7.1

@@ -42,6 +42,7 @@ pub struct ParsedNl {
 /// 2. The buffer must contain at least one trigger word (date words,
 ///    weekdays, months, recurrence vocabulary, `before`, `project`,
 ///    `context`, …).
+#[must_use] 
 pub fn looks_like_natural_language(text: &str) -> bool {
     if has_kv_token(text, "due") || has_kv_token(text, "rec") || has_kv_token(text, "t") {
         return false;
@@ -52,6 +53,7 @@ pub fn looks_like_natural_language(text: &str) -> bool {
 /// Main entry point. `today` resolves relative dates ("tomorrow", "the first
 /// of the month"). Returns `None` when the parser couldn't extract anything
 /// structured — the caller then falls through to the plain save path.
+#[must_use] 
 pub fn try_parse(text: &str, today: NaiveDate) -> Option<ParsedNl> {
     let mut scratch = Scratch::new(text);
     let mut parsed = ParsedNl::default();
@@ -79,6 +81,7 @@ pub fn try_parse(text: &str, today: NaiveDate) -> Option<ParsedNl> {
 /// is fixed: `(P) body +proj… @ctx… due:… rec:… t:…`. An empty body falls
 /// back to `"todo"` so the result is always a well-formed task — the caller
 /// is expected to flash a hint so the user knows to fix the body.
+#[must_use] 
 pub fn format_as_todo_txt(p: &ParsedNl) -> String {
     let mut out = String::new();
     if let Some(prio) = p.priority {
@@ -246,7 +249,7 @@ impl<'a> Scratch<'a> {
 
     fn mark(&mut self, start: usize, end: usize) {
         let end = end.min(self.consumed.len());
-        for slot in self.consumed[start..end].iter_mut() {
+        for slot in &mut self.consumed[start..end] {
             *slot = true;
         }
     }
@@ -1050,8 +1053,8 @@ fn pass_priority(scratch: &mut Scratch, p: &mut ParsedNl) {
                 Some("a") => Some(('A', 2)),
                 Some("b") => Some(('B', 2)),
                 Some("c") => Some(('C', 2)),
-                Some("high") | Some("highest") => Some(('A', 2)),
-                Some("medium") | Some("med") => Some(('B', 2)),
+                Some("high" | "highest") => Some(('A', 2)),
+                Some("medium" | "med") => Some(('B', 2)),
                 Some("low") => Some(('C', 2)),
                 _ => None,
             },

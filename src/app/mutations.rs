@@ -8,8 +8,8 @@ use super::types::{AddOutcome, View};
 use crate::app::WeekStart;
 use crate::core::AddOutcome as CoreAdd;
 use crate::core::{
-    ArchiveDeleteOutcome, ArchiveOutcome, CompleteOutcome, DeleteOutcome, EditOutcome,
-    PriorityOutcome, TagOutcome, UnarchiveOutcome, UndoOutcome,
+    ArchiveDeleteOutcome, ArchiveOneOutcome, ArchiveOutcome, CompleteOutcome, DeleteOutcome,
+    EditOutcome, PriorityOutcome, TagOutcome, UnarchiveOutcome, UndoOutcome,
 };
 use crate::nl;
 use crate::note;
@@ -86,8 +86,8 @@ impl App {
 
         // If entered via manual time entry (`M`), convert `dur:` values from
         // flexible user input (minutes, decimal hours, clock time) to raw seconds.
-        let text = if self.manual_time_entry {
-            self.manual_time_entry = false;
+        let text = if self.session.manual_time_entry {
+            self.session.manual_time_entry = false;
             self.convert_dur_in_text(&text)
         } else {
             text
@@ -95,9 +95,18 @@ impl App {
 
         match self.store.add_finalized(&text) {
             CoreAdd::Added { abs } => {
-                self.flash("added");
-                self.after_mutation(abs);
-                AddOutcome::Saved
+                if self.session.auto_start_on_save {
+                    self.session.auto_start_on_save = false;
+                    self.flash("added");
+                    self.after_mutation(abs);
+                    // Start the timer on the newly-created interruption entry.
+                    self.toggle_timer_at(abs);
+                    AddOutcome::Saved
+                } else {
+                    self.flash("added");
+                    self.after_mutation(abs);
+                    AddOutcome::Saved
+                }
             }
             CoreAdd::Empty => AddOutcome::Empty,
             CoreAdd::Aborted(r) => {
@@ -176,7 +185,7 @@ impl App {
         let Some(task) = self.cur_task().cloned() else {
             return;
         };
-        let target = note::target_for_task(&task, self.notes_dir());
+        let target = note::target_for_task(&task, &self.share_state.notes_dir);
 
         if !target.existed_in_task {
             if !create {
@@ -244,10 +253,29 @@ impl App {
                 self.flash(format!("archived {count}"));
                 self.recompute_visible();
                 self.clamp_cursor();
+                self.rebuild_archive_autocomplete_cache();
             }
             ArchiveOutcome::Nothing => self.flash("nothing to archive"),
             ArchiveOutcome::Aborted(r) => self.handle_reconcile_abort(r),
             ArchiveOutcome::Error(e) => self.flash(format!("archive failed: {e}")),
+        }
+    }
+
+    /// Archive a single completed task at `abs` in the live list.
+    pub fn archive_one(&mut self, abs: usize) {
+        match self.store.archive_one(abs) {
+            ArchiveOneOutcome::Archived => {
+                self.flash("archived");
+                self.recompute_visible();
+                self.clamp_cursor();
+                self.rebuild_archive_autocomplete_cache();
+            }
+            ArchiveOneOutcome::NotCompleted => {
+                self.flash("complete task first (x)");
+            }
+            ArchiveOneOutcome::OutOfRange => {}
+            ArchiveOneOutcome::Aborted(r) => self.handle_reconcile_abort(r),
+            ArchiveOneOutcome::Error(e) => self.flash(format!("archive failed: {e}")),
         }
     }
 
@@ -259,6 +287,7 @@ impl App {
                 self.flash("unarchived");
                 self.recompute_visible();
                 self.clamp_cursor();
+                self.rebuild_archive_autocomplete_cache();
             }
             UnarchiveOutcome::OutOfRange => {}
             UnarchiveOutcome::Aborted(r) => self.handle_reconcile_abort(r),
@@ -266,6 +295,7 @@ impl App {
                 self.flash("done.txt changed on disk — reloaded");
                 self.recompute_visible();
                 self.clamp_cursor();
+                self.rebuild_archive_autocomplete_cache();
             }
             UnarchiveOutcome::Error(e) => self.flash(format!("unarchive failed: {e}")),
         }
@@ -278,12 +308,14 @@ impl App {
                 self.flash("deleted from archive");
                 self.recompute_visible();
                 self.clamp_cursor();
+                self.rebuild_archive_autocomplete_cache();
             }
             ArchiveDeleteOutcome::OutOfRange => {}
             ArchiveDeleteOutcome::DoneReloaded => {
                 self.flash("done.txt changed on disk — reloaded");
                 self.recompute_visible();
                 self.clamp_cursor();
+                self.rebuild_archive_autocomplete_cache();
             }
             ArchiveDeleteOutcome::Error(e) => self.flash(format!("delete failed: {e}")),
         }
@@ -322,7 +354,7 @@ mod tests {
     #[test]
     fn open_file_rebinds_path_body_and_resets_cursor() {
         let mut app = build_app("old one\nold two\nold three\n");
-        app.cursor = 2;
+        app.nav.cursor = 2;
         let new_path = test_path();
         let done = new_path.parent().expect("temp parent").join("done.txt");
 
@@ -339,7 +371,7 @@ mod tests {
             1,
             "visible cache must be recomputed"
         );
-        assert_eq!(app.cursor, 0, "cursor must reset for the new file");
+        assert_eq!(app.nav.cursor, 0, "cursor must reset for the new file");
     }
 
     #[test]
@@ -493,5 +525,226 @@ mod tests {
         assert_eq!(app.week_start, WeekStart::Monday);
         app.toggle_week_start_date();
         assert_eq!(app.week_start, WeekStart::Sunday);
+    }
+
+    // ── add_time_to_current_from_input ───────────────────────────────
+
+    #[test]
+    fn add_time_to_task_with_existing_dur() {
+        let mut app = build_app("Draft motion +Smith @drafting dur:3600\n");
+        app.nav.cursor = 0; // cursor on the task
+        app.recompute_visible();
+
+        app.add_time_to_current_from_input("30"); // add 30 minutes (1800 s)
+
+        let raw = &app.tasks()[0].raw;
+        assert!(
+            raw.contains("dur:5400"),
+            "dur should be 3600+1800=5400, got: {raw}"
+        );
+        assert!(
+            !raw.contains("dur:dur"),
+            "must not double the dur: prefix, got: {raw}"
+        );
+        assert!(
+            app.flash_active()
+                .is_some_and(|m| m.contains("added 30m") && m.contains("total 1h 30m")),
+            "flash should include added and total"
+        );
+    }
+
+    #[test]
+    fn add_time_to_task_without_dur() {
+        let mut app = build_app("Review PR +work @dev\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+
+        app.add_time_to_current_from_input("15"); // add 15 minutes (900 s)
+
+        let raw = &app.tasks()[0].raw;
+        assert!(
+            raw.contains("dur:900"),
+            "dur should be 900, got: {raw}"
+        );
+        assert!(
+            app.flash_active()
+                .is_some_and(|m| m.contains("added 15m")),
+            "flash should confirm addition"
+        );
+    }
+
+    #[test]
+    fn add_time_with_invalid_input_flashes_error() {
+        let mut app = build_app("Draft motion +Smith @drafting dur:3600\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+
+        app.add_time_to_current_from_input("not-a-number");
+
+        let raw = &app.tasks()[0].raw;
+        assert!(
+            raw.contains("dur:3600"),
+            "dur should be unchanged, got: {raw}"
+        );
+        assert!(
+            app.flash_active()
+                .is_some_and(|m| m.contains("invalid duration")),
+            "flash should report invalid"
+        );
+    }
+
+    #[test]
+    fn add_time_with_no_task_selected_flashes_error() {
+        let mut app = build_app("Draft motion +Smith @drafting dur:3600\n");
+        app.nav.cursor = 999; // no task here
+        app.recompute_visible();
+
+        app.add_time_to_current_from_input("30");
+
+        assert!(
+            app.flash_active()
+                .is_some_and(|m| m.contains("no task selected")),
+            "flash should say no task selected"
+        );
+    }
+
+    #[test]
+    fn add_time_decimal_hours_parses_correctly() {
+        let mut app = build_app("Meeting notes +work dur:0\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+
+        app.add_time_to_current_from_input("1.5"); // 1.5 hours = 5400 seconds
+
+        assert!(
+            app.tasks()[0].raw.contains("dur:5400"),
+            "1.5h should produce 5400s"
+        );
+    }
+
+    #[test]
+    fn add_time_clock_format_parses_correctly() {
+        // "14:30" means "from 14:30 until now" — the exact result depends on
+        // wall-clock time, so we just verify it produces a positive number and
+        // no failure.
+        let mut app = build_app("Meeting notes +work\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+
+        let before_dur = app.tasks()[0].dur;
+        app.add_time_to_current_from_input("14:30");
+        let after_dur = app.tasks()[0].dur;
+        assert!(
+            after_dur.unwrap_or(0) > before_dur.unwrap_or(0),
+            "clock-time input should add positive seconds"
+        );
+    }
+
+    // ── toggle_billable ───────────────────────────────────────────────
+
+    #[test]
+    fn toggle_billable_adds_bill_n_tag() {
+        let mut app = build_app("Draft motion +Smith @drafting dur:3600\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+
+        app.toggle_billable();
+
+        assert!(
+            app.tasks()[0].raw.contains("bill:n"),
+            "should add bill:n tag"
+        );
+        assert_eq!(app.tasks()[0].bill.as_deref(), Some("n"));
+        assert_eq!(app.flash_active(), Some("marked as non-billable"));
+    }
+
+    #[test]
+    fn toggle_billable_removes_bill_n_tag() {
+        let mut app = build_app("Firm admin +Admin @admin dur:900 bill:n\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+
+        app.toggle_billable();
+
+        assert!(
+            !app.tasks()[0].raw.contains("bill:n"),
+            "should remove bill:n tag, got: {}",
+            app.tasks()[0].raw
+        );
+        assert_eq!(app.tasks()[0].bill, None);
+        assert_eq!(app.flash_active(), Some("marked as billable"));
+    }
+
+    #[test]
+    fn toggle_billable_with_no_task_selected_flashes_error() {
+        let mut app = build_app("Draft motion +Smith @drafting dur:3600\n");
+        app.nav.cursor = 999;
+        app.recompute_visible();
+
+        app.toggle_billable();
+
+        assert_eq!(app.flash_active(), Some("no task selected"));
+    }
+
+    #[test]
+    fn toggle_billable_preserves_other_tags() {
+        let mut app = build_app(
+            "(A) Draft motion +Smith @drafting due:2026-08-15 dur:3600\n",
+        );
+        app.nav.cursor = 0;
+        app.recompute_visible();
+
+        app.toggle_billable();
+
+        let raw = &app.tasks()[0].raw;
+        assert!(raw.contains("bill:n"), "should add bill:n");
+        assert!(raw.contains("+Smith"), "project preserved");
+        assert!(raw.contains("@drafting"), "context preserved");
+        assert!(raw.contains("due:2026-08-15"), "due preserved");
+        assert!(raw.contains("dur:3600"), "dur preserved");
+        assert!(raw.contains("(A)"), "priority preserved");
+    }
+
+    // ── save and start timer (Ctrl+Enter) ────────────────────────────
+
+    #[test]
+    fn add_from_draft_save_and_start_timer() {
+        let mut app = build_app("");
+        app.draft_set("Buy milk".into());
+        // Save the task first.
+        let outcome = app.add_from_draft();
+        assert_eq!(outcome, crate::app::AddOutcome::Saved);
+        assert_eq!(app.tasks().len(), 1);
+        assert!(!app.timer_running(), "timer not started yet");
+
+        // Ctrl+Enter: now start the timer on the newly created task.
+        app.toggle_timer();
+        assert!(app.timer_running(), "timer should be running after toggle_timer");
+        let active = app.active_timer_task().expect("active timer task");
+        assert!(
+            active.raw.contains("Buy milk"),
+            "timer on correct task, got: {}",
+            active.raw
+        );
+    }
+
+    #[test]
+    fn add_from_draft_save_and_start_uses_last_added_task() {
+        let mut app = build_app("existing task\n");
+        assert_eq!(app.tasks().len(), 1);
+        app.draft_set("new task".into());
+        let outcome = app.add_from_draft();
+        assert_eq!(outcome, crate::app::AddOutcome::Saved);
+        assert_eq!(app.tasks().len(), 2);
+
+        // Ctrl+Enter starts timer on the newly created task, not the existing one.
+        app.toggle_timer();
+        assert!(app.timer_running());
+        let active = app.active_timer_task().expect("active timer task");
+        assert!(
+            active.raw.contains("new task"),
+            "timer on new task, got: {}",
+            active.raw
+        );
     }
 }

@@ -147,6 +147,17 @@ pub enum ArchiveOutcome {
     Error(StoreError),
 }
 
+/// Outcome of archiving a single completed task.
+#[derive(Debug)]
+pub enum ArchiveOneOutcome {
+    Archived,
+    /// The task at `abs` is not marked as done.
+    NotCompleted,
+    OutOfRange,
+    Aborted(Reconcile),
+    Error(StoreError),
+}
+
 #[derive(Debug)]
 pub enum UnarchiveOutcome {
     Unarchived,
@@ -186,6 +197,7 @@ pub struct DrainReport {
 
 impl DrainReport {
     /// True when nothing happened and there was no error — the common case.
+    #[must_use] 
     pub fn is_noop(&self) -> bool {
         self.merged == 0 && self.skipped == 0 && self.error.is_none()
     }
@@ -230,5 +242,20 @@ pub enum TimerOutcome {
 pub enum TimerQuitOutcome {
     Stopped { abs: usize, elapsed_secs: u64, total_secs: u64 },
     NoTimer,
+    Error(StoreError),
+}
+
+/// Outcome of renaming a project across all tasks.
+#[derive(Debug)]
+pub enum RenameOutcome {
+    Renamed {
+        old: String,
+        new: String,
+        active_count: usize,
+        archived_count: usize,
+    },
+    NoTasks,
+    InvalidName,
+    Aborted(Reconcile),
     Error(StoreError),
 }

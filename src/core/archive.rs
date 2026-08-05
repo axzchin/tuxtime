@@ -4,7 +4,8 @@ use std::thread;
 
 use super::Store;
 use super::outcome::{
-    ArchiveDeleteOutcome, ArchiveOutcome, Reconcile, StoreError, UnarchiveOutcome,
+    ArchiveDeleteOutcome, ArchiveOneOutcome, ArchiveOutcome, Reconcile, StoreError,
+    UnarchiveOutcome,
 };
 use crate::todo::{self, Task};
 
@@ -21,21 +22,21 @@ pub struct Archive {
 
 fn done_path(todo_path: &Path) -> PathBuf {
     todo_path
-        .parent()
-        .map(|p| p.join("done.txt"))
-        .unwrap_or_else(|| PathBuf::from("done.txt"))
+        .parent().map_or_else(|| PathBuf::from("done.txt"), |p| p.join("done.txt"))
 }
 
 impl Archive {
     /// Construct an `Archive` for the sibling `done.txt` of `todo_path` and
     /// spawn a worker thread to read+parse it. The first frame can render
     /// `todo.txt` immediately while the loader runs in the background.
+    #[must_use] 
     pub fn spawn(todo_path: &Path) -> Self {
         Self::spawn_at(done_path(todo_path))
     }
 
     /// Like [`Archive::spawn`] but for an explicit `done.txt` path (e.g. a
     /// `DONE_FILE` that isn't a sibling of the todo file).
+    #[must_use] 
     pub fn spawn_at(path: PathBuf) -> Self {
         let loader_path = path.clone();
         let (tx, rx) = mpsc::sync_channel::<(String, Vec<Task>)>(1);
@@ -54,11 +55,13 @@ impl Archive {
 
     /// Read and parse the sibling `done.txt` inline (no background thread).
     /// Used by the one-shot CLI, where spawning a loader would be wasteful.
+    #[must_use] 
     pub fn load_sync(todo_path: &Path) -> Self {
         Self::load_sync_at(done_path(todo_path))
     }
 
     /// Like [`Archive::load_sync`] but for an explicit `done.txt` path.
+    #[must_use] 
     pub fn load_sync_at(path: PathBuf) -> Self {
         let body = std::fs::read_to_string(&path).unwrap_or_default();
         let tasks = todo::parse_file(&body);
@@ -82,18 +85,22 @@ impl Archive {
         }
     }
 
+    #[must_use] 
     pub fn tasks(&self) -> &[Task] {
         &self.tasks
     }
 
+    #[must_use] 
     pub fn path(&self) -> &Path {
         &self.path
     }
 
+    #[must_use] 
     pub fn len(&self) -> usize {
         self.tasks.len()
     }
 
+    #[must_use] 
     pub fn is_empty(&self) -> bool {
         self.tasks.is_empty()
     }
@@ -211,6 +218,55 @@ impl Store {
         self.archive.last_disk = combined;
         self.archive.loader = None;
         ArchiveOutcome::Archived { count }
+    }
+
+    /// Archive a single completed task at `abs` in `self.tasks`. Appends
+    /// only that task to `done.txt` and removes it from `todo.txt`.
+    pub fn archive_one(&mut self, abs: usize) -> ArchiveOneOutcome {
+        match self.reconcile() {
+            Reconcile::Unchanged => {}
+            other => return ArchiveOneOutcome::Aborted(other),
+        }
+        let task = match self.tasks.get(abs) {
+            Some(t) => t.clone(),
+            None => return ArchiveOneOutcome::OutOfRange,
+        };
+        if !task.done {
+            return ArchiveOneOutcome::NotCompleted;
+        }
+        // Read fresh so an external edit to done.txt since startup isn't lost.
+        let previous_archive_body = match self.read_archive_body() {
+            Ok(b) => b,
+            Err(e) => return ArchiveOneOutcome::Error(StoreError::ArchiveIo(e)),
+        };
+        let mut combined = previous_archive_body.clone();
+        if !combined.is_empty() && !combined.ends_with('\n') {
+            combined.push('\n');
+        }
+        combined.push_str(&todo::serialize(&[task]));
+        // Write done.txt before mutating todo.txt so a failure can't lose data.
+        if let Err(e) = todo::write_atomic(&self.archive.path, &combined) {
+            return ArchiveOneOutcome::Error(StoreError::ArchiveIo(e));
+        }
+        let remaining: Vec<Task> = self
+            .tasks
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != abs)
+            .map(|(_, t)| t.clone())
+            .collect();
+        let remaining_body = todo::serialize(&remaining);
+        if let Err(e) = todo::write_atomic(&self.file_path, &remaining_body) {
+            let _ = todo::write_atomic(&self.archive.path, &previous_archive_body);
+            return ArchiveOneOutcome::Error(StoreError::Write(e));
+        }
+        self.push_history();
+        self.tasks = remaining;
+        self.last_disk = remaining_body;
+        self.archive.tasks = todo::parse_file(&combined);
+        self.archive.last_disk = combined;
+        self.archive.loader = None;
+        ArchiveOneOutcome::Archived
     }
 
     /// Move an archived task back into the live list. `archive_idx` indexes

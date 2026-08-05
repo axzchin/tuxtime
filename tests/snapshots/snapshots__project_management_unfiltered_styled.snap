@@ -1,0 +1,37 @@
+---
+source: tests/snapshots.rs
+assertion_line: 227
+expression: buffer_to_styled(&buf)
+---
+{fg=#2a2f38 bg=#1f232b}┌ Project Management {/}{fg=#6b7280 bg=#1f232b} by name {/}{fg=#2a2f38 bg=#1f232b}─────────────────────────────────────────────────────────────────────┐{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#2f3947 mod=bold} > +finance{/}{bg=#1f232b}                                                                                       {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1f232b}   +health{/}{bg=#1f232b}                                                                                        {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1f232b}   +home{/}{bg=#1f232b}                                                                                          {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1f232b}   +learning{/}{bg=#1f232b}                                                                                      {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1f232b}   +personal{/}{bg=#1f232b}                                                                                      {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1f232b}   +travel{/}{bg=#1f232b}                                                                                        {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1f232b}   +work{/}{bg=#1f232b}                                                                                          {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}└──────────────────────────────────────────────────────────────────────────────────────────────────┘{/}
+{fg=#1a1d23 bg=#8aa9c9 mod=bold} PROJECTS {/}{bg=#252a33}  {/}{fg=#a8b0bc bg=#252a33}j/k nav · x archive · r rename ·{/}{fg=#6b7280 bg=#252a33}7 projects · 0 archived · 2026-05-06 · tuxtime 2026.7.1 {/}

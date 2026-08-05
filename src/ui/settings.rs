@@ -42,18 +42,16 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 
     let config_path = app
         .config_path
-        .as_ref()
-        .map(|p| p.display().to_string())
-        .unwrap_or_else(|| "(unavailable)".into());
+        .as_ref().map_or_else(|| "(unavailable)".into(), |p| p.display().to_string());
 
     let items: &[(&str, Option<String>)] = &[
         ("FILES", None),
         ("  todo file", Some(app.file_path.display().to_string())),
         ("  config file", Some(config_path)),
-        ("", Some("".into())),
+        ("", Some(String::new())),
         ("DISPLAY", None),
         ("  theme", Some(format!("{} ▾  (T to cycle)", theme.name))),
-        ("  density", Some(format!("{} ▾  (D to cycle)", density))),
+        ("  density", Some(format!("{density} ▾  (D to cycle)"))),
         (
             "  line numbers",
             Some(format!("{}  (L to toggle)", on(app.prefs.layout.line_num))),
@@ -75,13 +73,27 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             "  show future in list",
             Some(format!("{}  (F to toggle)", on(app.prefs.show_future))),
         ),
-        ("", Some("".into())),
+        ("", Some(String::new())),
         ("BEHAVIOR", None),
         (
             "  default sort",
             Some(format!("{} (s to cycle)", app.sort_label())),
         ),
-        ("", Some("".into())),
+        (
+            "  idle nudge",
+            Some(format!(
+                "{} min  (i to change)",
+                app.idle_nudge_seconds() / 60
+            )),
+        ),
+        (
+            "  long timer nudge",
+            Some(format!(
+                "{} min  (l to change)",
+                app.long_timer_nudge_seconds() / 60
+            )),
+        ),
+        ("", Some(String::new())),
         ("KEYBINDINGS", None),
         ("  ", Some("press ? for the full list".into())),
     ];

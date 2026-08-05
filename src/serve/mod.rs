@@ -205,7 +205,7 @@ fn build_tasks_view(todo_path: &Path) -> Result<String> {
 
 fn respond(req: Request, status: u16, content_type: &str, body: Vec<u8>) -> Result<()> {
     let header = Header::from_bytes(&b"Content-Type"[..], content_type.as_bytes())
-        .map_err(|_| anyhow!("invalid content-type header"))?;
+        .map_err(|()| anyhow!("invalid content-type header"))?;
     let len = body.len();
     let cursor = std::io::Cursor::new(body);
     let resp = Response::new(StatusCode(status), vec![header], cursor, Some(len), None);

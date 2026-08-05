@@ -39,6 +39,7 @@ impl Chord {
     }
 
     /// Currently armed leader, or None if expired or absent.
+    #[must_use] 
     pub fn active(&self) -> Option<char> {
         self.pending
             .filter(|(_, t)| t.elapsed() < LEADER_WINDOW)
@@ -46,21 +47,23 @@ impl Chord {
     }
 
     /// When the current leader (if any) goes stale.
+    #[must_use] 
     pub fn deadline(&self) -> Option<Instant> {
         self.pending.map(|(_, t)| t + LEADER_WINDOW)
     }
 
     /// True when a leader is set but has expired — the event loop uses this
     /// to trigger a redraw so the status-bar indicator clears.
+    #[must_use] 
     pub fn should_clear(&self) -> bool {
         self.pending
             .as_ref()
-            .map(|(_, t)| t.elapsed() >= LEADER_WINDOW)
-            .unwrap_or(false)
+            .is_some_and(|(_, t)| t.elapsed() >= LEADER_WINDOW)
     }
 
-    pub fn clear(&mut self) {
-        self.pending = None;
+    /// Clear the chord state and return the leader char if one was pending.
+    pub fn clear(&mut self) -> Option<char> {
+        self.pending.take().map(|(k, _)| k)
     }
 }
 
@@ -93,7 +96,7 @@ mod tests {
 
     #[test]
     fn chord_active_expires_after_window() {
-        let stale = Instant::now() - LEADER_WINDOW - Duration::from_millis(10);
+        let stale = Instant::now().checked_sub(LEADER_WINDOW).unwrap() - Duration::from_millis(10);
         let c = Chord {
             pending: Some(('g', stale)),
         };

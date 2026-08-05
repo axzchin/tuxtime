@@ -1,0 +1,36 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(&buf)
+---
+ FILTERS                  ┌ Timesheet  Wed 2026-05-06 (week)  by ┐ DETAIL                           
+                          │                                      │                                  
+ PROJECTS                 │  Tue 2026-05-05                      │ priority                         
+   +Smith            4    │  +Smith @drafting  —  2h 0m (2.0h) (2│ created   2026-05-05             
+                          │    • Draft motion for summary judgmen│ projects  +Smith                 
+ CONTEXTS                 │  +Smith @research  —  1h 0m (1.0h) (1│ contexts  @drafting              
+   @drafting         2    │    • Review discovery responses      │                                  
+   @meeting          1    │    ──  3h 0m (3.0h) (3.0h)           │ RAW                              
+   @research         1    │                                      │                                  
+                          │  Wed 2026-05-06                      │ 2026-05-05 Draft motion for      
+                          │  +Smith @drafting  —  30m (0.5h) (0.5│ summary judgment +Smith          
+                          │    • Prepare exhibit list            │ @drafting dur:7200               
+                          │  +Smith @meeting  —  45m (0.8h) (0.8h│                                  
+                          │    • Conference call with client     │                                  
+                          │    ──  1h 15m (1.3h) (1.3h)          │                                  
+                          │                                      │                                  
+                          │                                      │                                  
+                          │  Billable: 4h 15m (4.3h) (4.3h)      │                                  
+                          │  Total:    4h 15m (4.3h) (4.3h)      │                                  
+                          │                                      │                                  
+                          │                                      │                                  
+                          │                                      │                                  
+                          │                                      │                                  
+                          │                                      │                                  
+                          │                                      │                                  
+                          │                                      │                                  
+                          │                                      │                                  
+                          │                                      │                                  
+                          │                                      │                                  
+                          │                                      │                                  
+                          └──────────────────────────────────────┘                                  
+ TIMESHEET   j/k navigate  ·  Enter edit  ·  b billable  ·  a4 open · 2026-05-06 · tuxtime 2026.7.1

@@ -33,4 +33,4 @@ expression: buffer_to_text(&buf)
                                   │  Duration    time spent: 90 (min), 1.5h, 14:30, 9am      /dur │ 
                                   │                                                               │ 
                                   │  ↑↓ pick · Enter insert · Esc dismiss · type to filter        │ 
- INSERT   Enter save · Esc normal └───────────────────────────────────────────────────────────────┘
+ INSERT   Enter save · C-Enter sav└───────────────────────────────────────────────────────────────┘

@@ -31,7 +31,7 @@ impl std::fmt::Display for TagError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             TagError::Invalid => f.write_str("invalid name"),
-            TagError::Parse(e) => write!(f, "{}", e),
+            TagError::Parse(e) => write!(f, "{e}"),
         }
     }
 }
@@ -62,6 +62,9 @@ pub struct Task {
     /// Accumulated tracked time in integer seconds. `None` or `0` means no
     /// time has been tracked yet. Incremented when a timer is stopped.
     pub dur: Option<u64>,
+    /// Billing status. `None` or `Some("y")` = billable (default).
+    /// `Some("n")` = non-billable. Filtered from narrative output.
+    pub bill: Option<String>,
 }
 
 pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
@@ -102,6 +105,10 @@ pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
     let notes = find_quoted_kv(rest, "note");
     let start = find_kv(rest, "start");
     let dur = find_kv(rest, "dur").and_then(|v| v.parse::<u64>().ok());
+    // Only `bill:n` is meaningful — `bill:y` is equivalent to omitting the
+    // tag, so we normalize it to `None` so the field is a true "is
+    // non-billable?" indicator.
+    let bill = find_kv(rest, "bill").filter(|v| v == "n");
     let clean_raw = body_after_quoted_kv(line);
 
     Ok(Task {
@@ -119,6 +126,7 @@ pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
         notes,
         start,
         dur,
+        bill,
     })
 }
 
@@ -228,10 +236,12 @@ fn is_valid_key(k: &str) -> bool {
     chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
+#[must_use] 
 pub fn parse_file(s: &str) -> Vec<Task> {
     s.lines().filter_map(|line| parse_line(line).ok()).collect()
 }
 
+#[must_use] 
 pub fn serialize(tasks: &[Task]) -> String {
     let mut out = String::new();
     for t in tasks {
@@ -373,6 +383,7 @@ impl Task {
 }
 
 /// True if `s` begins with a `(X) ` priority token.
+#[must_use] 
 pub fn starts_with_priority(s: &str) -> bool {
     let b = s.as_bytes();
     b.len() >= 4 && b[0] == b'(' && b[1].is_ascii_uppercase() && b[2] == b')' && b[3] == b' '
@@ -380,6 +391,7 @@ pub fn starts_with_priority(s: &str) -> bool {
 
 /// True if `s` begins with a `YYYY-MM-DD` token (followed by EOL or whitespace
 /// is not required here — callers use this as a hint, not a tokenizer).
+#[must_use] 
 pub fn starts_with_iso_date(s: &str) -> bool {
     let b = s.as_bytes();
     b.len() >= 10
@@ -397,6 +409,7 @@ pub fn starts_with_iso_date(s: &str) -> bool {
 
 /// Strip a leading `(X) ` priority token if present, otherwise return the
 /// input unchanged.
+#[must_use] 
 pub fn strip_priority(raw: &str) -> &str {
     let b = raw.as_bytes();
     if b.len() >= 4 && b[0] == b'(' && b[1].is_ascii_uppercase() && b[2] == b')' && b[3] == b' ' {
@@ -408,6 +421,7 @@ pub fn strip_priority(raw: &str) -> &str {
 /// A project/context name is valid if non-empty and contains no characters
 /// that would break the todo.txt tokenization: whitespace splits a tag in
 /// half, and `+`/`@`/`:` collide with the format's own sigils.
+#[must_use] 
 pub fn is_valid_tag_name(name: &str) -> bool {
     !name.is_empty()
         && name
@@ -415,6 +429,7 @@ pub fn is_valid_tag_name(name: &str) -> bool {
             .all(|c| !c.is_whitespace() && c != '+' && c != '@' && c != ':')
 }
 
+#[must_use] 
 pub fn body_after_priority(raw: &str) -> &str {
     let mut s = raw;
     if let Some(stripped) = strip_prefix_x(s) {
@@ -439,8 +454,7 @@ pub fn body_after_quoted_kv(raw: &str) -> String {
         let after = &body[st + 2..];
         let st_key = before
             .rfind(char::is_whitespace)
-            .map(|i| i + 1)
-            .unwrap_or(0);
+            .map_or(0, |i| i + 1);
         if let Some(second_aps) = after.find('"') {
             let after = after[second_aps + 1..].trim_start();
             body = format!("{}{}", &before[..st_key], after);
@@ -456,6 +470,7 @@ pub fn body_after_quoted_kv(raw: &str) -> String {
 /// `@context`, and `key:value` token from what remains. Whitespace between
 /// surviving words collapses to single spaces. Returns an owned `String`
 /// because we're filtering tokens, not slicing a prefix.
+#[must_use] 
 pub fn body_only(raw: &str) -> String {
     let new_body = body_after_quoted_kv(raw);
     body_after_priority(&new_body)
@@ -677,5 +692,57 @@ mod tests {
     fn invalid_dur_value_returns_none() {
         let t = parse_line("task dur:notanumber").unwrap();
         assert_eq!(t.dur, None);
+    }
+
+    // ── bill: tag ──────────────────────────────────────────────────────
+
+    #[test]
+    fn parses_billable_default() {
+        let t = parse_line("Draft motion +Smith @drafting dur:3600").unwrap();
+        assert_eq!(t.bill, None); // absent = billable
+    }
+
+    #[test]
+    fn parses_bill_y_normalizes_to_none() {
+        // bill:y is equivalent to omitting the tag — normalized to None.
+        let t = parse_line("Draft motion +Smith @drafting dur:3600 bill:y").unwrap();
+        assert_eq!(t.bill, None);
+    }
+
+    #[test]
+    fn parses_bill_n_nonbillable() {
+        let t = parse_line("Firm admin +Admin @admin dur:900 bill:n").unwrap();
+        assert_eq!(t.bill.as_deref(), Some("n"));
+    }
+
+    #[test]
+    fn body_only_strips_bill_tag() {
+        assert_eq!(
+            body_only("Firm admin +Admin @admin dur:900 bill:n"),
+            "Firm admin",
+        );
+        assert_eq!(
+            body_only("Draft motion +Smith @drafting dur:3600 bill:y"),
+            "Draft motion",
+        );
+    }
+
+    #[test]
+    fn invalid_bill_value_treated_as_billable() {
+        // Unknown bill: values are silently treated as billable (None).
+        let t = parse_line("task bill:xyz").unwrap();
+        assert_eq!(t.bill, None);
+        let t2 = parse_line("task bill:maybe").unwrap();
+        assert_eq!(t2.bill, None);
+    }
+
+    #[test]
+    fn bill_round_trips_through_serialize() {
+        let raw = "Firm admin +Admin @admin dur:900 bill:n\n";
+        let parsed = parse_file(raw);
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].bill.as_deref(), Some("n"));
+        let serialized = serialize(&parsed);
+        assert_eq!(serialized, raw);
     }
 }

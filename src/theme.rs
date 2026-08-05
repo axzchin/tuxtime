@@ -36,6 +36,7 @@ pub struct Theme {
 }
 
 impl Theme {
+    #[must_use] 
     pub fn priority_color(&self, p: char) -> Color {
         match p {
             'A' => self.pri_a,
@@ -224,7 +225,8 @@ pub fn all() -> &'static [&'static Theme] {
 }
 
 /// Resolve `${XDG_CONFIG_HOME:-$HOME/.config}/tuxtime/themes`. Returns None
-/// only when neither XDG_CONFIG_HOME nor HOME is set.
+/// only when neither `XDG_CONFIG_HOME` nor HOME is set.
+#[must_use] 
 pub fn themes_dir() -> Option<PathBuf> {
     Some(crate::xdg::config_home()?.join("tuxtime").join("themes"))
 }
@@ -240,6 +242,7 @@ pub fn themes_dir() -> Option<PathBuf> {
 ///
 /// A non-existent directory is treated as "no themes" (no warning) — this is
 /// the first-run case.
+#[must_use] 
 pub fn load_user_themes(dir: &Path) -> (Vec<Theme>, Vec<String>) {
     let mut themes = Vec::new();
     let mut warnings = Vec::new();
@@ -254,7 +257,7 @@ pub fn load_user_themes(dir: &Path) -> (Vec<Theme>, Vec<String>) {
     };
 
     let mut files: Vec<PathBuf> = entries
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .map(|e| e.path())
         .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("toml"))
         .collect();
@@ -264,9 +267,7 @@ pub fn load_user_themes(dir: &Path) -> (Vec<Theme>, Vec<String>) {
 
     for path in files {
         let display = path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| path.display().to_string());
+            .file_name().map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().into_owned());
         let body = match fs::read_to_string(&path) {
             Ok(s) => s,
             Err(e) => {

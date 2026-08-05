@@ -29,11 +29,16 @@ impl App {
 
     /// Recompute the cached visible-index list and parallel group keys. Call
     /// after any mutation that affects filter/sort/view/tasks/archive.
+    /// Also invalidates the timesheet groups cache so the next timesheet
+    /// render forces a fresh computation — no more stale views after
+    /// archive/unarchive.
     pub fn recompute_visible(&mut self) {
-        match self.view {
+        match self.nav.view {
             View::List => self.rebuild_list_cache(),
             View::Archive => self.rebuild_archive_cache(),
+            View::Timesheet => {}
         }
+        self.timesheet.invalidate_cache();
     }
 
     fn rebuild_list_cache(&mut self) {
@@ -98,15 +103,15 @@ impl App {
     }
 
     pub fn cur_abs(&self) -> Option<usize> {
-        self.visible_cache.get(self.cursor).copied()
+        self.visible_cache.get(self.nav.cursor).copied()
     }
 
     pub fn clamp_cursor(&mut self) {
         let len = self.visible_cache.len();
         if len == 0 {
-            self.cursor = 0;
-        } else if self.cursor >= len {
-            self.cursor = len - 1;
+            self.nav.cursor = 0;
+        } else if self.nav.cursor >= len {
+            self.nav.cursor = len - 1;
         }
     }
 
@@ -114,7 +119,7 @@ impl App {
     /// Falls back to clamping if `abs` was filtered out.
     pub(super) fn follow_cursor(&mut self, abs: usize) {
         if let Some(pos) = self.visible_cache.iter().position(|&i| i == abs) {
-            self.cursor = pos;
+            self.nav.cursor = pos;
         } else {
             self.clamp_cursor();
         }
@@ -155,10 +160,10 @@ mod tests {
     #[test]
     fn list_cursor_survives_archive_roundtrip() {
         let mut app = build_app("a\nb\nc\nd\ne\n");
-        app.cursor = 3;
+        app.nav.cursor = 3;
         app.set_view(View::Archive);
         app.set_view(View::List);
-        assert_eq!(app.cursor, 3, "cursor lost on List → Archive → List");
+        assert_eq!(app.nav.cursor, 3, "cursor lost on List → Archive → List");
     }
 
     #[test]

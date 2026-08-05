@@ -178,7 +178,7 @@ fn render_row<'a>(
             spans.push(Span::styled(&label[cursor..p], label_style));
         }
         // Match offsets land on char boundaries (see `subseq_match_ci`).
-        let ch_len = label[p..].chars().next().map(char::len_utf8).unwrap_or(1);
+        let ch_len = label[p..].chars().next().map_or(1, char::len_utf8);
         spans.push(Span::styled(&label[p..p + ch_len], hl_style));
         cursor = p + ch_len;
     }

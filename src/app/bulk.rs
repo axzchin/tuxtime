@@ -14,7 +14,7 @@ impl App {
         match self.store.complete_many(&indices) {
             BulkCompleteOutcome::Done { completed, spawned } => {
                 self.selection.clear();
-                self.mode = Mode::Normal;
+                self.nav.mode = Mode::Normal;
                 self.flash(if spawned > 0 {
                     format!("completed {completed} (+{spawned} recurring)")
                 } else {
@@ -26,7 +26,7 @@ impl App {
             BulkCompleteOutcome::NothingToComplete => {
                 self.flash("nothing to complete");
                 self.selection.clear();
-                self.mode = Mode::Normal;
+                self.nav.mode = Mode::Normal;
             }
             BulkCompleteOutcome::Aborted(r) => self.handle_reconcile_abort(r),
             BulkCompleteOutcome::Error(e) => self.flash(format!("complete failed: {e}")),
@@ -42,14 +42,14 @@ impl App {
         match self.store.delete_many(&indices) {
             BulkDeleteOutcome::Done { deleted } => {
                 self.selection.clear();
-                self.mode = Mode::Normal;
+                self.nav.mode = Mode::Normal;
                 self.flash(format!("deleted {deleted}"));
                 self.recompute_visible();
                 self.clamp_cursor();
             }
             BulkDeleteOutcome::Nothing => {
                 self.selection.clear();
-                self.mode = Mode::Normal;
+                self.nav.mode = Mode::Normal;
             }
             BulkDeleteOutcome::Aborted(r) => self.handle_reconcile_abort(r),
             BulkDeleteOutcome::Error(e) => self.flash(format!("write failed: {e}")),
@@ -67,13 +67,13 @@ mod tests {
         let mut app = build_app("a\nb\nc\n");
         app.selection.toggle(0);
         app.selection.toggle(2);
-        app.mode = Mode::Visual;
+        app.nav.mode = Mode::Visual;
         app.complete_selected();
         assert!(app.tasks()[0].done);
         assert!(!app.tasks()[1].done);
         assert!(app.tasks()[2].done);
         assert!(app.selection.is_empty());
-        assert_eq!(app.mode, Mode::Normal);
+        assert_eq!(app.nav.mode, Mode::Normal);
         assert_eq!(app.flash_active(), Some("completed 2"));
     }
 
@@ -83,7 +83,7 @@ mod tests {
         app.refresh_today("2026-05-09".into());
         app.selection.toggle(1);
         app.selection.toggle(3);
-        app.mode = Mode::Visual;
+        app.nav.mode = Mode::Visual;
         app.complete_selected();
         assert_eq!(app.tasks().len(), 6);
         assert_eq!(app.flash_active(), Some("completed 2 (+2 recurring)"));
@@ -94,12 +94,12 @@ mod tests {
         let mut app = build_app("a\nb\nc\nd\n");
         app.selection.toggle(1);
         app.selection.toggle(3);
-        app.mode = Mode::Visual;
+        app.nav.mode = Mode::Visual;
         app.delete_selected();
         assert_eq!(app.tasks().len(), 2);
         assert_eq!(app.tasks()[0].raw, "a");
         assert_eq!(app.tasks()[1].raw, "c");
         assert!(app.selection.is_empty());
-        assert_eq!(app.mode, Mode::Normal);
+        assert_eq!(app.nav.mode, Mode::Normal);
     }
 }

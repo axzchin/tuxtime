@@ -69,7 +69,7 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
         spans.push(Span::styled("    ", Style::default().fg(theme.done)));
     } else if let Some(p) = task.priority {
         spans.push(Span::styled(
-            format!("({}) ", p),
+            format!("({p}) "),
             Style::default()
                 .fg(theme.priority_color(p))
                 .add_modifier(Modifier::BOLD),
@@ -152,7 +152,7 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
             let h = elapsed / 3600;
             let m = (elapsed % 3600) / 60;
             let s = elapsed % 60;
-            let timer_text = format!(" [{:02}:{:02}:{:02}]", h, m, s);
+            let timer_text = format!(" [{h:02}:{m:02}:{s:02}]");
             line.spans.push(Span::styled(
                 timer_text,
                 Style::default().fg(theme.accent),
@@ -355,6 +355,7 @@ pub(crate) fn due_token_style(task_done: bool, due: &str, today: &str, theme: &T
     style
 }
 
+#[must_use] 
 pub fn due_label(due: &str, today: &str) -> String {
     if let Some(d) = day_diff(due, today) {
         if d < 0 {
@@ -371,7 +372,7 @@ pub fn due_label(due: &str, today: &str) -> String {
             return "tomorrow".into();
         }
         if d < 7 {
-            return format!("in {}d", d);
+            return format!("in {d}d");
         }
     }
     due.to_string()

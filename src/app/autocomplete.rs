@@ -31,6 +31,7 @@ pub struct AutocompleteTarget<'a> {
 /// chars to the start of the current word; returns `Some` only if that word
 /// begins with `+` or `@`. Cursor on whitespace, on plain text, or at byte 0
 /// of an empty draft yields `None`.
+#[must_use] 
 pub fn active_token(draft: &str, cursor: usize) -> Option<ActiveToken<'_>> {
     let cursor = cursor.min(draft.len());
     if cursor == 0 {
@@ -64,9 +65,9 @@ impl App {
     /// Retrieve the autocomplete target (token kind, prefix, and replacement range)
     /// based on the current app mode.
     pub fn autocomplete_target(&self) -> Option<AutocompleteTarget<'_>> {
-        match self.mode {
+        match self.nav.mode {
             Mode::PromptProject | Mode::PromptContext => {
-                let kind = if self.mode == Mode::PromptProject {
+                let kind = if self.nav.mode == Mode::PromptProject {
                     TokenKind::Project
                 } else {
                     TokenKind::Context
@@ -87,8 +88,7 @@ impl App {
                 let end_offset = after_sigil
                     .char_indices()
                     .find(|(_, c)| c.is_whitespace())
-                    .map(|(i, _)| i)
-                    .unwrap_or(after_sigil.len());
+                    .map_or(after_sigil.len(), |(i, _)| i);
                 let end = token_start + 1 + end_offset;
                 Some(AutocompleteTarget {
                     kind: tok.kind,
@@ -125,6 +125,21 @@ impl App {
             for s in source {
                 seen.insert(s.as_str());
             }
+        }
+        // Also include cached archive projects/contexts so they stay
+        // available for autocomplete even after all active tasks for that
+        // project are deleted. The cache is rebuilt when the archive loads
+        // or changes (poll_archive), avoiding a scan of done.txt on every
+        // keystroke.
+        let archive_source: &[String] = match target.kind {
+            TokenKind::Project => &self.archive_cache.projects,
+            TokenKind::Context => &self.archive_cache.contexts,
+        };
+        for s in archive_source {
+            if target.kind == TokenKind::Project && self.is_project_archived(s) {
+                continue;
+            }
+            seen.insert(s.as_str());
         }
         let mut prefix_hits: Vec<&str> = Vec::new();
         let mut contains_hits: Vec<&str> = Vec::new();
@@ -311,7 +326,7 @@ mod tests {
 
     #[test]
     fn autocomplete_matches_caps_at_eight() {
-        let raw: String = (0..20).map(|i| format!("a +p{:02}\n", i)).collect();
+        let raw: String = (0..20).map(|i| format!("a +p{i:02}\n")).collect();
         let mut app = build_app(&raw);
         app.draft_set("Foo +p".into());
         assert_eq!(app.autocomplete_matches().len(), 8);
@@ -497,7 +512,7 @@ mod tests {
     #[test]
     fn autocomplete_prompt_project_mode() {
         let mut app = build_app("a +work\nb +health\n");
-        app.mode = Mode::PromptProject;
+        app.nav.mode = Mode::PromptProject;
         app.draft_set("hea".into());
         assert!(app.autocomplete_visible());
         assert_eq!(app.autocomplete_matches(), vec!["health"]);
@@ -509,7 +524,7 @@ mod tests {
     #[test]
     fn autocomplete_prompt_context_mode() {
         let mut app = build_app("a @work\nb @health\n");
-        app.mode = Mode::PromptContext;
+        app.nav.mode = Mode::PromptContext;
         app.draft_set("wor".into());
         assert!(app.autocomplete_visible());
         assert_eq!(app.autocomplete_matches(), vec!["work"]);

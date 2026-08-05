@@ -70,7 +70,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             let task = &app.tasks()[abs];
             let opts = task_row::RowOpts {
                 idx_label: i,
-                cursor: i == app.cursor && app.mode != Mode::Help && app.mode != Mode::Settings,
+                cursor: i == app.nav.cursor && app.nav.mode != Mode::Help && app.nav.mode != Mode::Settings,
                 multi_mode: app.effective_mode() == Mode::Visual,
                 multi_checked: app.selection.is_selected(abs),
                 selected: app.selection.is_selected(abs),
@@ -89,7 +89,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                     None
                 },
             };
-            if i == app.cursor {
+            if i == app.nav.cursor {
                 cursor_line = Some(lines.len());
             }
             lines.push(task_row::build_line(task, opts, theme));
@@ -101,7 +101,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         }
     }
 
-    let scroll_cell = &app.view_scroll[View::List.idx()];
+    let scroll_cell = &app.nav.view_scroll[View::List.idx()];
     let scroll = keep_cursor_visible(
         scroll_cell.get(),
         cursor_line,
@@ -175,7 +175,7 @@ fn group_header<'a>(theme: &Theme, gk: &GroupKey, count: usize) -> Line<'a> {
 
     Line::from(vec![
         Span::raw(" "),
-        Span::styled(format!("({})", count), Style::default().fg(theme.dim)),
+        Span::styled(format!("({count})"), Style::default().fg(theme.dim)),
         Span::raw("  "),
         Span::styled(
             label,
