@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 use super::*;
 use chrono::NaiveDate;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -1195,6 +1197,65 @@ fn long_timer_nudge_enter_sets_new_threshold() {
     handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert_eq!(app.nav.mode, Mode::Settings);
     assert_eq!(app.long_timer_nudge_seconds(), 3600); // 60 min
+}
+
+// ---- idle nudge safety ----
+
+/// The idle nudge must not fire while the user is in a mode with transient
+/// state (draft, prompt, overlay). Firing would run `exit_overlay_to_normal`
+/// and silently discard their in-progress composition.
+#[test]
+fn idle_nudge_skips_modes_with_unsaved_state() {
+    let mut app = build_app();
+    // Make the idle threshold trivially exceeded.
+    app.prefs.idle_nudge_seconds = 0;
+    app.session.last_timer_activity =
+        std::time::Instant::now() - std::time::Duration::from_secs(60);
+
+    // Insert mode with a half-typed draft.
+    app.nav.mode = Mode::Insert;
+    app.draft_set("half typed".into());
+    assert!(!app.check_nudges(), "nudge must not fire in Insert mode");
+    assert_eq!(app.nav.mode, Mode::Insert, "Insert mode must be preserved");
+    assert_eq!(
+        app.draft.text(),
+        "half typed",
+        "draft must survive the tick"
+    );
+
+    // Search mode with a filter typed.
+    app.nav.mode = Mode::Search;
+    app.draft_set("needle".into());
+    assert!(!app.check_nudges(), "nudge must not fire in Search mode");
+    assert_eq!(app.nav.mode, Mode::Search);
+    assert_eq!(app.draft.text(), "needle");
+
+    // Settings overlay.
+    app.nav.mode = Mode::Settings;
+    assert!(!app.check_nudges(), "nudge must not fire over Settings");
+    assert_eq!(app.nav.mode, Mode::Settings);
+
+    // Command palette.
+    app.nav.mode = Mode::CommandPalette;
+    assert!(!app.check_nudges(), "nudge must not fire over the palette");
+    assert_eq!(app.nav.mode, Mode::CommandPalette);
+
+    // A text-input prompt.
+    app.nav.mode = Mode::PromptAddTime;
+    app.draft_set("30".into());
+    assert!(!app.check_nudges(), "nudge must not fire over a prompt");
+    assert_eq!(app.nav.mode, Mode::PromptAddTime);
+}
+
+/// From Normal mode — no draft, no modal — the idle nudge fires as designed.
+#[test]
+fn idle_nudge_fires_in_normal_mode() {
+    let mut app = build_app();
+    app.prefs.idle_nudge_seconds = 0;
+    app.session.last_timer_activity =
+        std::time::Instant::now() - std::time::Duration::from_secs(60);
+    assert!(app.check_nudges());
+    assert_eq!(app.nav.mode, Mode::IdleNudge);
 }
 
 // ---- prompt mode transitions ----

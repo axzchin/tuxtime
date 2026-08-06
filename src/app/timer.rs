@@ -58,14 +58,22 @@ impl App {
             return false;
         }
         let idle_secs = self.session.last_timer_activity.elapsed().as_secs();
-        // Idle nudge: fire regardless of mode, but first dismiss the overlay
-        // so the popup is visible. Save the pre-nudge view for Dismiss.
-        if !self.timer_running() && idle_secs >= self.prefs.idle_nudge_seconds {
+        // Idle nudge: a full-screen popup that clears the draft/selection and
+        // forces the mode back to Normal. Firing it over Insert, Search, the
+        // palette, a prompt, or Settings would silently discard in-progress
+        // composition — so it only fires from Normal mode, where there is no
+        // transient state to lose. Save the pre-nudge view for Dismiss.
+        let mut fired = false;
+        if self.nav.mode == Mode::Normal
+            && !self.timer_running()
+            && idle_secs >= self.prefs.idle_nudge_seconds
+        {
             self.session.pre_nudge_view = Some(self.nav.view);
             self.exit_overlay_to_normal();
             self.nav.mode = Mode::IdleNudge;
-            return true;
+            fired = true;
         }
+        // Long-timer nudge only toggles a status-bar flag — safe in any mode.
         let was_active = self.session.long_timer_nudge_active;
         if self.timer_running() {
             let elapsed = self.timer_elapsed_secs().unwrap_or(0);
@@ -74,7 +82,7 @@ impl App {
         } else {
             self.session.long_timer_nudge_active = false;
         }
-        was_active != self.session.long_timer_nudge_active
+        fired || (was_active != self.session.long_timer_nudge_active)
     }
 
     /// Dismiss any overlay/dialog mode back to Normal, discarding transient
