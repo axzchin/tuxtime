@@ -65,6 +65,12 @@ pub struct Task {
     /// Billing status. `None` or `Some("y")` = billable (default).
     /// `Some("n")` = non-billable. Filtered from narrative output.
     pub bill: Option<String>,
+    /// Date (`YYYY-MM-DD`) the accumulated `dur:` was last logged. Written
+    /// when the timer stops and by manual time additions, so the timesheet
+    /// can attribute time to the day it was actually tracked rather than the
+    /// task's creation date. `None` for lines written before this tag
+    /// existed or entered by hand.
+    pub log: Option<String>,
 }
 
 pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
@@ -109,6 +115,7 @@ pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
     // tag, so we normalize it to `None` so the field is a true "is
     // non-billable?" indicator.
     let bill = find_kv(rest, "bill").filter(|v| v == "n");
+    let log = find_kv(rest, "log");
     let clean_raw = body_after_quoted_kv(line);
 
     Ok(Task {
@@ -127,6 +134,7 @@ pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
         start,
         dur,
         bill,
+        log,
     })
 }
 
@@ -741,6 +749,36 @@ mod tests {
         let parsed = parse_file(raw);
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].bill.as_deref(), Some("n"));
+        let serialized = serialize(&parsed);
+        assert_eq!(serialized, raw);
+    }
+
+    // ── log: tag (day the time was tracked) ─────────────────────────────
+
+    #[test]
+    fn parses_log_tag() {
+        let t = parse_line("Draft motion +Smith @drafting dur:3600 log:2026-08-06").unwrap();
+        assert_eq!(t.log.as_deref(), Some("2026-08-06"));
+        // Absent log: means the day isn't known (pre-log lines, hand-typed).
+        let t2 = parse_line("Draft motion +Smith @drafting dur:3600").unwrap();
+        assert_eq!(t2.log, None);
+    }
+
+    #[test]
+    fn body_only_strips_log_tag() {
+        // The narrative output must not include the log date token.
+        assert_eq!(
+            body_only("Draft motion +Smith @drafting dur:3600 log:2026-08-06"),
+            "Draft motion",
+        );
+    }
+
+    #[test]
+    fn log_round_trips_through_serialize() {
+        let raw = "Draft motion +Smith @drafting dur:3600 log:2026-08-06\n";
+        let parsed = parse_file(raw);
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].log.as_deref(), Some("2026-08-06"));
         let serialized = serialize(&parsed);
         assert_eq!(serialized, raw);
     }

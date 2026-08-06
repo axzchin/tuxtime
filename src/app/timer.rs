@@ -7,6 +7,7 @@
 
 use super::{App, Mode, format_duration, parse_duration_input};
 use crate::core::outcome::{TimerOutcome, TimerQuitOutcome};
+use crate::core::rebuild_token_line;
 use crate::todo::Task;
 use std::time::Instant;
 
@@ -240,18 +241,13 @@ impl App {
         };
         let current = self.store.tasks()[abs].dur.unwrap_or(0);
         let total = current + secs;
-        // Replace/add the dur: token on the raw line using plain string ops
-        // (the rest of the codebase avoids regex for line mutation).
+        // Replace/add the `dur:` token and stamp the `log:` date through the
+        // store's shared token-rewrite helper, so all raw-line surgery stays
+        // in one place. The log date makes manual additions show up on
+        // today's timesheet even when the task was created earlier.
         let raw = self.store.task_raw(abs).unwrap_or_default();
-        let updated = if let Some(pos) = raw.find("dur:") {
-            let val_start = pos + "dur:".len();
-            let val_end = raw[val_start..]
-                .find(|c: char| c.is_ascii_whitespace())
-                .map_or(raw.len(), |n| val_start + n);
-            format!("{}dur:{total}{}", &raw[..pos], &raw[val_end..])
-        } else {
-            format!("{raw} dur:{total}")
-        };
+        let updated = rebuild_token_line(&raw, "dur:", None, &format!("dur:{total}"));
+        let updated = rebuild_token_line(&updated, "log:", None, &format!("log:{}", self.today()));
         use crate::core::EditOutcome;
         match self.store.edit_line(abs, &updated) {
             EditOutcome::Saved { abs } => {

@@ -162,7 +162,9 @@ pub enum TimesheetTaskRef {
 /// A single group entry in the timesheet view.
 #[derive(Debug, Clone)]
 pub struct TimesheetEntry {
-    /// ISO date string ("2026-05-07"). Used for date headers in weekly view.
+    /// ISO date string ("2026-05-07"). The day the time was actually tracked
+    /// (`log:` tag) when the line has one, else the task's creation date.
+    /// Used for date headers and daily/weekly bucketing.
     pub date: String,
     /// Group key: "+project @activity".
     pub key: String,

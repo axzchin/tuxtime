@@ -547,6 +547,12 @@ impl Store {
             Some("start:"),
             &format!("dur:{new_total}"),
         );
+        // Stamp the day the work was logged so the timesheet attributes the
+        // accumulated time to the stop date, not the task's creation date.
+        // The stop date comes from the store's cached `today` (refreshed by
+        // the TUI event loop every iteration) rather than a fresh wall-clock
+        // read, keeping the store deterministic and the tests reproducible.
+        let new_raw = rebuild_token_line(&new_raw, "log:", None, &format!("log:{}", self.today));
         match todo::parse_line(&new_raw) {
             Ok(parsed) => {
                 let project = parsed.projects.first().cloned();
@@ -677,7 +683,11 @@ impl Store {
 /// forward (e.g. drop `start:` when stopping a timer). `new_token` is the
 /// full replacement token value (e.g. "start:2026-05-07T12:00:00" or
 /// "dur:5400").
-fn rebuild_token_line(
+/// Shared by the timer and manual time-entry paths to rewrite a task's raw
+/// line: replace or add a `key:` token (e.g. `start:`, `dur:`, `log:`) while
+/// preserving the priority/date prefix and token order. `drop_prefix` removes
+/// a token family (e.g. `start:` when stopping a timer).
+pub(crate) fn rebuild_token_line(
     raw: &str,
     replace_prefix: &str,
     drop_prefix: Option<&str>,
@@ -1015,5 +1025,63 @@ mod tests {
         assert_eq!(store.tasks().len(), 2);
         assert_eq!(store.tasks()[0].raw, "a");
         assert_eq!(store.tasks()[1].raw, "c");
+    }
+
+    // ---- timer log-date stamping ----
+
+    #[test]
+    fn timer_stop_stamps_log_date_and_removes_start() {
+        // build_store fixes today at 2026-05-06.
+        let mut store = build_store("Draft motion +Smith @drafting\n");
+        assert!(matches!(
+            store.timer_toggle(0),
+            TimerOutcome::Started { .. }
+        ));
+        assert!(store.tasks()[0].start.is_some());
+        assert!(matches!(
+            store.timer_toggle(0),
+            TimerOutcome::Stopped { .. }
+        ));
+        let raw = &store.tasks()[0].raw;
+        assert!(raw.contains("dur:"), "stop must add dur:, got: {raw}");
+        assert!(
+            raw.contains("log:2026-05-06"),
+            "stop must stamp the day the time was logged, got: {raw}"
+        );
+        assert!(
+            !raw.contains("start:"),
+            "stop must remove start:, got: {raw}"
+        );
+    }
+
+    #[test]
+    fn timer_stop_replaces_existing_log_date_without_duplicating() {
+        // A task tracked earlier keeps its dur but the log date must move to
+        // the day of the latest stop — one token, never two.
+        let mut store = build_store("Draft motion +Smith @drafting dur:3600 log:2026-05-01\n");
+        assert!(matches!(
+            store.timer_toggle(0),
+            TimerOutcome::Started { .. }
+        ));
+        assert!(matches!(
+            store.timer_toggle(0),
+            TimerOutcome::Stopped { .. }
+        ));
+        let raw = &store.tasks()[0].raw;
+        assert_eq!(
+            raw.matches("log:").count(),
+            1,
+            "must not duplicate log:, got: {raw}"
+        );
+        assert!(
+            raw.contains("log:2026-05-06"),
+            "log must move to the latest stop date, got: {raw}"
+        );
+        let dur_val = raw
+            .split_whitespace()
+            .find_map(|t| t.strip_prefix("dur:"))
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(0);
+        assert!(dur_val >= 3600, "dur must accumulate, got: {raw}");
     }
 }

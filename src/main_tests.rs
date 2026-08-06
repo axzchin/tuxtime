@@ -1,4 +1,3 @@
-
 use super::*;
 use chrono::NaiveDate;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -376,6 +375,119 @@ fn build_timesheet_groups_separates_billable_and_dnb() {
     assert_eq!(dnb_tenths, 1);
     let total_tenths_str = tuxtime::app::format_billable_tenths(billable_tenths + dnb_tenths);
     assert_eq!(total_tenths_str, "0.2h");
+}
+
+// ── timesheet log-date attribution ────────────────────────────────
+
+/// Regression: time must be attributed to the day it was actually logged
+/// (`log:`), not the task's creation date. A task created two days ago and
+/// tracked today must appear under today in the daily view.
+#[test]
+fn timesheet_attributes_time_to_log_date_not_creation_date() {
+    let raw = "2026-05-05 Draft memo +legal @research dur:3600 log:2026-05-07\n";
+    let app = timesheet_app_with_tasks(raw);
+    let groups = app.build_timesheet_groups();
+    assert_eq!(groups.len(), 1, "exactly one entry expected");
+    assert_eq!(
+        groups[0].date, "2026-05-07",
+        "time must be attributed to the log date, not the creation date"
+    );
+    assert_eq!(groups[0].total_secs, 3600);
+    assert_eq!(groups[0].narratives, vec!["Draft memo"]);
+}
+
+/// Regression: a task created today but tracked yesterday must NOT show in
+/// today's daily view — it belongs to the day the time was logged.
+#[test]
+fn timesheet_daily_view_excludes_entries_logged_elsewhere() {
+    let raw = "2026-05-07 Old work +legal @research dur:1800 log:2026-05-06\n";
+    let mut app = timesheet_app_with_tasks(raw);
+    assert!(
+        app.build_timesheet_groups().is_empty(),
+        "yesterday's work must not appear in today's daily view"
+    );
+
+    app.timesheet_shift_days(-1);
+    let groups = app.build_timesheet_groups();
+    assert_eq!(groups.len(), 1, "yesterday's view must show the entry");
+    assert_eq!(groups[0].date, "2026-05-06");
+}
+
+/// Legacy/hand-typed lines without a `log:` tag must keep working: they fall
+/// back to the creation date, preserving pre-existing behavior.
+#[test]
+fn timesheet_falls_back_to_creation_date_without_log() {
+    let raw = "2026-05-07 Plain work +work @dev dur:900\n";
+    let app = timesheet_app_with_tasks(raw);
+    let groups = app.build_timesheet_groups();
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].date, "2026-05-07");
+}
+
+/// A hand-typed or otherwise unparseable `log:` value must not hide the
+/// entry: it falls back to the creation date like a missing tag.
+#[test]
+fn timesheet_falls_back_to_creation_date_when_log_invalid() {
+    let raw = "2026-05-07 Bogus log +work @dev dur:600 log:garbage\n";
+    let app = timesheet_app_with_tasks(raw);
+    let groups = app.build_timesheet_groups();
+    assert_eq!(groups.len(), 1, "invalid log must not hide the entry");
+    assert_eq!(groups[0].date, "2026-05-07");
+}
+
+/// Weekly view must bucket by log date too: entries logged inside the week
+/// appear, entries logged outside are excluded even if created before.
+/// (Sunday-start week containing 2026-05-07 spans 2026-05-03..2026-05-09.)
+#[test]
+fn timesheet_weekly_view_attributes_by_log_date() {
+    let raw = "2026-05-01 Early +work @dev dur:600 log:2026-05-04\n\
+               2026-05-01 Late +work @dev dur:1200 log:2026-05-08\n\
+               2026-05-01 Last week +legal @dev dur:300 log:2026-05-02\n";
+    let mut app = timesheet_app_with_tasks(raw);
+    app.timesheet.weekly = true;
+    let groups = app.build_timesheet_groups();
+    assert_eq!(
+        groups.len(),
+        2,
+        "only entries logged inside the week should appear, got {groups:#?}"
+    );
+    let dates: Vec<&str> = groups.iter().map(|g| g.date.as_str()).collect();
+    assert!(dates.contains(&"2026-05-04"), "dates: {dates:?}");
+    assert!(dates.contains(&"2026-05-08"), "dates: {dates:?}");
+    assert!(!dates.contains(&"2026-05-02"), "dates: {dates:?}");
+}
+
+/// Integration: stopping the timer must stamp today's log date, so a task
+/// created last week (with accumulated time from earlier sessions) shows up
+/// on today's timesheet the moment it's tracked again. The seeded dur also
+/// keeps the test deterministic — a same-second start/stop would otherwise
+/// log dur:0, which the timesheet (correctly) excludes.
+#[test]
+fn timer_stop_makes_entry_appear_in_todays_timesheet() {
+    let raw = "2026-05-01 Long task +work @dev dur:3600\n";
+    let mut app = timesheet_app_with_tasks(raw);
+    // Not logged today yet: created last week, so today's view is empty.
+    assert!(app.build_timesheet_groups().is_empty());
+
+    app.toggle_timer_at(0); // start (resume)
+    app.toggle_timer_at(0); // stop
+
+    let raw_after = app.task_raw(0).unwrap_or_default();
+    assert!(
+        raw_after.contains("log:2026-05-07"),
+        "stop must stamp today's log date, got: {raw_after}"
+    );
+    let groups = app.build_timesheet_groups();
+    assert_eq!(groups.len(), 1, "stopped timer must create an entry");
+    assert_eq!(
+        groups[0].date, "2026-05-07",
+        "entry must be attributed to the log date, not the creation date"
+    );
+    assert!(
+        groups[0].total_secs >= 3600,
+        "accumulated dur must be preserved, got {}",
+        groups[0].total_secs
+    );
 }
 
 // ── timesheet date navigation ─────────────────────────────────────

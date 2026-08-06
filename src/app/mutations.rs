@@ -570,6 +570,43 @@ mod tests {
     }
 
     #[test]
+    fn add_time_stamps_log_date() {
+        // Manual additions must carry today's log date so they show up on
+        // today's timesheet even when the task was created earlier.
+        let mut app = build_app("Draft motion +Smith @drafting\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+
+        app.add_time_to_current_from_input("30");
+
+        let raw = &app.tasks()[0].raw;
+        assert!(
+            raw.contains("log:2026-05-06"),
+            "manual add must stamp today's log date, got: {raw}"
+        );
+    }
+
+    #[test]
+    fn add_time_replaces_existing_log_date_without_duplicating() {
+        let mut app = build_app("Draft motion +Smith @drafting dur:3600 log:2026-05-01\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+
+        app.add_time_to_current_from_input("30");
+
+        let raw = &app.tasks()[0].raw;
+        assert_eq!(
+            raw.matches("log:").count(),
+            1,
+            "must not duplicate log:, got: {raw}"
+        );
+        assert!(
+            raw.contains("log:2026-05-06"),
+            "log must move to today, got: {raw}"
+        );
+    }
+
+    #[test]
     fn add_time_with_invalid_input_flashes_error() {
         let mut app = build_app("Draft motion +Smith @drafting dur:3600\n");
         app.nav.cursor = 0;

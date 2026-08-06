@@ -63,6 +63,8 @@ A task accumulates time through new metadata tags on the task line:
 ```
 start:<ISO-8601-with-seconds>  — when the timer most recently started (present = timer running)
 dur:<seconds>                  — accumulated tracked time in integer seconds
+log:<YYYY-MM-DD>               — the day the accumulated `dur:` was last logged (written on timer
+                                 stop and manual time additions; timesheet bucketing key)
 ```
 
 **Example — timer running:**
@@ -72,8 +74,13 @@ dur:<seconds>                  — accumulated tracked time in integer seconds
 
 **Example — timer stopped (entry complete):**
 ```
-(A) 2026-07-31 Draft motion for summary judgment +Smith @drafting dur:3600
+(A) 2026-07-31 Draft motion for summary judgment +Smith @drafting dur:3600 log:2026-07-31
 ```
+
+`log:` is what the timesheet attributes time to. A task created last week and
+tracked today carries today's `log:` date, so the daily/weekly views and the
+copy-narratives output bill it to the day the work happened. Lines without a
+`log:` (written by hand, or pre-dating the tag) fall back to the creation date.
 (Narrative = "Draft motion for summary judgment" — the task body with metadata stripped)
 
 **Example — resumed then stopped again:**
@@ -87,8 +94,9 @@ dur:<seconds>                  — accumulated tracked time in integer seconds
 - `start:` is **only present while a timer is actively running** on that task
 - `dur:` is a non-negative integer (seconds). Absent dur means 0 (no time tracked yet)
 - When timer is stopped: `start:` is removed; elapsed seconds added to `dur:`
+- On timer stop (and on manual time additions), a `log:<YYYY-MM-DD>` tag is set/replaced with the stop date; the timesheet groups on `log:` when present, else the creation date
 - Only **one task** can have a `start:` tag at a time (single-timer invariant)
-- The `parse_line` function in `todo.rs` is extended to recognize `start:` and `dur:` as known key:value pairs
+- The `parse_line` function in `todo.rs` is extended to recognize `start:`, `dur:`, and `log:` as known key:value pairs
 
 ### 3.3 Narrative = Task Body
 - When "copy narratives" is invoked, the narrative is the task's **body text** (`body_only()` — priority, dates, `+project`, `@context`, `key:value` tags all stripped)

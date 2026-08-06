@@ -213,11 +213,20 @@ impl App {
                 .enumerate()
                 .filter(|(_, t)| t.dur.is_some_and(|d| d > 0))
             {
-                let Some(ref cd) = t.created_date else {
+                let Some(cd) = t.created_date.as_deref() else {
                     continue;
                 };
-                let in_range =
-                    cd.as_str() >= range_start.as_str() && cd.as_str() <= range_end.as_str();
+                // Attribute time to the day it was actually tracked (`log:`)
+                // when the line carries a valid one, so work done on a later
+                // day than the task's creation shows up on the right day.
+                // Lines written before the log tag existed, entered by hand,
+                // or carrying an unparseable value fall back to the creation
+                // date — an invalid log must never make billable time vanish.
+                let work_date = match t.log.as_deref() {
+                    Some(l) if is_log_date(l) => l,
+                    _ => cd,
+                };
+                let in_range = work_date >= range_start.as_str() && work_date <= range_end.as_str();
                 if !in_range {
                     continue;
                 }
@@ -242,7 +251,7 @@ impl App {
                 };
                 let billable = t.bill.as_deref() != Some("n");
                 let entry = groups
-                    .entry((cd.clone(), key.clone(), billable))
+                    .entry((work_date.to_string(), key.clone(), billable))
                     .or_insert_with(|| (0, Vec::new(), Vec::new()));
                 entry.0 += t.dur.unwrap_or(0);
                 entry.1.push(body);
@@ -280,7 +289,16 @@ impl App {
         *self.timesheet.groups_cache.borrow_mut() = Some(entries.clone());
         entries
     }
+}
 
+/// True when `s` is a parseable `YYYY-MM-DD` date. Guards the timesheet
+/// against hand-typed `log:` garbage, which would otherwise put a
+/// non-comparable "date" on every entry and hide it from all ranges.
+fn is_log_date(s: &str) -> bool {
+    s.len() == 10 && chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").is_ok()
+}
+
+impl App {
     // ---- date navigation (thin wrappers: borrow checker needs App.today()) ----
 
     /// Shift the timesheet anchor by `delta` days (negative = backward).

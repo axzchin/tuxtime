@@ -19,6 +19,8 @@ pub mod outcome;
 #[cfg(test)]
 pub(crate) mod test_support;
 
+pub(crate) use mutations::rebuild_token_line;
+
 pub use archive::Archive;
 pub use history::History;
 pub use outcome::{
