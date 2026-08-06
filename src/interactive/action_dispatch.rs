@@ -18,75 +18,32 @@ use super::timesheet_handler::handle_timesheet_keys;
 // Top-level dispatch
 // ---------------------------------------------------------------------------
 
+/// Apply one [`Action`] to the app. This is a **single exhaustive match**:
+/// every `Action` variant has exactly one arm, and there is deliberately no
+/// `_ => {}` catch-all. Adding a variant to `Action` therefore fails to
+/// compile until it is routed here — the compiler enforces that no action is
+/// silently dropped.
 pub fn apply_action(app: &mut App, action: Action) {
+    // Archive view guard: redirect or block actions that can't touch the
+    // live list, then fall through to the shared exhaustive dispatch below.
     if app.view() == View::Archive && !apply_archive_action(app, action) {
         return;
     }
-    apply_cursor_actions(app, action);
-    apply_mutation_actions(app, action);
-    apply_overlay_actions(app, action);
-}
-
-// ---------------------------------------------------------------------------
-// Archive view guard
-// ---------------------------------------------------------------------------
-
-/// Returns `false` when the action was blocked (read-only flash).
-fn apply_archive_action(app: &mut App, action: Action) -> bool {
     match action {
-        Action::ToggleComplete => {
-            if let Some(idx) = app.cur_abs() {
-                app.unarchive(idx);
-            }
-            return false;
-        }
-        Action::Delete => {
-            if let Some(idx) = app.cur_abs() {
-                app.archive_delete(idx);
-            }
-            return false;
-        }
-        Action::BeginAdd
-        | Action::BeginEdit
-        | Action::BeginEditInsert
-        | Action::CyclePriority
-        | Action::ToggleVisual
-        | Action::ToggleSelected
-        | Action::BeginSearch
-        | Action::BeginPromptProject
-        | Action::BeginPromptContext
-        | Action::PickProject
-        | Action::PickContext
-        | Action::PickSavedFilter
-        | Action::SaveCurrentFilter
-        | Action::CycleSort
-        | Action::ToggleShowDone
-        | Action::ToggleShowFuture
-        | Action::Undo => {
-            app.flash("read-only in archive");
-            return false;
-        }
-        _ => {}
-    }
-    true
-}
-
-// ---------------------------------------------------------------------------
-// Cursor movement, view switching, pane toggles, quit
-// ---------------------------------------------------------------------------
-
-fn apply_cursor_actions(app: &mut App, action: Action) {
-    let len = app.visible_indices().len();
-    match action {
+        // ---- lifecycle / cursor / view ----------------------------------
         Action::Quit => {
             app.stop_timer_on_quit();
             app.nav.quit();
         }
-        Action::CursorDown => app.nav.move_down(len.saturating_sub(1)),
+        Action::CursorDown => {
+            app.nav.move_down(app.visible_indices().len().saturating_sub(1));
+        }
         Action::CursorUp => app.nav.move_up(),
         Action::CursorTop => app.nav.move_top(),
-        Action::CursorBottom => app.nav.move_bottom(len.saturating_sub(1)),
-        Action::HalfPageDown => app.nav.move_down_by(10, len),
+        Action::CursorBottom => {
+            app.nav.move_bottom(app.visible_indices().len().saturating_sub(1));
+        }
+        Action::HalfPageDown => app.nav.move_down_by(10, app.visible_indices().len()),
         Action::HalfPageUp => app.nav.move_up_by(10),
         Action::GoList => app.set_view(View::List),
         Action::ToggleArchiveView => {
@@ -156,16 +113,8 @@ fn apply_cursor_actions(app: &mut App, action: Action) {
             app.nav.enter_normal();
             app.session.last_timer_activity = std::time::Instant::now();
         }
-        _ => {}
-    }
-}
 
-// ---------------------------------------------------------------------------
-// Task mutations: complete, delete, priority, billable, archive, undo
-// ---------------------------------------------------------------------------
-
-fn apply_mutation_actions(app: &mut App, action: Action) {
-    match action {
+        // ---- task mutations ---------------------------------------------
         Action::ToggleComplete => {
             if app.nav.is_visual() && !app.selection.is_empty() {
                 app.complete_selected();
@@ -205,16 +154,8 @@ fn apply_mutation_actions(app: &mut App, action: Action) {
         Action::ToggleBillable => app.toggle_billable(),
         Action::QuickInterrupt => app.interrupt_timer(),
         Action::ToggleVisual => app.nav.toggle_visual(),
-        _ => {}
-    }
-}
 
-// ---------------------------------------------------------------------------
-// Mode transitions: insert, search, help, settings, palette, picker, timer
-// ---------------------------------------------------------------------------
-
-fn apply_overlay_actions(app: &mut App, action: Action) {
-    match action {
+        // ---- mode transitions / overlays --------------------------------
         Action::BeginAdd => {
             app.nav.set_mode(Mode::Insert);
             app.draft_clear();
@@ -325,8 +266,51 @@ fn apply_overlay_actions(app: &mut App, action: Action) {
         Action::CopyNarratives => app.flash("open the timesheet (V) to copy narratives"),
         Action::OpenNote => app.open_note_for_current(),
         Action::CreateOrOpenNote => app.create_or_open_note_for_current(),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Archive view guard
+// ---------------------------------------------------------------------------
+
+/// Returns `false` when the action was blocked (read-only flash).
+fn apply_archive_action(app: &mut App, action: Action) -> bool {
+    match action {
+        Action::ToggleComplete => {
+            if let Some(idx) = app.cur_abs() {
+                app.unarchive(idx);
+            }
+            return false;
+        }
+        Action::Delete => {
+            if let Some(idx) = app.cur_abs() {
+                app.archive_delete(idx);
+            }
+            return false;
+        }
+        Action::BeginAdd
+        | Action::BeginEdit
+        | Action::BeginEditInsert
+        | Action::CyclePriority
+        | Action::ToggleVisual
+        | Action::ToggleSelected
+        | Action::BeginSearch
+        | Action::BeginPromptProject
+        | Action::BeginPromptContext
+        | Action::PickProject
+        | Action::PickContext
+        | Action::PickSavedFilter
+        | Action::SaveCurrentFilter
+        | Action::CycleSort
+        | Action::ToggleShowDone
+        | Action::ToggleShowFuture
+        | Action::Undo => {
+            app.flash("read-only in archive");
+            return false;
+        }
         _ => {}
     }
+    true
 }
 
 // ---------------------------------------------------------------------------

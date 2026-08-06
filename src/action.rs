@@ -85,82 +85,132 @@ pub enum Action {
 }
 
 impl Action {
+    /// Every accepted `keybinds.toml` spelling for each action, including the
+    /// canonical snake_case name (first) and user-friendly aliases. Keeping
+    /// the names as data next to the enum (rather than a second hand-maintained
+    /// match) means the config interface can't silently drift from the set of
+    /// actions: adding an action is one enum arm + one registry row.
+    const NAMES: &'static [(&'static str, Self)] = &[
+        ("quit", Self::Quit),
+        ("cursor_down", Self::CursorDown),
+        ("cursor_up", Self::CursorUp),
+        ("cursor_top", Self::CursorTop),
+        ("cursor_bottom", Self::CursorBottom),
+        ("half_page_down", Self::HalfPageDown),
+        ("half_page_up", Self::HalfPageUp),
+        ("begin_add", Self::BeginAdd),
+        ("add", Self::BeginAdd),
+        ("begin_edit", Self::BeginEdit),
+        ("edit", Self::BeginEdit),
+        ("begin_edit_insert", Self::BeginEditInsert),
+        ("edit_insert", Self::BeginEditInsert),
+        ("toggle_complete", Self::ToggleComplete),
+        ("delete", Self::Delete),
+        ("reschedule", Self::Reschedule),
+        ("cycle_priority", Self::CyclePriority),
+        ("begin_search", Self::BeginSearch),
+        ("search", Self::BeginSearch),
+        ("open_help", Self::OpenHelp),
+        ("help", Self::OpenHelp),
+        ("open_settings", Self::OpenSettings),
+        ("settings", Self::OpenSettings),
+        ("open_command_palette", Self::OpenCommandPalette),
+        ("command_palette", Self::OpenCommandPalette),
+        ("undo", Self::Undo),
+        ("toggle_visual", Self::ToggleVisual),
+        ("toggle_selected", Self::ToggleSelected),
+        ("go_list", Self::GoList),
+        ("list", Self::GoList),
+        ("toggle_archive_view", Self::ToggleArchiveView),
+        ("archive_view", Self::ToggleArchiveView),
+        ("archive_completed", Self::ArchiveCompleted),
+        ("arm_f", Self::ArmF),
+        ("pick_project", Self::PickProject),
+        ("pick_context", Self::PickContext),
+        ("pick_saved_filter", Self::PickSavedFilter),
+        ("save_current_filter", Self::SaveCurrentFilter),
+        ("cycle_sort", Self::CycleSort),
+        ("begin_prompt_project", Self::BeginPromptProject),
+        ("prompt_project", Self::BeginPromptProject),
+        ("begin_prompt_context", Self::BeginPromptContext),
+        ("prompt_context", Self::BeginPromptContext),
+        ("toggle_left_pane", Self::ToggleLeftPane),
+        ("toggle_right_pane", Self::ToggleRightPane),
+        ("cycle_theme", Self::CycleTheme),
+        ("cycle_density", Self::CycleDensity),
+        ("toggle_line_num", Self::ToggleLineNum),
+        ("toggle_line_numbers", Self::ToggleLineNum),
+        ("toggle_show_done", Self::ToggleShowDone),
+        ("toggle_show_future", Self::ToggleShowFuture),
+        ("copy_line", Self::CopyLine),
+        ("copy_body", Self::CopyBody),
+        ("open_note", Self::OpenNote),
+        ("note", Self::OpenNote),
+        ("create_or_open_note", Self::CreateOrOpenNote),
+        ("create_note", Self::CreateOrOpenNote),
+        ("escape_stack", Self::EscapeStack),
+        ("escape", Self::EscapeStack),
+        ("open_share", Self::OpenShare),
+        ("share", Self::OpenShare),
+        ("open_theme_picker", Self::OpenThemePicker),
+        ("theme_picker", Self::OpenThemePicker),
+        ("change_week_start", Self::ChangeWeekStart),
+        ("timer_start_stop", Self::TimerStartStop),
+        ("timer", Self::TimerStartStop),
+        ("manual_time_entry", Self::ManualTimeEntry),
+        ("manual_entry", Self::ManualTimeEntry),
+        ("copy_narratives", Self::CopyNarratives),
+        ("copy_time", Self::CopyNarratives),
+        ("open_timesheet", Self::OpenTimesheet),
+        ("timesheet", Self::OpenTimesheet),
+        ("dismiss_nudge", Self::DismissNudge),
+        ("begin_session_from_current", Self::BeginSessionFromCurrent),
+        ("new_session", Self::BeginSessionFromCurrent),
+        ("session", Self::BeginSessionFromCurrent),
+        ("configure_idle_nudge", Self::ConfigureIdleNudge),
+        ("idle_nudge", Self::ConfigureIdleNudge),
+        ("configure_long_timer_nudge", Self::ConfigureLongTimerNudge),
+        ("long_timer_nudge", Self::ConfigureLongTimerNudge),
+        ("toggle_billable", Self::ToggleBillable),
+        ("billable", Self::ToggleBillable),
+        ("quick_interrupt", Self::QuickInterrupt),
+        ("interrupt", Self::QuickInterrupt),
+        ("open_project_manager", Self::OpenProjectManager),
+        ("project_manager", Self::OpenProjectManager),
+        ("manage_projects", Self::OpenProjectManager),
+    ];
+
     #[must_use]
     pub fn from_keybind_name(s: &str) -> Option<Self> {
         let normalized = s.trim().replace('-', "_").to_ascii_lowercase();
-        match normalized.as_str() {
-            "quit" => Some(Self::Quit),
-            "cursor_down" => Some(Self::CursorDown),
-            "cursor_up" => Some(Self::CursorUp),
-            "cursor_top" => Some(Self::CursorTop),
-            "cursor_bottom" => Some(Self::CursorBottom),
-            "half_page_down" => Some(Self::HalfPageDown),
-            "half_page_up" => Some(Self::HalfPageUp),
-            "begin_add" | "add" => Some(Self::BeginAdd),
-            "begin_edit" | "edit" => Some(Self::BeginEdit),
-            "begin_edit_insert" | "edit_insert" => Some(Self::BeginEditInsert),
-            "toggle_complete" => Some(Self::ToggleComplete),
-            "delete" => Some(Self::Delete),
-            "reschedule" => Some(Self::Reschedule),
-            "cycle_priority" => Some(Self::CyclePriority),
-            "begin_search" | "search" => Some(Self::BeginSearch),
-            "open_help" | "help" => Some(Self::OpenHelp),
-            "open_settings" | "settings" => Some(Self::OpenSettings),
-            "open_command_palette" | "command_palette" => Some(Self::OpenCommandPalette),
-            "undo" => Some(Self::Undo),
-            "toggle_visual" => Some(Self::ToggleVisual),
-            "toggle_selected" => Some(Self::ToggleSelected),
-            "go_list" | "list" => Some(Self::GoList),
-            "toggle_archive_view" | "archive_view" => Some(Self::ToggleArchiveView),
-            "archive_completed" => Some(Self::ArchiveCompleted),
-            "arm_f" => Some(Self::ArmF),
-            "pick_project" => Some(Self::PickProject),
-            "pick_context" => Some(Self::PickContext),
-            "pick_saved_filter" => Some(Self::PickSavedFilter),
-            "save_current_filter" => Some(Self::SaveCurrentFilter),
-            "cycle_sort" => Some(Self::CycleSort),
-            "begin_prompt_project" | "prompt_project" => Some(Self::BeginPromptProject),
-            "begin_prompt_context" | "prompt_context" => Some(Self::BeginPromptContext),
-            "toggle_left_pane" => Some(Self::ToggleLeftPane),
-            "toggle_right_pane" => Some(Self::ToggleRightPane),
-            "cycle_theme" => Some(Self::CycleTheme),
-            "cycle_density" => Some(Self::CycleDensity),
-            "toggle_line_num" | "toggle_line_numbers" => Some(Self::ToggleLineNum),
-            "toggle_show_done" => Some(Self::ToggleShowDone),
-            "toggle_show_future" => Some(Self::ToggleShowFuture),
-            "copy_line" => Some(Self::CopyLine),
-            "copy_body" => Some(Self::CopyBody),
-            "open_note" | "note" => Some(Self::OpenNote),
-            "create_or_open_note" | "create_note" => Some(Self::CreateOrOpenNote),
-            "escape_stack" | "escape" => Some(Self::EscapeStack),
-            "open_share" | "share" => Some(Self::OpenShare),
-            "open_theme_picker" | "theme_picker" => Some(Self::OpenThemePicker),
-            "change_week_start" => Some(Self::ChangeWeekStart),
-            "timer_start_stop" | "timer" => Some(Self::TimerStartStop),
-            "manual_time_entry" | "manual_entry" => Some(Self::ManualTimeEntry),
-            "copy_narratives" | "copy_time" => Some(Self::CopyNarratives),
-            "open_timesheet" | "timesheet" => Some(Self::OpenTimesheet),
-            "dismiss_nudge" => Some(Self::DismissNudge),
-            "begin_session_from_current" | "new_session" | "session" => {
-                Some(Self::BeginSessionFromCurrent)
-            }
-            "configure_idle_nudge" | "idle_nudge" => Some(Self::ConfigureIdleNudge),
-            "configure_long_timer_nudge" | "long_timer_nudge" => {
-                Some(Self::ConfigureLongTimerNudge)
-            }
-            "toggle_billable" | "billable" => Some(Self::ToggleBillable),
-            "quick_interrupt" | "interrupt" => Some(Self::QuickInterrupt),
-            "open_project_manager" | "project_manager" | "manage_projects" => {
-                Some(Self::OpenProjectManager)
-            }
-            _ => None,
-        }
+        Self::NAMES
+            .iter()
+            .find(|(name, _)| *name == normalized)
+            .map(|&(_, action)| action)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every registry row must round-trip through `from_keybind_name`, and no
+    /// two rows may share a spelling (the first match would silently win).
+    #[test]
+    fn keybind_registry_is_total_and_unique() {
+        let mut seen: std::collections::HashSet<&'static str> = std::collections::HashSet::new();
+        for &(name, action) in Action::NAMES {
+            assert!(
+                seen.insert(name),
+                "duplicate keybind name {name:?} for {action:?}"
+            );
+            assert_eq!(
+                Action::from_keybind_name(name),
+                Some(action),
+                "{name:?} must resolve back to {action:?}"
+            );
+        }
+    }
 
     #[test]
     fn reschedule_is_rebindable() {
