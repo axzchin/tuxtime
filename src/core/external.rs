@@ -10,8 +10,27 @@ impl Store {
     /// the inbox — draining is a separate, explicitly-invoked step (the TUI run
     /// loop and the CLI's mutating commands call [`Store::drain_inbox`]).
     pub fn reconcile(&mut self) -> Reconcile {
+        // Cheap gate: skip the full-file read when the file's (mtime, size)
+        // signature matches the last read or write. `reconcile` runs on every
+        // keystroke and every idle tick, so this turns a page-sized read into
+        // a single stat. The signature is only cached for outcomes that leave
+        // `last_disk` authoritative (Unchanged / Reloaded), so a read error
+        // never gets masked.
+        let sig = super::file_sig(&self.file_path);
+        // A missing file is only "unchanged" when we have nothing in memory
+        // either; if the file is gone but we hold content, it may have been
+        // deleted after we loaded it and we must read to learn that (the
+        // signature is only None-both-None before the first reconcile).
+        let unchanged = sig == self.last_meta && (sig.is_some() || self.last_disk.is_empty());
+        if unchanged {
+            return Reconcile::Unchanged;
+        }
         let read = std::fs::read_to_string(&self.file_path);
-        self.apply_external_state(read)
+        let outcome = self.apply_external_state(read);
+        if matches!(outcome, Reconcile::Unchanged | Reconcile::Reloaded) {
+            self.last_meta = sig;
+        }
+        outcome
     }
 
     /// Decide what to do with a read result for the todo file. `NotFound`
@@ -129,6 +148,7 @@ impl Store {
         match todo::write_atomic(&self.file_path, &body) {
             Ok(()) => {
                 self.last_disk = body;
+                self.last_meta = super::file_sig(&self.file_path);
             }
             Err(e) => {
                 // Roll back the in-memory append; leave staging for retry.
@@ -193,6 +213,64 @@ mod tests {
         assert_eq!(store.tasks().len(), 3);
         assert_eq!(store.tasks()[0].raw, "x");
         assert_eq!(store.reconcile(), Reconcile::Unchanged);
+    }
+
+    // ---- signature gate (no full-file read on every keystroke) ----
+
+    #[test]
+    fn reconcile_primes_signature_cache() {
+        let path = test_path();
+        std::fs::write(&path, "a\nb\n").unwrap();
+        let mut store = Store::open_sync(path.clone(), "a\nb\n".to_string(), "2026-05-06".into());
+        assert!(store.last_meta.is_none(), "signature starts unknown");
+        assert_eq!(store.reconcile(), Reconcile::Unchanged);
+        assert!(
+            store.last_meta.is_some(),
+            "a confirming read must cache the file signature"
+        );
+    }
+
+    #[test]
+    fn reconcile_detects_deletion_before_first_reconcile() {
+        // The gate must not treat a missing file as "unchanged" when the store
+        // was constructed with content: the file may have been deleted after
+        // we loaded it, and the old behavior (reload as empty) must survive.
+        let path = test_path();
+        std::fs::write(&path, "a\nb\n").unwrap();
+        let mut store = Store::open_sync(path.clone(), "a\nb\n".to_string(), "2026-05-06".into());
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(store.reconcile(), Reconcile::Reloaded);
+        assert!(store.tasks().is_empty());
+        // And the empty state is now cached: no repeated reload.
+        assert_eq!(store.reconcile(), Reconcile::Unchanged);
+    }
+
+    #[test]
+    fn reconcile_detects_deletion_and_reprimes() {
+        let path = test_path();
+        std::fs::write(&path, "a\nb\n").unwrap();
+        let mut store = Store::open_sync(path.clone(), "a\nb\n".to_string(), "2026-05-06".into());
+        assert_eq!(store.reconcile(), Reconcile::Unchanged); // prime the gate
+        std::fs::remove_file(&path).unwrap();
+        // A missing file must NOT be masked by the cached signature.
+        assert_eq!(store.reconcile(), Reconcile::Reloaded);
+        assert!(store.tasks().is_empty());
+        // The missing-file state is now cached too: no repeated reload.
+        assert_eq!(store.reconcile(), Reconcile::Unchanged);
+    }
+
+    #[test]
+    fn reconcile_rereads_when_signature_changes() {
+        let path = test_path();
+        std::fs::write(&path, "a\n").unwrap();
+        let mut store = Store::open_sync(path.clone(), "a\n".to_string(), "2026-05-06".into());
+        assert_eq!(store.reconcile(), Reconcile::Unchanged); // prime the gate
+        // Replace the file with a directory: the signature changes, so the
+        // gate must attempt a read, which now fails instead of silently
+        // reporting Unchanged.
+        std::fs::remove_file(&path).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        assert_eq!(store.reconcile(), Reconcile::ReadError);
     }
 
     #[test]

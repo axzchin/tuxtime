@@ -681,6 +681,7 @@ impl Store {
                 return RenameOutcome::Error(StoreError::ArchiveIo(e));
             }
             self.archive.last_disk = archive_body;
+            self.archive.last_meta = super::file_sig(&self.archive.path);
         }
         RenameOutcome::Renamed {
             old: old.to_string(),

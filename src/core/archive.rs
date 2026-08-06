@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
+use std::time::SystemTime;
 
 use super::Store;
 use super::outcome::{
@@ -17,6 +18,9 @@ pub struct Archive {
     pub(crate) tasks: Vec<Task>,
     pub(crate) path: PathBuf,
     pub(crate) last_disk: String,
+    /// Signature `(mtime, len)` of `done.txt` at the last read/write, so
+    /// [`Store::poll_archive`] can skip the full-file read on every tick.
+    pub(crate) last_meta: Option<(SystemTime, u64)>,
     pub(crate) loader: Option<Receiver<(String, Vec<Task>)>>,
 }
 
@@ -50,6 +54,7 @@ impl Archive {
             tasks: Vec::new(),
             path,
             last_disk: String::new(),
+            last_meta: None,
             loader: Some(rx),
         }
     }
@@ -70,6 +75,7 @@ impl Archive {
             tasks,
             path,
             last_disk: body,
+            last_meta: None,
             loader: None,
         }
     }
@@ -82,6 +88,7 @@ impl Archive {
             tasks,
             path,
             last_disk,
+            last_meta: None,
             loader: None,
         }
     }
@@ -131,6 +138,7 @@ impl Store {
         if body != self.archive.last_disk {
             self.archive.tasks = todo::parse_file(&body);
             self.archive.last_disk = body;
+            self.archive.last_meta = super::file_sig(&self.archive.path);
             self.archive.loader = None;
             return ArchiveRefresh::Reloaded;
         }
@@ -149,6 +157,10 @@ impl Store {
                     self.archive.last_disk = body;
                     self.archive.tasks = tasks;
                     self.archive.loader = None;
+                    // Don't trust the loader's read as the current signature:
+                    // the file may have changed between the thread's read and
+                    // now. Leave last_meta as-is (None at startup) so the next
+                    // poll re-reads once and primes the gate.
                     changed = true;
                 }
                 Err(TryRecvError::Empty) => return false,
@@ -158,8 +170,20 @@ impl Store {
             }
         }
         if !changed {
-            let read = std::fs::read_to_string(&self.archive.path);
-            changed = self.apply_archive_read(read);
+            // Same signature gate as `reconcile`: skip the read when done.txt
+            // hasn't changed since we last read or wrote it.
+            let sig = super::file_sig(&self.archive.path);
+            if sig != self.archive.last_meta {
+                let read = std::fs::read_to_string(&self.archive.path);
+                // Only treat the signature as current when the read actually
+                // succeeded — a transient error must not hide a coincident
+                // external edit from later polls.
+                let read_ok = read.is_ok();
+                changed = self.apply_archive_read(read);
+                if read_ok {
+                    self.archive.last_meta = sig;
+                }
+            }
         }
         changed
     }
@@ -220,6 +244,7 @@ impl Store {
         self.last_disk = remaining_body;
         self.archive.tasks = todo::parse_file(&combined);
         self.archive.last_disk = combined;
+        self.archive.last_meta = super::file_sig(&self.archive.path);
         self.archive.loader = None;
         ArchiveOutcome::Archived { count }
     }
@@ -272,6 +297,7 @@ impl Store {
         self.last_disk = remaining_body;
         self.archive.tasks = todo::parse_file(&combined);
         self.archive.last_disk = combined;
+        self.archive.last_meta = super::file_sig(&self.archive.path);
         self.archive.loader = None;
         ArchiveOneOutcome::Archived
     }
@@ -309,6 +335,7 @@ impl Store {
         }
         self.archive.tasks = new_archive;
         self.archive.last_disk = archive_body;
+        self.archive.last_meta = super::file_sig(&self.archive.path);
         self.push_history();
         self.tasks.push(task);
         if let Err(e) = self.persist() {
@@ -343,6 +370,7 @@ impl Store {
         }
         self.archive.tasks = new_archive;
         self.archive.last_disk = archive_body;
+        self.archive.last_meta = super::file_sig(&self.archive.path);
         ArchiveDeleteOutcome::Deleted
     }
 
@@ -351,6 +379,7 @@ impl Store {
         match todo::write_atomic(&self.file_path, &body) {
             Ok(()) => {
                 self.last_disk = body;
+                self.last_meta = super::file_sig(&self.file_path);
                 Ok(())
             }
             Err(e) => Err(StoreError::Write(e)),

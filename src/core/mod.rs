@@ -4,6 +4,7 @@
 //! (`App` wraps a `Store`) and the CLI (`cmd`) drive this type.
 
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use chrono::NaiveDateTime;
 
@@ -41,6 +42,11 @@ pub struct Store {
     /// Snapshot of the file body the last time we read or wrote it; used by
     /// `reconcile` to detect external edits.
     pub(crate) last_disk: String,
+    /// Signature `(mtime, len)` of the todo file the last time we read it or
+    /// wrote it. Lets [`Store::reconcile`] skip the full-file read on every
+    /// keystroke when the file hasn't changed. `None` means "unknown — read"
+    /// (also used to represent a missing file).
+    pub(crate) last_meta: Option<(SystemTime, u64)>,
     pub(crate) today: String,
     /// State of the currently running timer, if any. `None` means no timer
     /// is active. Re-derived from the task list (whichever task carries a
@@ -58,6 +64,16 @@ pub struct Store {
 pub struct TimerState {
     pub task_abs: usize,
     pub started_at: NaiveDateTime,
+}
+
+/// Cheap file-change signature: `(mtime, size)`. `None` when the file is
+/// missing or its metadata can't be read (in which case the caller should
+/// read anyway to learn what's going on). Comparing signatures avoids a
+/// full-file read on every keystroke/tick; on filesystems with nanosecond
+/// mtime resolution an unchanged signature means unchanged content.
+pub(crate) fn file_sig(path: &Path) -> Option<(SystemTime, u64)> {
+    let m = std::fs::metadata(path).ok()?;
+    Some((m.modified().ok()?, m.len()))
 }
 
 impl Store {
@@ -111,6 +127,7 @@ impl Store {
             archive,
             file_path,
             last_disk: body,
+            last_meta: None,
             today,
             active_timer: None,
         };
