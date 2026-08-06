@@ -68,8 +68,8 @@ fn main() -> std::io::Result<()> {
     // the ranker surfaces start-of-label hits first, then word-boundary,
     // then mid-word.
     let mut app = make();
-    app.command_palette.open(Mode::Normal);
-    app.nav.mode = Mode::CommandPalette;
+    app.command_palette.open();
+    app.nav.push_mode(Mode::CommandPalette);
     app.draft_set("arch".to_string());
     app.command_palette.refresh("arch");
     save(&app, &out.join("command-palette.svg"))?;

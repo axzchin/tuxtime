@@ -1171,8 +1171,9 @@ fn long_timer_nudge_prompt_prefills_default_minutes() {
 #[test]
 fn idle_nudge_enter_sets_new_threshold() {
     let mut app = build_app();
-    app.nav.mode = Mode::PromptIdleNudge;
-    app.nav.nudge_prompt_return = Some(Mode::Settings);
+    // Settings → push the nudge prompt → Enter must pop back to Settings.
+    app.nav.mode = Mode::Settings;
+    app.nav.push_mode(Mode::PromptIdleNudge);
     app.draft_set_insert("30".to_string());
     handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert_eq!(app.nav.mode, Mode::Settings);
@@ -1182,8 +1183,8 @@ fn idle_nudge_enter_sets_new_threshold() {
 #[test]
 fn idle_nudge_enter_rejects_zero_minutes() {
     let mut app = build_app();
-    app.nav.mode = Mode::PromptIdleNudge;
-    app.nav.nudge_prompt_return = Some(Mode::Settings);
+    app.nav.mode = Mode::Settings;
+    app.nav.push_mode(Mode::PromptIdleNudge);
     app.draft_set_insert("0".to_string());
     handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert_eq!(app.nav.mode, Mode::Settings);
@@ -1194,8 +1195,8 @@ fn idle_nudge_enter_rejects_zero_minutes() {
 #[test]
 fn long_timer_nudge_enter_sets_new_threshold() {
     let mut app = build_app();
-    app.nav.mode = Mode::PromptLongTimerNudge;
-    app.nav.nudge_prompt_return = Some(Mode::Settings);
+    app.nav.mode = Mode::Settings;
+    app.nav.push_mode(Mode::PromptLongTimerNudge);
     app.draft_set_insert("60".to_string());
     handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert_eq!(app.nav.mode, Mode::Settings);
@@ -1266,8 +1267,8 @@ fn idle_nudge_fires_in_normal_mode() {
 #[test]
 fn idle_nudge_prompt_esc_returns_to_settings() {
     let mut app = build_app();
-    app.nav.mode = Mode::PromptIdleNudge;
-    app.nav.nudge_prompt_return = Some(Mode::Settings);
+    app.nav.mode = Mode::Settings;
+    app.nav.push_mode(Mode::PromptIdleNudge);
     handle_prompt(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     assert_eq!(app.nav.mode, Mode::Settings);
     assert!(app.draft.text().is_empty());
@@ -1488,4 +1489,63 @@ fn manage_projects_s_cycles_sort() {
         KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE),
     );
     assert_ne!(app.project_manager.project_sort, original);
+}
+
+/// Regression: `/` in the project manager pushes Search over ManageProjects
+/// (replacing the old `pre_search_mode` Option field), so Esc pops straight
+/// back — the search never "loses" its caller.
+#[test]
+fn manage_projects_search_esc_returns_to_manage_projects() {
+    let mut app = build_app();
+    app.nav.mode = Mode::ManageProjects;
+    handle_manage_projects(&mut app, key('/'));
+    assert_eq!(app.nav.mode, Mode::Search, "`/` must open search");
+    assert_eq!(
+        app.nav.peek_under(),
+        Some(Mode::ManageProjects),
+        "search must be stacked over ManageProjects"
+    );
+    handle_search(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(app.nav.mode, Mode::ManageProjects);
+}
+
+/// The command palette pushes over the current mode and pops back to it,
+/// replacing the palette's old hand-rolled `prior_mode` field.
+#[test]
+fn palette_esc_restores_underlying_mode() {
+    let mut app = build_app();
+    app.nav.enter_visual();
+    apply_action(&mut app, Action::OpenCommandPalette);
+    assert_eq!(app.nav.mode, Mode::CommandPalette);
+    assert_eq!(
+        app.nav.peek_under(),
+        Some(Mode::Visual),
+        "palette must remember it opened over Visual"
+    );
+    crate::interactive::overlays::handle_command_palette(
+        &mut app,
+        KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+    );
+    assert_eq!(app.nav.mode, Mode::Visual);
+    assert!(app.nav.peek_under().is_none(), "stack must be empty");
+}
+
+/// A nudge prompt launched from the command palette pops back to the mode
+/// the palette returned to — not hard-coded to Normal.
+#[test]
+fn palette_launched_nudge_prompt_pops_back_to_caller() {
+    let mut app = build_app();
+    // Palette opened over Settings; Enter pops the palette back to Settings
+    // *before* running the chosen action (mirroring handle_command_palette).
+    app.nav.mode = Mode::Settings;
+    app.nav.push_mode(Mode::CommandPalette);
+    app.nav.pop_mode();
+    apply_action(&mut app, Action::ConfigureIdleNudge);
+    assert_eq!(app.nav.mode, Mode::PromptIdleNudge);
+    handle_prompt(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(
+        app.nav.mode,
+        Mode::Settings,
+        "nudge prompt must return to the mode the palette returned to"
+    );
 }

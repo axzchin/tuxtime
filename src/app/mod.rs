@@ -310,10 +310,12 @@ impl App {
     /// open, the underlying list/sidebars should keep rendering as if the
     /// user were still in the mode they came from — otherwise opening the
     /// palette mid-Visual hides the multi-select checkboxes and similar
-    /// mode-driven affordances.
+    /// mode-driven affordances. The palette remembers its caller via the
+    /// navigation mode stack (`push_mode`), so `effective_mode` reads the
+    /// mode beneath it.
     pub fn effective_mode(&self) -> Mode {
         match self.nav.mode() {
-            Mode::CommandPalette => self.command_palette.prior().unwrap_or(self.nav.mode()),
+            Mode::CommandPalette => self.nav.peek_under().unwrap_or(self.nav.mode()),
             m => m,
         }
     }

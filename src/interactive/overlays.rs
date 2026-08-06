@@ -51,19 +51,17 @@ pub(crate) fn handle_share(app: &mut App, _key: KeyEvent) {
 // ---------------------------------------------------------------------------
 
 pub(crate) fn handle_search(app: &mut App, key: KeyEvent) {
-    let return_mode = app.nav.pre_search_mode.take().unwrap_or(Mode::Normal);
     match key.code {
         KeyCode::Esc => {
-            app.nav.set_mode(return_mode);
+            app.nav.pop_mode();
             app.draft_clear();
             app.clear_search();
         }
         KeyCode::Enter => {
-            app.nav.set_mode(return_mode);
+            app.nav.pop_mode();
             app.nav.move_top();
         }
         _ => {
-            app.nav.pre_search_mode = Some(return_mode);
             if apply_to_draft(app, key) == DraftEffect::TextChanged {
                 app.set_search(app.draft.text().to_string());
             }
@@ -87,15 +85,15 @@ pub(crate) fn handle_settings(app: &mut App, key: KeyEvent) {
             let mins = app.idle_nudge_seconds() / 60;
             app.draft_clear();
             app.draft_set_insert(mins.to_string());
-            app.nav.nudge_prompt_return = Some(Mode::Settings);
-            app.nav.set_mode(Mode::PromptIdleNudge);
+            // Open the prompt over Settings so Esc/Enter returns to Settings.
+            app.nav.push_mode(Mode::PromptIdleNudge);
         }
         KeyCode::Char('l') => {
             let mins = app.long_timer_nudge_seconds() / 60;
             app.draft_clear();
             app.draft_set_insert(mins.to_string());
-            app.nav.nudge_prompt_return = Some(Mode::Settings);
-            app.nav.set_mode(Mode::PromptLongTimerNudge);
+            // Open the prompt over Settings so Esc/Enter returns to Settings.
+            app.nav.push_mode(Mode::PromptLongTimerNudge);
         }
         _ => {}
     }
@@ -133,13 +131,13 @@ pub(crate) fn handle_command_palette(app: &mut App, key: KeyEvent) {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
     match key.code {
         KeyCode::Esc => {
-            app.nav.set_mode(app.command_palette.take_prior());
+            app.nav.pop_mode();
             app.draft_clear();
             return;
         }
         KeyCode::Enter => {
             let chosen = app.command_palette.current_action();
-            app.nav.set_mode(app.command_palette.take_prior());
+            app.nav.pop_mode();
             app.draft_clear();
             if let Some(action) = chosen {
                 apply_action(app, action);
@@ -226,7 +224,9 @@ pub(crate) fn handle_prompt(app: &mut App, key: KeyEvent) {
                 app.nav.mode(),
                 Mode::PromptIdleNudge | Mode::PromptLongTimerNudge
             ) {
-                app.nav.nudge_prompt_return.take().unwrap_or(Mode::Normal)
+                // Entered with push_mode (Settings or the mode the command
+                // palette returned to), so pop restores the caller.
+                app.nav.pop_mode()
             } else if app.nav.mode() == Mode::PromptRenameProject {
                 Mode::ManageProjects
             } else {
@@ -245,7 +245,9 @@ pub(crate) fn handle_prompt(app: &mut App, key: KeyEvent) {
             );
             let is_rename = prev_mode == Mode::PromptRenameProject;
             let return_mode = if is_nudge {
-                app.nav.nudge_prompt_return.take().unwrap_or(Mode::Normal)
+                // Entered with push_mode (Settings or the mode the command
+                // palette returned to), so pop restores the caller.
+                app.nav.pop_mode()
             } else if is_rename {
                 Mode::ManageProjects
             } else {
@@ -326,9 +328,9 @@ pub(crate) fn handle_manage_projects(app: &mut App, key: KeyEvent) {
             app.cycle_project_sort();
         }
         KeyCode::Char('/') => {
-            app.nav.pre_search_mode = Some(Mode::ManageProjects);
+            // Push search over ManageProjects so Esc/Enter pops straight back.
             app.draft_clear();
-            app.nav.set_mode(Mode::Search);
+            app.nav.push_mode(Mode::Search);
         }
         _ => {}
     }

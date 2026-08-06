@@ -25,17 +25,13 @@ pub struct Navigation {
     /// renderer can keep the cursor row visible without taking `&mut self`.
     pub view_scroll: ViewMap<Cell<u16>>,
     pub should_quit: bool,
-    /// The mode to return to when Search is dismissed (Enter/Esc). Set by
-    /// overlays like `ManageProjects` that enter Search for inline filtering.
-    /// `None` means the caller didn't override — `handle_search` falls back
-    /// to [`Mode::Normal`].
-    pub pre_search_mode: Option<Mode>,
-    /// The mode to return to when a nudge prompt (`PromptIdleNudge` /
-    /// `PromptLongTimerNudge`) completes via Enter or Esc. Set to
-    /// `Some(Mode::Settings)` by `handle_settings` (the primary entry
-    /// point); left as `None` when triggered from the command palette,
-    /// so `handle_prompt` falls back to `Mode::Normal`.
-    pub nudge_prompt_return: Option<Mode>,
+    /// Return-path stack for modal overlays. [`push_mode`](Self::push_mode)
+    /// saves the current mode and enters a new one; [`pop_mode`](Self::pop_mode)
+    /// restores the most recently saved mode (falling back to [`Mode::Normal`]
+    /// on an empty stack). Replaces the hand-rolled `pre_search_mode` /
+    /// `nudge_prompt_return` `Option<Mode>` fields — overlays no longer
+    /// reimplement "where do I go back to" with bespoke fields.
+    mode_stack: Vec<Mode>,
 }
 
 impl Navigation {
@@ -48,8 +44,7 @@ impl Navigation {
             view_cursor: ViewMap::default(),
             view_scroll: ViewMap::default(),
             should_quit: false,
-            pre_search_mode: None,
-            nudge_prompt_return: None,
+            mode_stack: Vec::new(),
         }
     }
 
@@ -89,6 +84,31 @@ impl Navigation {
     /// common transitions; use this for programmatic mode assignment.
     pub fn set_mode(&mut self, mode: Mode) {
         self.mode = mode;
+    }
+
+    /// Enter a modal overlay, remembering the current mode so `pop_mode` can
+    /// restore it on dismissal. The stack replaces bespoke `Option<Mode>`
+    /// return-path fields: any overlay that returns to its caller opens with
+    /// `push_mode` and closes with `pop_mode`.
+    pub fn push_mode(&mut self, mode: Mode) {
+        self.mode_stack.push(self.mode);
+        self.mode = mode;
+    }
+
+    /// Leave a modal overlay entered with [`push_mode`](Self::push_mode),
+    /// restoring the saved mode (or [`Mode::Normal`] on an empty stack).
+    pub fn pop_mode(&mut self) -> Mode {
+        self.mode = self.mode_stack.pop().unwrap_or(Mode::Normal);
+        self.mode
+    }
+
+    /// The mode beneath the current overlay, if the overlay was entered with
+    /// [`push_mode`](Self::push_mode). The command palette uses this to keep
+    /// rendering the underlying UI in the mode it came from (e.g. Visual
+    /// while the palette overlays it).
+    #[must_use]
+    pub fn peek_under(&self) -> Option<Mode> {
+        self.mode_stack.last().copied()
     }
 
     /// Transition to Normal mode.

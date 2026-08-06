@@ -2,7 +2,6 @@
 //! human-readable label and its current keybinding, then filters by fuzzy
 //! subsequence match against the label. Reuses `search::subseq_match_ci` so
 //! the matching semantics stay identical to the `/` task search.
-use super::types::Mode;
 use crate::action::Action;
 use crate::search::subseq_match_ci;
 
@@ -275,12 +274,6 @@ pub struct CommandPaletteState {
     /// edits the search text so the highlight doesn't get stranded past the
     /// new result count.
     pub cursor: usize,
-    /// Mode the user was in when they opened the palette. Restored on close
-    /// so that opening the palette from Visual mode (with a selection) and
-    /// cancelling — or running a visual-aware action like `ToggleComplete` —
-    /// keeps the selection meaningful instead of silently dropping into
-    /// Normal.
-    prior_mode: Option<Mode>,
     /// Cached filter inputs and outputs. `refresh` recomputes only when the
     /// needle changes, so multiple call sites (Enter, Up/Down, render) can
     /// read `hits()` per frame without re-running the match each time.
@@ -289,28 +282,14 @@ pub struct CommandPaletteState {
 }
 
 impl CommandPaletteState {
-    /// Snapshot the mode the palette is being opened from, reset the
-    /// highlight, and seed the cache with the unfiltered list so the first
-    /// frame doesn't have to fall through `refresh`.
-    pub fn open(&mut self, prior: Mode) {
+    /// Reset the highlight and seed the cache with the unfiltered list so
+    /// the first frame doesn't have to fall through `refresh`. The mode the
+    /// palette was opened from is tracked by `Navigation`'s mode stack
+    /// (`push_mode` / `pop_mode`), not a bespoke field here.
+    pub fn open(&mut self) {
         self.cursor = 0;
-        self.prior_mode = Some(prior);
         self.cached_needle.clear();
         self.cached_hits = filtered("");
-    }
-
-    /// Consume the snapshot taken in `open`. Defaults to `Normal` if the
-    /// palette was somehow closed without a matching open — keeps the close
-    /// path total instead of panicking.
-    pub fn take_prior(&mut self) -> Mode {
-        self.prior_mode.take().unwrap_or(Mode::Normal)
-    }
-
-    /// Read the snapshot without consuming it. Renderers use this to keep
-    /// the underlying UI looking the same while the palette overlay is open.
-    #[must_use]
-    pub fn prior(&self) -> Option<Mode> {
-        self.prior_mode
     }
 
     /// Currently visible hits, in rank order. Computed at most once per

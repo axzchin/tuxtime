@@ -309,16 +309,16 @@ fn settings_overlay() {
 #[test]
 fn command_palette_unfiltered() {
     let mut app = make_app();
-    app.command_palette.open(Mode::Normal);
-    app.nav.mode = Mode::CommandPalette;
+    app.command_palette.open();
+    app.nav.push_mode(Mode::CommandPalette);
     snapshot_app("command_palette_unfiltered", &app);
 }
 
 #[test]
 fn command_palette_filtered() {
     let mut app = make_app();
-    app.command_palette.open(Mode::Normal);
-    app.nav.mode = Mode::CommandPalette;
+    app.command_palette.open();
+    app.nav.push_mode(Mode::CommandPalette);
     app.draft_set("arch".to_string());
     app.command_palette.refresh("arch");
     snapshot_app("command_palette_filtered", &app);
@@ -332,8 +332,9 @@ fn command_palette_preserves_visual_selection() {
     app.nav.mode = Mode::Visual;
     app.selection.toggle(0);
     app.selection.toggle(1);
-    app.command_palette.open(Mode::Visual);
-    app.nav.mode = Mode::CommandPalette;
+    app.command_palette.open();
+    // Push over Visual so the palette's peek_under keeps the tick marks visible.
+    app.nav.push_mode(Mode::CommandPalette);
     snapshot_app("command_palette_preserves_visual_selection", &app);
 }
 

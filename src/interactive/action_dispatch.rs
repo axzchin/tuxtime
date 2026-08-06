@@ -36,12 +36,14 @@ pub fn apply_action(app: &mut App, action: Action) {
             app.nav.quit();
         }
         Action::CursorDown => {
-            app.nav.move_down(app.visible_indices().len().saturating_sub(1));
+            app.nav
+                .move_down(app.visible_indices().len().saturating_sub(1));
         }
         Action::CursorUp => app.nav.move_up(),
         Action::CursorTop => app.nav.move_top(),
         Action::CursorBottom => {
-            app.nav.move_bottom(app.visible_indices().len().saturating_sub(1));
+            app.nav
+                .move_bottom(app.visible_indices().len().saturating_sub(1));
         }
         Action::HalfPageDown => app.nav.move_down_by(10, app.visible_indices().len()),
         Action::HalfPageUp => app.nav.move_up_by(10),
@@ -191,16 +193,15 @@ pub fn apply_action(app: &mut App, action: Action) {
             }
         }
         Action::BeginSearch => {
-            app.nav.set_mode(Mode::Search);
+            app.nav.push_mode(Mode::Search);
             app.draft_clear();
             app.clear_search();
         }
         Action::OpenHelp => app.nav.set_mode(Mode::Help),
         Action::OpenSettings => app.nav.set_mode(Mode::Settings),
         Action::OpenCommandPalette => {
-            let prior = app.nav.mode();
-            app.command_palette.open(prior);
-            app.nav.set_mode(Mode::CommandPalette);
+            app.command_palette.open();
+            app.nav.push_mode(Mode::CommandPalette);
             app.draft_clear();
         }
         Action::OpenThemePicker => {
@@ -229,13 +230,15 @@ pub fn apply_action(app: &mut App, action: Action) {
             let mins = app.idle_nudge_seconds() / 60;
             app.draft_clear();
             app.draft_set_insert(mins.to_string());
-            app.nav.set_mode(Mode::PromptIdleNudge);
+            // Push so the prompt pops back to the mode the palette returned to.
+            app.nav.push_mode(Mode::PromptIdleNudge);
         }
         Action::ConfigureLongTimerNudge => {
             let mins = app.long_timer_nudge_seconds() / 60;
             app.draft_clear();
             app.draft_set_insert(mins.to_string());
-            app.nav.set_mode(Mode::PromptLongTimerNudge);
+            // Push so the prompt pops back to the mode the palette returned to.
+            app.nav.push_mode(Mode::PromptLongTimerNudge);
         }
         Action::OpenShare => match app.ensure_share_started() {
             Ok(_) => app.nav.set_mode(Mode::Share),
