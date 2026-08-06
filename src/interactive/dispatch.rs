@@ -6,12 +6,12 @@
 //! 2. adding one arm to [`ModeDispatcher::dispatch`],
 //! 3. (for new UI) a status-bar label in `ui::status`.
 //!
-//! The event loop in `main::run` delegates every keypress here; this module
+//! The binary's event loop delegates every keypress here; this module
 //! never touches the store directly, only forwards to the per-mode handlers.
 
+use crate::app::{App, Mode};
+use crate::keybinds::KeyBindings;
 use ratatui::crossterm::event::KeyEvent;
-use tuxtime::app::{App, Mode};
-use tuxtime::keybinds::KeyBindings;
 
 use super::action_dispatch::handle_normal;
 use super::insert::handle_insert;
@@ -24,18 +24,19 @@ use super::overlays::{
 /// Owns the keybindings and routes each keypress to the handler for the
 /// active mode. `handle_normal` needs the bindings; the overlay handlers
 /// ignore them.
-pub(crate) struct ModeDispatcher<'a> {
+pub struct ModeDispatcher<'a> {
     keybinds: &'a KeyBindings,
 }
 
 impl<'a> ModeDispatcher<'a> {
-    pub(crate) fn new(keybinds: &'a KeyBindings) -> Self {
+    #[must_use]
+    pub fn new(keybinds: &'a KeyBindings) -> Self {
         Self { keybinds }
     }
 
     /// Route one keypress to the handler for `app.nav.mode()`. The caller is
     /// responsible for triggering a redraw after the call.
-    pub(crate) fn dispatch(&self, app: &mut App, key: KeyEvent) {
+    pub fn dispatch(&self, app: &mut App, key: KeyEvent) {
         // Detect external edits before processing the key. On detection the
         // file is reloaded, the keystroke is consumed (re-press to act on
         // the new state), and the per-mutator checks become no-ops downstream.

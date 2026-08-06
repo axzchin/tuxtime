@@ -1,9 +1,12 @@
 #![allow(clippy::unwrap_used)]
 
 use super::*;
+use crate::action::Action;
+use crate::app::{App, Mode, View};
+use crate::config::Config;
+use crate::keybinds::KeyBindings;
 use chrono::NaiveDate;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use tuxtime::config::Config;
 
 fn key(c: char) -> KeyEvent {
     KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)
@@ -236,15 +239,15 @@ fn timesheet_sort_cycles_modes() {
 
     assert_eq!(
         app.timesheet.sort,
-        tuxtime::app::TimesheetSort::ProjectActivity
+        crate::app::TimesheetSort::ProjectActivity
     );
     handle_timesheet_keys(&mut app, key('s'));
-    assert_eq!(app.timesheet.sort, tuxtime::app::TimesheetSort::Date);
+    assert_eq!(app.timesheet.sort, crate::app::TimesheetSort::Date);
     assert_eq!(app.timesheet.cursor, 0, "sort change resets cursor");
     assert!(app.flash_active().is_some_and(|m| m.contains("by date")));
 
     handle_timesheet_keys(&mut app, key('s'));
-    assert_eq!(app.timesheet.sort, tuxtime::app::TimesheetSort::Duration);
+    assert_eq!(app.timesheet.sort, crate::app::TimesheetSort::Duration);
     assert!(
         app.flash_active()
             .is_some_and(|m| m.contains("by duration"))
@@ -253,7 +256,7 @@ fn timesheet_sort_cycles_modes() {
     handle_timesheet_keys(&mut app, key('s'));
     assert_eq!(
         app.timesheet.sort,
-        tuxtime::app::TimesheetSort::ProjectActivity
+        crate::app::TimesheetSort::ProjectActivity
     );
     assert!(app.flash_active().is_some_and(|m| m.contains("by project")));
 }
@@ -262,7 +265,7 @@ fn timesheet_sort_cycles_modes() {
 fn build_timesheet_groups_sorts_by_project() {
     let mut app = build_timesheet_app();
     app.set_view(View::Timesheet);
-    app.timesheet.sort = tuxtime::app::TimesheetSort::ProjectActivity;
+    app.timesheet.sort = crate::app::TimesheetSort::ProjectActivity;
     let groups = app.build_timesheet_groups();
     assert!(!groups.is_empty());
     // ProjectActivity sort: keys should be in lexicographic order.
@@ -275,7 +278,7 @@ fn build_timesheet_groups_sorts_by_project() {
 fn build_timesheet_groups_sorts_by_duration() {
     let mut app = build_timesheet_app();
     app.set_view(View::Timesheet);
-    app.timesheet.sort = tuxtime::app::TimesheetSort::Duration;
+    app.timesheet.sort = crate::app::TimesheetSort::Duration;
     let groups = app.build_timesheet_groups();
     // Duration sort: descending by total_secs.
     for w in groups.windows(2) {
@@ -288,7 +291,7 @@ fn build_timesheet_groups_sorts_by_date() {
     let mut app = build_timesheet_app();
     app.set_view(View::Timesheet);
     app.timesheet.weekly = true; // need weekly to see both dates
-    app.timesheet.sort = tuxtime::app::TimesheetSort::Date;
+    app.timesheet.sort = crate::app::TimesheetSort::Date;
     let groups = app.build_timesheet_groups();
     assert!(groups.len() >= 2, "weekly must show at least 2 date groups");
     // Date sort: entries ordered by date then key.
@@ -366,8 +369,8 @@ fn build_timesheet_groups_separates_billable_and_dnb() {
     // (bill:n tag is stripped from body).
     assert_eq!(billable_group.narratives, vec!["Billable work"]);
     assert_eq!(dnb_group.narratives, vec!["DNB work"]);
-    let billable_str = tuxtime::app::format_billable(billable_group.total_secs);
-    let dnb_str = tuxtime::app::format_billable(dnb_group.total_secs);
+    let billable_str = crate::app::format_billable(billable_group.total_secs);
+    let dnb_str = crate::app::format_billable(dnb_group.total_secs);
     assert_eq!(billable_str, "0.1h");
     assert_eq!(dnb_str, "0.1h");
     // The sum of per-group tenths (from format_billable_tenths) should be 0.2h.
@@ -375,7 +378,7 @@ fn build_timesheet_groups_separates_billable_and_dnb() {
     let dnb_tenths = dnb_group.total_secs.div_ceil(360);
     assert_eq!(billable_tenths, 1);
     assert_eq!(dnb_tenths, 1);
-    let total_tenths_str = tuxtime::app::format_billable_tenths(billable_tenths + dnb_tenths);
+    let total_tenths_str = crate::app::format_billable_tenths(billable_tenths + dnb_tenths);
     assert_eq!(total_tenths_str, "0.2h");
 }
 
@@ -1388,7 +1391,7 @@ fn timesheet_archive_invalidates_groups_cache() {
         alpha_entry
             .task_indices
             .iter()
-            .all(|r| matches!(r, tuxtime::app::TimesheetTaskRef::Archived(_))),
+            .all(|r| matches!(r, crate::app::TimesheetTaskRef::Archived(_))),
         "archived task ref must be Archived, not Active"
     );
 }
@@ -1418,7 +1421,7 @@ fn timesheet_unarchive_invalidates_groups_cache() {
         alpha_entry
             .task_indices
             .iter()
-            .all(|r| matches!(r, tuxtime::app::TimesheetTaskRef::Archived(_))),
+            .all(|r| matches!(r, crate::app::TimesheetTaskRef::Archived(_))),
         "archived task ref must be Archived"
     );
 
@@ -1437,7 +1440,7 @@ fn timesheet_unarchive_invalidates_groups_cache() {
         alpha_unarchived
             .task_indices
             .iter()
-            .all(|r| matches!(r, tuxtime::app::TimesheetTaskRef::Active(_))),
+            .all(|r| matches!(r, crate::app::TimesheetTaskRef::Active(_))),
         "unarchived task ref must be Active, not Archived"
     );
 }

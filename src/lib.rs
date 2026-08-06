@@ -9,6 +9,7 @@ pub mod config;
 pub mod config_watcher;
 pub mod core;
 pub(crate) mod inbox;
+pub mod interactive;
 pub mod keybinds;
 pub(crate) mod nl;
 pub(crate) mod note;

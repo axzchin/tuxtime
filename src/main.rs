@@ -10,52 +10,15 @@ use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, Ke
 
 use std::io::Write;
 
-#[cfg(test)]
-use tuxtime::action::Action;
-#[cfg(test)]
-use tuxtime::app::View;
 use tuxtime::app::{App, Mode};
 use tuxtime::cli;
 use tuxtime::config::Config;
 use tuxtime::config_watcher;
+use tuxtime::interactive::{ModeDispatcher, apply_action, resolve_builtin_single_key};
 use tuxtime::keybinds::KeyBindings;
 use tuxtime::theme;
 use tuxtime::ui::hyperlinks;
 use tuxtime::{ui, update};
-
-mod insert;
-pub(crate) use insert::{DraftEffect, apply_to_draft};
-#[cfg(test)]
-pub(crate) use insert::{EditAction, resolve_edit_key};
-
-mod key_resolve;
-use key_resolve::resolve_builtin_single_key;
-#[cfg(test)]
-pub(crate) use key_resolve::resolve_normal_key;
-
-mod action_dispatch;
-pub(crate) use action_dispatch::apply_action;
-
-mod dispatch;
-use dispatch::ModeDispatcher;
-
-mod overlays;
-pub(crate) use overlays::handle_autocomplete_keys;
-
-mod timesheet_handler;
-#[cfg(test)]
-pub(crate) use timesheet_handler::handle_timesheet_keys;
-
-// The main_tests.rs integration tests drive handlers directly; re-export the
-// handler entry points so the test module can call them without reaching
-// into private modules.
-#[cfg(test)]
-pub(crate) use insert::handle_insert;
-#[cfg(test)]
-pub(crate) use overlays::{
-    handle_manage_projects, handle_pick_timesheet_date, handle_prompt, handle_search,
-    handle_settings, handle_welcome,
-};
 
 const EVENT_POLL: Duration = Duration::from_millis(250);
 fn main() -> Result<()> {
@@ -382,7 +345,3 @@ fn next_timeout(app: &App) -> Duration {
 fn handle_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
     ModeDispatcher::new(keybinds).dispatch(app, key);
 }
-
-#[cfg(test)]
-#[path = "main_tests.rs"]
-mod tests;

@@ -1,4 +1,4 @@
-//! Overlay/modal key handlers extracted from `main.rs`. Each function
+//! Overlay/modal key handlers for the interactive layer. Each function
 //! handles one transient mode (welcome, search, help, settings, pickers,
 //! command palette, prompts, project manager, idle nudge, etc.).
 //!
@@ -6,12 +6,13 @@
 //! - [`handle_autocomplete_keys`] — shared by Insert, Search, Prompt modes
 //! - All other handlers are `pub(crate)` for use by [`handle_key`].
 
+use crate::app::{App, Mode, View};
+use crate::cli;
+use crate::todo;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use tuxtime::app::{App, Mode, View};
-use tuxtime::cli;
-use tuxtime::todo;
 
-use super::{DraftEffect, apply_action, apply_to_draft};
+use super::action_dispatch::apply_action;
+use super::insert::{DraftEffect, apply_to_draft};
 
 // ---------------------------------------------------------------------------
 // Welcome & share — first-run and network overlay

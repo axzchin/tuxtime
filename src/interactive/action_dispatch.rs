@@ -4,12 +4,12 @@
 //! sub-dispatch functions. [`handle_normal`] ties together key resolution
 //! and action dispatch for the Normal/Visual modes.
 
+use crate::action::Action;
+use crate::app::{App, CalendarTarget, Mode, View};
+use crate::keybinds::KeyBindings;
+use crate::theme;
+use crate::{clipboard, todo};
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
-use tuxtime::action::Action;
-use tuxtime::app::{App, CalendarTarget, Mode, View};
-use tuxtime::keybinds::KeyBindings;
-use tuxtime::theme;
-use tuxtime::{clipboard, todo};
 
 use super::key_resolve::resolve_normal_key;
 use super::timesheet_handler::handle_timesheet_keys;
@@ -18,7 +18,7 @@ use super::timesheet_handler::handle_timesheet_keys;
 // Top-level dispatch
 // ---------------------------------------------------------------------------
 
-pub(crate) fn apply_action(app: &mut App, action: Action) {
+pub fn apply_action(app: &mut App, action: Action) {
     if app.view() == View::Archive && !apply_archive_action(app, action) {
         return;
     }

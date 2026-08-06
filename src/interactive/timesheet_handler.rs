@@ -2,8 +2,8 @@
 //! date navigation, narrative-level movement, edit, archive, billable
 //! toggle, and clipboard operations.
 
+use crate::app::{App, Mode, TimesheetTaskRef, View, format_billable};
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
-use tuxtime::app::{App, Mode, TimesheetTaskRef, View, format_billable};
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn handle_timesheet_keys(app: &mut App, key: KeyEvent) {
@@ -127,7 +127,7 @@ pub(crate) fn handle_timesheet_keys(app: &mut App, key: KeyEvent) {
                 } else {
                     format!("{} (DNB)", entry.key)
                 };
-                match tuxtime::clipboard::copy(&payload) {
+                match crate::clipboard::copy(&payload) {
                     Ok(()) => {
                         app.timesheet.copy_flash = Some((gi, std::time::Instant::now()));
                         app.flash(format!("copied narrative for {key_label}"));
@@ -153,7 +153,7 @@ pub(crate) fn handle_timesheet_keys(app: &mut App, key: KeyEvent) {
             } else {
                 format!("{} (DNB)", entry.key)
             };
-            match tuxtime::clipboard::copy(&billable) {
+            match crate::clipboard::copy(&billable) {
                 Ok(()) => {
                     app.timesheet.copy_flash = Some((gi, std::time::Instant::now()));
                     app.flash(format!("copied {billable} for {key_label}"));
@@ -184,7 +184,7 @@ pub(crate) fn handle_timesheet_keys(app: &mut App, key: KeyEvent) {
                 } else {
                     format!("{} (DNB)", entry.key)
                 };
-                match tuxtime::clipboard::copy(&payload) {
+                match crate::clipboard::copy(&payload) {
                     Ok(()) => {
                         app.timesheet.copy_flash = Some((gi, std::time::Instant::now()));
                         app.flash(format!("copied {billable} for {key_label}"));

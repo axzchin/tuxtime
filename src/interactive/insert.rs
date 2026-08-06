@@ -2,17 +2,18 @@
 //! slash menu, calendar, recurrence builder, priority chooser, and
 //! duration picker overlays.
 //!
-//! Extracted from `main.rs` to keep the TUI event loop focused on mode
-//! dispatch. The public entry point is [`handle_insert`]; overlay-specific
-//! handlers are `pub(crate)` for testing.
+//! Part of the library's interactive layer, keeping the binary's event loop
+//! focused on mode dispatch. The public entry point is [`handle_insert`];
+//! overlay-specific handlers are `pub(crate)` for testing.
 //!
 //! [`DraftEffect`] and [`EditAction`] model the result of each keystroke on
 //! the draft buffer — callers like search and the command palette reuse
 //! [`apply_to_draft`] to share the same text-editing behavior.
 
-use crate::handle_autocomplete_keys;
+use crate::app::{AddOutcome, App, DialogInputMode, OverlayKind};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use tuxtime::app::{AddOutcome, App, DialogInputMode, OverlayKind};
+
+use super::overlays::handle_autocomplete_keys;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DraftEffect {
@@ -245,7 +246,7 @@ pub(crate) fn handle_insert(app: &mut App, key: KeyEvent) {
     // consume keys until accepted or cancelled; the slash menu intercepts
     // only its navigation keys and lets text editing flow through so the
     // filter text in the buffer keeps growing as the user types.
-    let overlay = app.draft.overlay().map(tuxtime::app::DraftOverlay::kind);
+    let overlay = app.draft.overlay().map(crate::app::DraftOverlay::kind);
     match overlay {
         Some(OverlayKind::Calendar) => {
             handle_insert_calendar(app, key);

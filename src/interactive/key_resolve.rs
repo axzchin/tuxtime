@@ -5,15 +5,16 @@
 //! then falls back to the built-in map. [`resolve_builtin_single_key`] is
 //! used when a chord expires so the leader key fires its single-key behavior.
 
+use crate::action::Action;
+use crate::app::App;
+use crate::keybinds::{KeyBindings, ResolvedKey};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use tuxtime::action::Action;
-use tuxtime::app::App;
-use tuxtime::keybinds::{KeyBindings, ResolvedKey};
 
 /// Resolve a single character key to its built-in action, ignoring keybinds
 /// and chords. Used when a two-key chord expires — the leader key should still
 /// trigger its built-in single-key behavior.
-pub(crate) fn resolve_builtin_single_key(key: KeyEvent) -> Option<Action> {
+#[must_use]
+pub fn resolve_builtin_single_key(key: KeyEvent) -> Option<Action> {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
     if ctrl {
         return match key.code {
