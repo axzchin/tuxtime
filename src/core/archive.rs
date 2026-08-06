@@ -214,6 +214,9 @@ impl Store {
         self.push_history();
         let count = to_move.len();
         self.tasks = remaining;
+        // Archived tasks leave the live list — a timer on one of them can't
+        // keep running, and the remaining indices have shifted.
+        self.resync_timer();
         self.last_disk = remaining_body;
         self.archive.tasks = todo::parse_file(&combined);
         self.archive.last_disk = combined;
@@ -263,6 +266,9 @@ impl Store {
         }
         self.push_history();
         self.tasks = remaining;
+        // If the running timer was on the archived task, it's gone from the
+        // live list; otherwise re-attach at its shifted index.
+        self.resync_timer();
         self.last_disk = remaining_body;
         self.archive.tasks = todo::parse_file(&combined);
         self.archive.last_disk = combined;

@@ -29,6 +29,11 @@ impl Store {
             return Reconcile::Unchanged;
         }
         self.tasks = todo::parse_file(&on_disk);
+        // The reloaded list may have a different order/indices than the one
+        // the running timer was attached to — re-derive it from the `start:`
+        // tag so the timer keeps tracking the right task (or clears if an
+        // external edit removed the tag).
+        self.resync_timer();
         self.last_disk = on_disk;
         self.history.clear();
         Reconcile::Reloaded
@@ -217,6 +222,47 @@ mod tests {
         let err = std::io::Error::new(std::io::ErrorKind::NotFound, "missing");
         assert_eq!(store.apply_external_state(Err(err)), Reconcile::Reloaded);
         assert!(store.tasks().is_empty());
+    }
+
+    #[test]
+    fn external_reload_reattaches_timer_to_shifted_task() {
+        let path = test_path();
+        let raw = "task zero\nDraft start:2026-05-06T10:00:00\n";
+        std::fs::write(&path, raw).unwrap();
+        let mut store = Store::open_sync(path.clone(), raw.to_string(), "2026-05-06".into());
+        assert_eq!(store.active_timer_abs(), Some(1));
+        // External edit inserts a line above the timer task, shifting its index.
+        let shifted = "task zero\ninserted between\nDraft start:2026-05-06T10:00:00\n";
+        std::fs::write(&path, shifted).unwrap();
+        assert_eq!(store.reconcile(), Reconcile::Reloaded);
+        assert!(
+            store.timer_running(),
+            "timer must survive a reload even when its index shifted"
+        );
+        assert_eq!(
+            store.active_timer_abs(),
+            Some(2),
+            "timer must follow the task carrying start: to its new index"
+        );
+        assert_eq!(
+            store.tasks()[2].start.as_deref(),
+            Some("2026-05-06T10:00:00")
+        );
+    }
+
+    #[test]
+    fn external_reload_clears_timer_when_start_tag_removed() {
+        let path = test_path();
+        let raw = "Draft start:2026-05-06T10:00:00\n";
+        std::fs::write(&path, raw).unwrap();
+        let mut store = Store::open_sync(path.clone(), raw.to_string(), "2026-05-06".into());
+        assert!(store.timer_running());
+        std::fs::write(&path, "Draft (start tag gone)\n").unwrap();
+        assert_eq!(store.reconcile(), Reconcile::Reloaded);
+        assert!(
+            !store.timer_running(),
+            "removing start: externally must stop the timer, not leave it pointing at another task"
+        );
     }
 
     // ----- inbox drain tests ---------------------------------------------

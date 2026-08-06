@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use super::Store;
 use super::outcome::{
     AddOutcome, BulkCompleteOutcome, BulkDeleteOutcome, CompleteOutcome, DeleteOutcome,
@@ -57,6 +55,9 @@ impl Store {
                     self.tasks.insert(abs + 1, parsed);
                     Some(abs + 1)
                 });
+                // Spawn insertion shifts indices above `abs` — re-attach the
+                // running timer to the task that still carries `start:`.
+                self.resync_timer();
                 if let Err(e) = self.persist() {
                     return CompleteOutcome::Error(e);
                 }
@@ -117,6 +118,10 @@ impl Store {
         }
         self.push_history();
         self.tasks.remove(abs);
+        // Removal shifts indices above `abs` — keep the timer attached to the
+        // task that still carries `start:` (or clear it if that task was the
+        // one deleted).
+        self.resync_timer();
         match self.persist() {
             Ok(()) => DeleteOutcome::Deleted { abs },
             Err(e) => DeleteOutcome::Error(e),
@@ -260,6 +265,11 @@ impl Store {
             Ok(task) => {
                 self.push_history();
                 self.tasks[abs] = task;
+                // Edits that drop `start:` from the running task's line must
+                // stop the timer (the tag is the source of truth); edits that
+                // preserve it keep the timer attached. The edit dialog carries
+                // the full raw line, so body-only edits are unaffected.
+                self.resync_timer();
                 match self.persist() {
                     Ok(()) => EditOutcome::Saved { abs },
                     Err(e) => EditOutcome::Error(e),
@@ -381,6 +391,7 @@ impl Store {
         for (abs, parsed) in spawns {
             self.tasks.insert(abs + 1, parsed);
         }
+        self.resync_timer();
         let completed = to_complete.len();
         match self.persist() {
             Ok(()) => BulkCompleteOutcome::Done { completed, spawned },
@@ -408,6 +419,7 @@ impl Store {
         for abs in indices {
             self.tasks.remove(abs);
         }
+        self.resync_timer();
         match self.persist() {
             Ok(()) => BulkDeleteOutcome::Done { deleted },
             Err(e) => BulkDeleteOutcome::Error(e),
@@ -513,10 +525,9 @@ impl Store {
         match todo::parse_line(&new_raw) {
             Ok(parsed) => {
                 self.tasks[abs] = parsed;
-                self.active_timer = Some(super::TimerState {
-                    task_abs: abs,
-                    started_at: Instant::now(),
-                });
+                // Derive the timer from the tag just written, keeping `start:`
+                // the single source of truth for the running timer.
+                self.resync_timer();
                 let t = &self.tasks[abs];
                 TimerOutcome::Started {
                     abs,
@@ -533,7 +544,11 @@ impl Store {
         let Some(ts) = self.active_timer.take() else {
             return TimerOutcome::OutOfRange;
         };
-        let elapsed = ts.started_at.elapsed().as_secs();
+        // Elapsed comes from the durable `start:` timestamp, so a restart or
+        // system suspend doesn't undercount billable time.
+        let elapsed = (chrono::Local::now().naive_local() - ts.started_at)
+            .num_seconds()
+            .max(0) as u64;
         let abs = ts.task_abs;
         if abs >= self.tasks.len() {
             return TimerOutcome::OutOfRange;
@@ -1083,5 +1098,87 @@ mod tests {
             .and_then(|v| v.parse::<u64>().ok())
             .unwrap_or(0);
         assert!(dur_val >= 3600, "dur must accumulate, got: {raw}");
+    }
+
+    // ---- timer re-attachment (start: is the source of truth) ----
+
+    #[test]
+    fn timer_attaches_to_shifted_index_after_delete() {
+        let mut store = build_store("task one\nDraft start:2026-05-06T10:00:00\n");
+        assert_eq!(store.active_timer_abs(), Some(1));
+        store.delete(0);
+        // The timer task moved from index 1 to 0; the timer must follow it,
+        // not keep pointing at index 1 (which is now a different task).
+        assert!(store.timer_running(), "timer must survive the delete");
+        assert_eq!(store.active_timer_abs(), Some(0));
+        assert!(store.tasks()[0].start.is_some());
+    }
+
+    #[test]
+    fn delete_of_timer_task_clears_timer() {
+        let mut store = build_store("Draft start:2026-05-06T10:00:00\n");
+        assert!(store.timer_running());
+        store.delete(0);
+        assert!(
+            !store.timer_running(),
+            "deleting the running task must clear the timer"
+        );
+    }
+
+    #[test]
+    fn undo_restores_timer_to_correct_task() {
+        let mut store = build_store("task one\nDraft start:2026-05-06T10:00:00\n");
+        store.delete(0); // timer task shifts to index 0
+        assert_eq!(store.active_timer_abs(), Some(0));
+        store.undo();
+        assert_eq!(store.tasks().len(), 2);
+        assert!(store.timer_running(), "timer must survive undo");
+        assert_eq!(
+            store.active_timer_abs(),
+            Some(1),
+            "undo must re-attach the timer to the restored task's index"
+        );
+        assert!(store.tasks()[1].start.is_some());
+    }
+
+    #[test]
+    fn edit_preserves_running_timer() {
+        let mut store = build_store("Draft start:2026-05-06T10:00:00\n");
+        assert!(store.timer_running());
+        store.edit_line(0, "Draft edited +work start:2026-05-06T10:00:00");
+        assert!(
+            store.timer_running(),
+            "editing the body must not stop a running timer"
+        );
+        assert_eq!(store.active_timer_abs(), Some(0));
+    }
+
+    #[test]
+    fn edit_removing_start_clears_timer() {
+        let mut store = build_store("Draft start:2026-05-06T10:00:00\n");
+        assert!(store.timer_running());
+        store.edit_line(0, "Draft edited (start tag removed)");
+        assert!(
+            !store.timer_running(),
+            "removing start: via edit must clear the timer"
+        );
+    }
+
+    #[test]
+    fn timer_elapsed_derived_from_start_token_on_restart() {
+        // A task whose timer was started 65s ago (e.g. by a previous app
+        // session, then restarted) must resume billing from the durable
+        // `start:` tag rather than from load time — `Instant` resets on
+        // restart and freezes across suspend, the tag does not.
+        let start = (chrono::Local::now() - chrono::Duration::seconds(65))
+            .format("%Y-%m-%dT%H:%M:%S")
+            .to_string();
+        let store = build_store(&format!("Draft start:{start}\n"));
+        assert!(store.timer_running(), "restart must resume the timer");
+        let elapsed = store.timer_elapsed_secs().unwrap_or(0);
+        assert!(
+            elapsed >= 60,
+            "elapsed must count from the durable start tag, got {elapsed}"
+        );
     }
 }

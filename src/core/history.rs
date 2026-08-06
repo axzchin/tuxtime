@@ -50,6 +50,11 @@ impl Store {
         match self.history.pop() {
             Some(prev) => {
                 self.tasks = prev;
+                // Undo restores a pre-mutation task list whose indices may
+                // differ from the live one — re-attach the timer to whatever
+                // task in the snapshot carries `start:` (e.g. undoing a delete
+                // puts the running timer back where it was).
+                self.resync_timer();
                 match self.persist() {
                     Ok(()) => UndoOutcome::Undone,
                     Err(e) => UndoOutcome::Error(e),

@@ -4,7 +4,8 @@
 //! (`App` wraps a `Store`) and the CLI (`cmd`) drive this type.
 
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+
+use chrono::NaiveDateTime;
 
 use crate::todo::{self, Task};
 
@@ -42,18 +43,21 @@ pub struct Store {
     pub(crate) last_disk: String,
     pub(crate) today: String,
     /// State of the currently running timer, if any. `None` means no timer
-    /// is active. The `Instant` is a wall-clock reference for live elapsed
-    /// display; on-disk state is in the task's `start:` tag.
+    /// is active. Re-derived from the task list (whichever task carries a
+    /// `start:` tag) by [`Store::resync_timer`], so it can never point at
+    /// the wrong task after a reload, undo, or index-shifting mutation.
     pub(crate) active_timer: Option<TimerState>,
 }
 
 /// Wall-clock state for the running timer. The on-disk truth is the task's
-/// `start:` tag; this `Instant` exists so the UI can show live elapsed
-/// seconds without re-reading the file every frame.
+/// `start:` tag; `started_at` is that tag parsed back, so elapsed time is
+/// computed from the durable timestamp rather than a monotonic clock. That
+/// keeps the timer honest across app restarts (which reset `Instant`) and
+/// system suspend (which freezes it).
 #[derive(Debug, Clone)]
 pub struct TimerState {
     pub task_abs: usize,
-    pub started_at: Instant,
+    pub started_at: NaiveDateTime,
 }
 
 impl Store {
@@ -101,21 +105,40 @@ impl Store {
 
     fn assemble(file_path: PathBuf, archive: Archive, body: String, today: String) -> Self {
         let tasks = todo::parse_file(&body);
-        let active_timer = tasks.iter().enumerate().find_map(|(i, t)| {
-            t.start.as_ref().map(|_| TimerState {
-                task_abs: i,
-                started_at: Instant::now(),
-            })
-        });
-        Self {
+        let mut store = Self {
             tasks,
             history: History::default(),
             archive,
             file_path,
             last_disk: body,
             today,
-            active_timer,
-        }
+            active_timer: None,
+        };
+        store.resync_timer();
+        store
+    }
+
+    /// Re-derive `active_timer` from the task list. The on-disk `start:` tag
+    /// is the single source of truth for a running timer: after a reload,
+    /// undo, or any mutation that shifts task indices, the in-memory
+    /// `task_abs` may point at the wrong task. This scan re-attaches the
+    /// timer to whichever task actually carries `start:` (at most one —
+    /// starting a timer stops any other first), or clears it when the tag is
+    /// gone. Cheap (a linear scan), so it runs after every index-shifting or
+    /// raw-rewriting mutation.
+    pub(crate) fn resync_timer(&mut self) {
+        self.active_timer = self.tasks.iter().enumerate().find_map(|(i, t)| {
+            let token = t.start.as_deref()?;
+            let started_at = NaiveDateTime::parse_from_str(token, "%Y-%m-%dT%H:%M:%S")
+                // A hand-typed `start:` that isn't a parseable timestamp can't
+                // be used for billing; fall back to "now" so the timer still
+                // runs and counts from load rather than crashing or stalling.
+                .unwrap_or_else(|_| chrono::Local::now().naive_local());
+            Some(TimerState {
+                task_abs: i,
+                started_at,
+            })
+        });
     }
 
     #[must_use]
@@ -167,12 +190,15 @@ impl Store {
     }
 
     /// Elapsed wall-clock seconds for the live timer display. `None` when no
-    /// timer is active.
+    /// timer is active. Computed from the durable `start:` timestamp, so it
+    /// survives app restarts and counts through system suspend.
     #[must_use]
     pub fn timer_elapsed_secs(&self) -> Option<u64> {
-        self.active_timer
-            .as_ref()
-            .map(|ts| ts.started_at.elapsed().as_secs())
+        self.active_timer.as_ref().map(|ts| {
+            (chrono::Local::now().naive_local() - ts.started_at)
+                .num_seconds()
+                .max(0) as u64
+        })
     }
 
     /// Reference to the task the running timer is on, if any.
