@@ -205,11 +205,11 @@ pub fn is_newer(latest: &str, current: &str) -> bool {
             (None, Some(_)) => return false,
             (Some(a), Some(b)) => match (a.parse::<u64>(), b.parse::<u64>()) {
                 (Ok(x), Ok(y)) if x != y => return x > y,
-                (Ok(_), Ok(_)) => continue,
+                (Ok(_), Ok(_)) => {}
                 _ => match a.cmp(b) {
                     std::cmp::Ordering::Greater => return true,
                     std::cmp::Ordering::Less => return false,
-                    std::cmp::Ordering::Equal => continue,
+                    std::cmp::Ordering::Equal => {}
                 },
             },
         }

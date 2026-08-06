@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 //! Unit tests for the natural-language parser. Included from `src/nl/mod.rs`
 //! via `mod tests;`, so `super::*` resolves to the `nl` module (re-exports
 //! [`ParsedNl`], `try_parse`, `format_as_todo_txt`, and

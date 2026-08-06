@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 //! Unit tests for the draft overlays (slash menu, calendar, recurrence
 //! builder, priority chooser, duration picker) and the `apply_kv` /
 //! `apply_priority` buffer writers. Included from [`super::draft_overlay`]

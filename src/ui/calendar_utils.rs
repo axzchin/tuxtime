@@ -117,6 +117,7 @@ pub(crate) fn calendar_footer<'a>(theme: &Theme) -> Line<'a> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

@@ -114,7 +114,6 @@ impl EditAction {
 /// characters on international layouts (e.g. AltGr+E → `€`). That is text, not a
 /// chord, so the chord arms are gated on exactly one modifier being held and
 /// AltGr falls through to the `Char(c)` insert arm.
-
 pub(crate) fn resolve_edit_key(key: KeyEvent) -> Option<EditAction> {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
     let alt = key.modifiers.contains(KeyModifiers::ALT);

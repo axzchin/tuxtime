@@ -107,6 +107,9 @@ fn save(app: &App, path: &Path) -> std::io::Result<()> {
     fs::write(path, svg)
 }
 
+// Column/row counts are bounded by the fixed COLS/ROWS above, so the usize→f32
+// cast for SVG user units can never lose precision in practice.
+#[allow(clippy::cast_precision_loss)]
 fn render_svg(buf: &Buffer) -> String {
     let cols = buf.area.width as usize;
     let rows = buf.area.height as usize;

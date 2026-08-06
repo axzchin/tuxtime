@@ -53,9 +53,8 @@ pub(crate) use timesheet_handler::handle_timesheet_keys;
 pub(crate) use insert::handle_insert;
 #[cfg(test)]
 pub(crate) use overlays::{
-    handle_command_palette, handle_help, handle_idle_nudge, handle_manage_projects,
-    handle_manual_entry_choice, handle_pick, handle_pick_theme, handle_pick_timesheet_date,
-    handle_prompt, handle_search, handle_settings, handle_share, handle_welcome,
+    handle_manage_projects, handle_pick_timesheet_date, handle_prompt, handle_search,
+    handle_settings, handle_welcome,
 };
 
 const EVENT_POLL: Duration = Duration::from_millis(250);
