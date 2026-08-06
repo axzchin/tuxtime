@@ -104,7 +104,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         lines.push(task_row::build_line(task, opts, theme));
     }
 
-    let scroll_cell = &app.nav.view_scroll[View::Archive.idx()];
+    let scroll_cell = &app.nav.view_scroll[View::Archive];
     let scroll = keep_cursor_visible(
         scroll_cell.get(),
         cursor_line,

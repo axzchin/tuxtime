@@ -4,7 +4,7 @@
 
 use std::cell::Cell;
 
-use super::types::{Mode, View};
+use super::types::{Mode, View, ViewMap};
 
 /// All state related to view navigation: which view, in which mode,
 /// at which cursor position, with per-view scroll offsets and saved
@@ -16,14 +16,14 @@ pub struct Navigation {
     pub view: View,
     pub mode: Mode,
     pub cursor: usize,
-    /// Per-view saved cursor, indexed by [`View::idx()`]. [`App::set_view`]
-    /// snapshots the outgoing view's cursor here and restores the incoming
-    /// view's, so each view remembers where the user last was.
-    pub view_cursor: [usize; 3],
+    /// Per-view saved cursor, keyed by `View`. [`App::set_view`] snapshots
+    /// the outgoing view's cursor here and restores the incoming view's, so
+    /// each view remembers where the user last was.
+    pub view_cursor: ViewMap<usize>,
     /// Vertical scroll offset (rows from the top of the line list) for each
-    /// view, keyed by [`View::idx()`]. Updated at render time via `Cell` so
-    /// the renderer can keep the cursor row visible without taking `&mut self`.
-    pub view_scroll: [Cell<u16>; 3],
+    /// view, keyed by `View`. Updated at render time via `Cell` so the
+    /// renderer can keep the cursor row visible without taking `&mut self`.
+    pub view_scroll: ViewMap<Cell<u16>>,
     pub should_quit: bool,
     /// The mode to return to when Search is dismissed (Enter/Esc). Set by
     /// overlays like `ManageProjects` that enter Search for inline filtering.
@@ -45,8 +45,8 @@ impl Navigation {
             view: View::List,
             mode: Mode::Normal,
             cursor: 0,
-            view_cursor: [0; 3],
-            view_scroll: [Cell::new(0), Cell::new(0), Cell::new(0)],
+            view_cursor: ViewMap::default(),
+            view_scroll: ViewMap::default(),
             should_quit: false,
             pre_search_mode: None,
             nudge_prompt_return: None,
@@ -145,12 +145,12 @@ impl Navigation {
         self.should_quit = true;
     }
 
-    /// Save the current cursor into the per-view cursor array for `view`,
+    /// Save the current cursor into the per-view cursor map for `view`,
     /// then restore the cursor saved for the new view.
     pub fn switch_view(&mut self, old_view: View, new_view: View) {
-        self.view_cursor[old_view.idx()] = self.cursor;
+        self.view_cursor[old_view] = self.cursor;
         self.view = new_view;
-        self.cursor = self.view_cursor[new_view.idx()];
+        self.cursor = self.view_cursor[new_view];
     }
 
     /// Toggle between Visual and Normal mode.

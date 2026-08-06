@@ -1,4 +1,5 @@
 use std::fmt;
+use std::ops::{Index, IndexMut};
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -63,23 +64,82 @@ pub enum Mode {
     PromptRenameProject,
 }
 
+/// Top-level views. The explicit discriminants are the canonical slot
+/// indices used by [`ViewMap`]; keep them contiguous and in sync with
+/// [`View::COUNT`] (enforced by a test).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(usize)]
 pub enum View {
-    List,
-    Archive,
-    Timesheet,
+    List = 0,
+    Archive = 1,
+    Timesheet = 2,
 }
 
 impl View {
-    /// Stable slot index for keying per-view state arrays. Don't reorder the
-    /// `View` variants without updating this together.
+    /// Number of view variants. Must equal the highest discriminant + 1.
+    pub const COUNT: usize = 3;
+}
+
+/// A fixed-size map from [`View`] to a value. Replaces the old pattern of
+/// parallel `[T; 3]` arrays keyed by a hand-rolled index function, where the
+/// index mapping could silently desync from the enum. Indexing by `View`
+/// directly makes the mapping explicit and greppable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ViewMap<T>([T; View::COUNT]);
+
+impl<T> ViewMap<T> {
     #[must_use]
-    pub fn idx(self) -> usize {
-        match self {
-            View::List => 0,
-            View::Archive => 1,
-            View::Timesheet => 2,
-        }
+    pub const fn new(values: [T; View::COUNT]) -> Self {
+        Self(values)
+    }
+}
+
+impl<T: Default> Default for ViewMap<T> {
+    fn default() -> Self {
+        Self(std::array::from_fn(|_| T::default()))
+    }
+}
+
+impl<T> Index<View> for ViewMap<T> {
+    type Output = T;
+
+    fn index(&self, view: View) -> &T {
+        &self.0[view as usize]
+    }
+}
+
+impl<T> IndexMut<View> for ViewMap<T> {
+    fn index_mut(&mut self, view: View) -> &mut T {
+        &mut self.0[view as usize]
+    }
+}
+
+#[cfg(test)]
+mod view_map_tests {
+    use super::*;
+
+    #[test]
+    fn view_map_indexes_by_view() {
+        let mut m = ViewMap::new([10usize, 20, 30]);
+        assert_eq!(m[View::List], 10);
+        assert_eq!(m[View::Archive], 20);
+        assert_eq!(m[View::Timesheet], 30);
+        m[View::Timesheet] = 99;
+        assert_eq!(m[View::Timesheet], 99);
+    }
+
+    #[test]
+    fn view_discriminants_match_map_slots() {
+        // The ViewMap slots are the enum discriminants. If a variant is ever
+        // reordered or a new one added, COUNT and this mapping must move
+        // together.
+        assert_eq!(View::List as usize, 0);
+        assert_eq!(View::Archive as usize, 1);
+        assert_eq!(View::Timesheet as usize, 2);
+        assert_eq!(View::COUNT, 3);
+        assert!((View::List as usize) < View::COUNT);
+        assert!((View::Archive as usize) < View::COUNT);
+        assert!((View::Timesheet as usize) < View::COUNT);
     }
 }
 

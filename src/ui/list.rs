@@ -103,7 +103,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         }
     }
 
-    let scroll_cell = &app.nav.view_scroll[View::List.idx()];
+    let scroll_cell = &app.nav.view_scroll[View::List];
     let scroll = keep_cursor_visible(
         scroll_cell.get(),
         cursor_line,
