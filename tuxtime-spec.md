@@ -31,6 +31,7 @@
 | State ownership | **Part of `Store`** — persistent, survives redraws and view switches |
 | On quit | **Auto-stop** — timer stops, entry is created, app exits |
 | Resume | **Continue most recent entry** on the same task — adds to accumulated `dur` |
+| Multi-day | **One line per task-day** — a task worked on multiple days becomes multiple lines, one per day, each with its own `dur:`/`log:`/`bill:`/body (see §3.5). Sessions crossing midnight split automatically; starting a timer on a task with time from a previous day prompts |
 
 ### 2.3 Keep Everything
 All existing `tuxedo` features are preserved:
@@ -109,6 +110,71 @@ copy-narratives output bill it to the day the work happened. Lines without a
 - User enters: duration (in minutes, or decimal hours like `1.5`, or start time like `14:30`), optionally a description override
 - Produces a task line with `dur:<seconds>` but no `start:` (already done)
 - Default narrative from the description field, or blank if none provided
+
+### 3.5 Multi-Day Tasks (One Line Per Task-Day)
+
+**Model.** A task worked across multiple days becomes **multiple lines** in
+todo.txt — one line per day of work. Each line carries its own `dur:`, `log:`,
+`bill:`, and body (narrative). This preserves per-day time attribution, per-day
+narratives, and per-day billability simultaneously, which a single line with a
+per-day ledger cannot express (one body / one `bill:` per line). The timesheet
+already groups by `log:` and merges same-day duplicates, so it needs no changes.
+
+**Mechanism 1 — automatic midnight split (timer stop).** When a timer session
+`[start, now)` spans more than one calendar day, the elapsed time is split by
+calendar day:
+- The original line keeps the pre-midnight portion: `dur` = existing + start-day
+  chunk, `log:` = start day, then it is **auto-completed** (`x <log-date> ...`).
+- One new open line is created for each subsequent day that has time: creation
+  date = that day, body + priority + projects + contexts + `bill:` copied,
+  `dur:` = that day's chunk, `log:` = that day.
+- `due:`, `rec:`, `notes:`, `start:` are **not** carried. The whole split is one
+  undo entry; the flash reports the per-day breakdown.
+
+**Mechanism 2 — day-boundary prompt (timer start).** Pressing `t` on a task whose
+*effective log date* (`log:` when valid, else the creation date) is before today
+and that has `dur: > 0` prompts:
+```
+[c]ontinue same entry — normal toggle; time will move to today on stop
+[n]ew entry for today — carry forward + start the timer on the new line
+[esc] cancel
+```
+Config `prompt_on_day_boundary` (default `true`).
+
+**Mechanism 3 — upgraded `N` (manual carry-forward, no timer).** `N` opens the
+Insert dialog pre-filled with the carried-over line (body + `@ctx` + `+proj` +
+`bill:n`), so the narrative can be polished before saving. `Enter` creates the
+new line (fresh creation date) and auto-completes the old one; `Esc` changes
+nothing. No timer is started.
+
+**Carry-over rules (both mechanisms):**
+
+| Attribute | Carried? |
+|---|---|
+| body (narrative) | yes |
+| priority | yes |
+| `+project` / `@context` | yes |
+| `bill:n` | yes |
+| `due:` / `rec:` / `notes:` | no — `rec:` especially, so the consumed line can never double-spawn a recurring successor |
+| `start:` / `dur:` / `log:` | no — the new line starts with no time |
+
+**Auto-complete details.** The consumed line's done-date is its `log:` date (the
+day the time was logged), not the stop date. It keeps `dur:`, `log:`, `bill:` so
+the timesheet still attributes it (completed entries with time stay in the
+sheet by design). Completion is a **raw write** — never `toggle_complete` — so
+recurrence never spawns from a consumed line, and priority is stripped per
+todo.txt convention (same as `mark_done`). Auto-completing keeps the active
+list to today's work only; past days' entries surface in the archive.
+
+**Log-date asymmetry (deliberate).** Same-day stops stamp the store's cached
+`today` (injectable in tests/CLI, refreshed by the TUI each tick), while
+midnight-split stops stamp the actual session dates — the split only exists to
+get the calendar-day boundaries right, so it uses real dates. The two agree in
+production (the event loop keeps `today` current); they diverge only under an
+injected `today`, and that divergence is what keeps the tests deterministic.
+
+**Existing data.** Lines whose time already collapsed onto one `log:` date are
+left as-is; the split applies going forward.
 
 ---
 

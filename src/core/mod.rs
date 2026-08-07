@@ -21,15 +21,15 @@ pub mod outcome;
 #[cfg(test)]
 pub(crate) mod test_support;
 
-pub(crate) use mutations::rebuild_token_line;
+pub(crate) use mutations::{carry_forward_body, rebuild_token_line};
 
 pub use archive::Archive;
 pub use history::History;
 pub use outcome::{
     AddOutcome, ArchiveDeleteOutcome, ArchiveOneOutcome, ArchiveOutcome, BulkCompleteOutcome,
-    BulkDeleteOutcome, CompleteOutcome, DeleteOutcome, DrainReport, EditOutcome, PriorityOutcome,
-    Reconcile, StoreError, TagOutcome, TimerOutcome, TimerQuitOutcome, UnarchiveOutcome,
-    UndoOutcome,
+    BulkDeleteOutcome, CarryForwardOutcome, CompleteOutcome, DeleteOutcome, DrainReport,
+    EditOutcome, PriorityOutcome, Reconcile, StoreError, TagOutcome, TimerOutcome,
+    TimerQuitOutcome, UnarchiveOutcome, UndoOutcome,
 };
 
 /// The durable task store. Owns the live task list, the sibling `done.txt`

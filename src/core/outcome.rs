@@ -203,6 +203,32 @@ impl DrainReport {
     }
 }
 
+/// Outcome of carrying a task forward to a new day (one line per task-day
+/// model, see tuxtime-spec.md §3.5). The old line is consumed (raw
+/// completion preserving its `dur:`/`log:`/`bill:`) and a fresh line is
+/// inserted at `old + 1`.
+#[derive(Debug)]
+pub enum CarryForwardOutcome {
+    /// `old` was completed; the new day's line lives at `new`.
+    Carried {
+        old: usize,
+        new: usize,
+    },
+    /// Carry + immediately start the timer on the new line (day-boundary
+    /// prompt "new entry" path). Mirrors [`TimerOutcome::Started`] fields
+    /// so the caller can flash the same "▶ ..." message.
+    CarriedStarted {
+        old: usize,
+        new: usize,
+        project: Option<String>,
+        activity: Option<String>,
+        body: String,
+    },
+    Aborted(Reconcile),
+    OutOfRange,
+    Error(StoreError),
+}
+
 /// Outcome of starting or stopping the timer on a task.
 #[derive(Debug)]
 pub enum TimerOutcome {
@@ -217,6 +243,21 @@ pub enum TimerOutcome {
         abs: usize,
         elapsed_secs: u64,
         total_secs: u64,
+        project: Option<String>,
+        activity: Option<String>,
+        body: String,
+    },
+    /// A stop whose session crossed midnight. The elapsed time was split by
+    /// calendar day: the original line keeps the start-day chunk (and was
+    /// auto-completed), and one new open line was created per subsequent
+    /// day. `elapsed_secs`/`total_secs` mirror [`TimerOutcome::Stopped`]
+    /// (whole session / new total of the consumed line); `chunks` is the
+    /// per-day breakdown, oldest first, for the caller's flash message.
+    StoppedSplit {
+        abs: usize,
+        elapsed_secs: u64,
+        total_secs: u64,
+        chunks: Vec<(String, u64)>,
         project: Option<String>,
         activity: Option<String>,
         body: String,

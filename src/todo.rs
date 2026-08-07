@@ -397,6 +397,16 @@ pub fn starts_with_priority(s: &str) -> bool {
     b.len() >= 4 && b[0] == b'(' && b[1].is_ascii_uppercase() && b[2] == b')' && b[3] == b' '
 }
 
+/// True when `s` is a parseable `YYYY-MM-DD` calendar date. The length guard
+/// rejects non-padded forms like `2026-5-6` that chrono would otherwise
+/// accept leniently. Shared by the timesheet's `log:` validation and the
+/// day-boundary prompt's effective-log-date check so their fallback
+/// semantics can't drift.
+#[must_use]
+pub fn is_iso_date(s: &str) -> bool {
+    s.len() == 10 && chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").is_ok()
+}
+
 /// True if `s` begins with a `YYYY-MM-DD` token (followed by EOL or whitespace
 /// is not required here — callers use this as a hint, not a tokenizer).
 #[must_use]
