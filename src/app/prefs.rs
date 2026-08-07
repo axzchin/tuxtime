@@ -144,27 +144,29 @@ impl Prefs {
     /// corrupt the TUI). Saving is best-effort — callers that don't care
     /// about reporting can `let _ = prefs.save();`.
     ///
-    /// Loads the on-disk config first so non-pref fields (like
-    /// `share_token` / `share_port`, owned by the capture server) are
-    /// preserved across pref toggles.
+    /// Runs as one atomic `Config::update` under an advisory lock: the
+    /// on-disk config is re-read just before writing, so non-pref fields
+    /// (like `share_token` / `share_port`, owned by the capture server) and
+    /// prefs changed concurrently by another instance survive instead of
+    /// being clobbered by a whole-file rewrite from a stale read.
     /// `week_start` lives on `App`, not on `Prefs`, so callers must pass it
     /// in so it is persisted alongside the other preferences.
     pub fn save(&self, week_start: crate::app::WeekStart) -> io::Result<()> {
-        let mut cfg = Config::load();
-        cfg.theme = Some(self.theme().name.to_string());
-        cfg.density = Some(self.density);
-        cfg.sort = Some(self.sort);
-        cfg.show_left = Some(self.layout.left);
-        cfg.show_right = Some(self.layout.right);
-        cfg.show_line_num = Some(self.layout.line_num);
-        cfg.show_status_bar = Some(self.layout.status_bar);
-        cfg.show_done = Some(self.show_done);
-        cfg.show_future = Some(self.show_future);
-        cfg.hidden_keys = self.hidden_keys.clone();
-        cfg.week_start = Some(week_start);
-        cfg.idle_nudge_seconds = Some(self.idle_nudge_seconds);
-        cfg.long_timer_nudge_seconds = Some(self.long_timer_nudge_seconds);
-        cfg.prompt_on_day_boundary = Some(self.prompt_on_day_boundary);
-        cfg.save()
+        Config::update(|cfg| {
+            cfg.theme = Some(self.theme().name.to_string());
+            cfg.density = Some(self.density);
+            cfg.sort = Some(self.sort);
+            cfg.show_left = Some(self.layout.left);
+            cfg.show_right = Some(self.layout.right);
+            cfg.show_line_num = Some(self.layout.line_num);
+            cfg.show_status_bar = Some(self.layout.status_bar);
+            cfg.show_done = Some(self.show_done);
+            cfg.show_future = Some(self.show_future);
+            cfg.hidden_keys = self.hidden_keys.clone();
+            cfg.week_start = Some(week_start);
+            cfg.idle_nudge_seconds = Some(self.idle_nudge_seconds);
+            cfg.long_timer_nudge_seconds = Some(self.long_timer_nudge_seconds);
+            cfg.prompt_on_day_boundary = Some(self.prompt_on_day_boundary);
+        })
     }
 }

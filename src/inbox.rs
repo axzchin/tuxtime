@@ -57,16 +57,7 @@ pub fn lock_path_for(todo_path: &Path) -> PathBuf {
 /// on process exit if the holder crashes.
 pub fn acquire_lock(todo_path: &Path) -> std::io::Result<std::fs::File> {
     let path = lock_path_for(todo_path);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let file = std::fs::OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .write(true)
-        .open(&path)?;
-    file.lock()?;
-    Ok(file)
+    crate::file_lock::acquire(&path)
 }
 
 fn sibling(todo_path: &Path, name: &str) -> PathBuf {

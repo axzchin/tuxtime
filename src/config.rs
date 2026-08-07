@@ -68,10 +68,51 @@ impl Config {
         Self::load_from(&path)
     }
 
+    /// Plain whole-file write of an already-built config. This is the bare
+    /// primitive; for read-modify-write persistence (the common case) use
+    /// [`Config::update`], which holds an advisory lock across the reload so
+    /// a concurrent save can't be silently clobbered by a stale read.
     pub fn save(&self) -> io::Result<()> {
         let path =
             Self::path().ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no config dir"))?;
         self.save_to(&path)
+    }
+
+    /// Atomically load-modify-write the on-disk config under an advisory
+    /// lock. The whole read-modify-write happens while holding an exclusive
+    /// `flock` on a sibling `config.toml.tuxtime-lock` file, so a concurrent
+    /// save from another tuxtime instance cannot interleave between the read
+    /// and the write and silently clobber the other writer's keys (the
+    /// load-modify-write race that the bare `load()` + `save()` pair leaves
+    /// open). The lock lives on a separate sidecar — never the config itself
+    /// — because `save_to`'s atomic tmp-then-rename swaps the config's inode
+    /// and would otherwise invalidate the file being locked. Writers that
+    /// don't take the lock still see atomic whole-file swaps, just not the
+    /// lost-update protection.
+    pub fn update<F>(f: F) -> io::Result<()>
+    where
+        F: FnOnce(&mut Config),
+    {
+        let path =
+            Self::path().ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no config dir"))?;
+        Self::update_to(&path, f)
+    }
+
+    /// Like [`Config::update`] but against an explicit path, so tests can
+    /// exercise the locked read-modify-write without touching the real XDG
+    /// config. The lock file is derived from `path` itself, so two processes
+    /// reaching the same target through *different* symlink names would not
+    /// serialize; in practice every instance resolves the same XDG path.
+    pub fn update_to<F>(path: &Path, f: F) -> io::Result<()>
+    where
+        F: FnOnce(&mut Config),
+    {
+        // Held for the whole read-modify-write: released on drop at the end
+        // of the function (or on an early error return).
+        let _lock = acquire_lock(path)?;
+        let mut cfg = Self::load_from(path);
+        f(&mut cfg);
+        cfg.save_to(path)
     }
 
     /// Read a config file from an explicit path. Missing or unreadable files
@@ -136,6 +177,31 @@ impl Config {
     pub fn path_in(xdg_base: &Path) -> PathBuf {
         xdg_base.join("tuxtime").join("config.toml")
     }
+}
+
+/// Sibling advisory-lock file guarding the config while `Config::update`
+/// re-reads and rewrites it. Mirrors the `inbox.txt.tuxtime-lock`
+/// convention: a persistent sidecar that is never renamed, so `flock`
+/// stays on a stable inode across the atomic tmp-then-rename of the
+/// config file itself.
+fn lock_path_for(path: &Path) -> PathBuf {
+    let name = path.file_name().map_or_else(
+        || "config.toml".to_string(),
+        |n| n.to_string_lossy().into_owned(),
+    );
+    let locked = format!("{name}.tuxtime-lock");
+    match path.parent() {
+        Some(p) => p.join(locked),
+        None => PathBuf::from(locked),
+    }
+}
+
+/// Acquire an exclusive advisory lock on the config's sidecar lock file,
+/// via the shared [`crate::file_lock`] helper. Blocking: serializes
+/// concurrent `Config::update` calls across threads and processes;
+/// released automatically if the holder crashes.
+fn acquire_lock(path: &Path) -> io::Result<std::fs::File> {
+    crate::file_lock::acquire(&lock_path_for(path))
 }
 
 fn parse(s: &str) -> Config {
@@ -473,6 +539,89 @@ mod tests {
         assert!(path.exists());
         let loaded = Config::load_from(&path);
         assert_eq!(loaded, written);
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// The `update_to` closure must start from a fresh read of the on-disk
+    /// file — a field it doesn't touch survives the whole-file rewrite, and
+    /// a second update layers on top of the first.
+    #[test]
+    fn update_to_reloads_freshly_and_preserves_unrelated_keys() {
+        let base = std::env::temp_dir().join(format!(
+            "tuxtime-test-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = fs::remove_dir_all(&base);
+        let path = Config::path_in(&base);
+        let seed = Config {
+            theme: Some("Dawn".into()),
+            ..Config::default()
+        };
+        seed.save_to(&path).expect("seed save should succeed");
+
+        Config::update_to(&path, |cfg| cfg.share_port = Some(18081))
+            .expect("update should succeed");
+        let loaded = Config::load_from(&path);
+        assert_eq!(loaded.theme.as_deref(), Some("Dawn"));
+        assert_eq!(loaded.share_port, Some(18081));
+
+        // A second update must build on the first, not reset it.
+        Config::update_to(&path, |cfg| cfg.week_start = Some(WeekStart::Monday))
+            .expect("update should succeed");
+        let loaded = Config::load_from(&path);
+        assert_eq!(loaded.share_port, Some(18081));
+        assert_eq!(loaded.week_start, Some(WeekStart::Monday));
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// Regression for the load-modify-write race: N threads each persist a
+    /// distinct filter key. Without the advisory lock, each thread's
+    /// whole-file rewrite comes from a stale read and silently drops the
+    /// other threads' keys; with `update_to` every key must survive.
+    #[test]
+    fn concurrent_updates_do_not_lose_writes() {
+        let base = std::env::temp_dir().join(format!(
+            "tuxtime-test-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = fs::remove_dir_all(&base);
+        let path = Config::path_in(&base);
+        Config::default()
+            .save_to(&path)
+            .expect("seed save should succeed");
+
+        let workers: Vec<_> = (0..8)
+            .map(|i| {
+                let p = path.clone();
+                std::thread::spawn(move || {
+                    for _ in 0..25 {
+                        Config::update_to(&p, |cfg| {
+                            let name = format!("thread{i}");
+                            cfg.filters.retain(|(n, _)| n != &name);
+                            cfg.filters.push((name, format!("value{i}")));
+                        })
+                        .expect("update should succeed");
+                    }
+                })
+            })
+            .collect();
+        for w in workers {
+            w.join().expect("worker should finish");
+        }
+
+        let loaded = Config::load_from(&path);
+        for i in 0..8 {
+            let name = format!("thread{i}");
+            assert!(
+                loaded
+                    .filters
+                    .iter()
+                    .any(|(n, q)| n == &name && q == &format!("value{i}")),
+                "filter {name} was lost by a concurrent whole-file write"
+            );
+        }
         let _ = fs::remove_dir_all(&base);
     }
 }

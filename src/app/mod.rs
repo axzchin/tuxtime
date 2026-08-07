@@ -251,12 +251,14 @@ impl App {
             Err(e) => return Err(format!("bind: {e}")),
         };
         // Persist token + port back to config so phone bookmarks survive.
-        // Load fresh first so we don't clobber any prefs the user has
-        // toggled since this App was constructed.
-        let mut to_save = Config::load();
-        to_save.share_token = Some(info.token.clone());
-        to_save.share_port = Some(info.port);
-        if let Err(e) = to_save.save() {
+        // Config::update re-reads the file under an advisory lock, so prefs
+        // the user toggled since this App was constructed (or a concurrent
+        // save from another instance) survive instead of being clobbered by
+        // a whole-file rewrite from a stale read.
+        if let Err(e) = Config::update(|to_save| {
+            to_save.share_token = Some(info.token.clone());
+            to_save.share_port = Some(info.port);
+        }) {
             self.flash(format!("share config save failed: {e}"));
         }
         Ok(info)

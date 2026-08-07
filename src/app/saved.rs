@@ -44,20 +44,22 @@ impl App {
 
     /// Name the current `/`-search and persist it. Flashes the outcome.
     ///
-    /// Persistence is load-modify-save: scalar prefs/share keys written to
-    /// the file by another process are preserved because `Config::load`
-    /// re-reads them. The saved-filter block is *merged* — `merge_saved`
-    /// overlays our in-memory list onto whatever `filter.*` lines are on
-    /// disk, so a filter added to the config externally since startup also
-    /// survives instead of being clobbered by a wholesale overwrite. (An
-    /// external *deletion* is not honored: there is no in-app delete, so
-    /// the startup snapshot still carries it.)
+    /// Persistence is one atomic `Config::update` under an advisory lock,
+    /// so scalar prefs/share keys written to the file by another process are
+    /// preserved (the closure starts from a fresh read) and a concurrent
+    /// whole-file write can't clobber ours mid-flight. The saved-filter
+    /// block is *merged* — `merge_saved` overlays our in-memory list onto
+    /// whatever `filter.*` lines are on disk, so a filter added to the
+    /// config externally since startup also survives instead of being
+    /// clobbered by a wholesale overwrite. (An external *deletion* is not
+    /// honored: there is no in-app delete, so the startup snapshot still
+    /// carries it.)
     pub fn save_current_filter_as(&mut self, name: &str) {
         match self.upsert_saved_filter(name) {
             Ok(saved) => {
-                let mut cfg = Config::load();
-                cfg.filters = merge_saved(&cfg.filters, &self.saved_filters);
-                if let Err(e) = cfg.save() {
+                if let Err(e) = Config::update(|cfg| {
+                    cfg.filters = merge_saved(&cfg.filters, &self.saved_filters);
+                }) {
                     self.flash(format!("save failed: {e}"));
                 } else {
                     self.flash(format!("saved filter: {saved}"));
