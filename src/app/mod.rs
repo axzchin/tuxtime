@@ -1,11 +1,13 @@
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
+use self::saved::SavedFilterState;
+use self::visibility::VisibleList;
 use crate::config::Config;
 use crate::core::Store;
 use crate::core::outcome::{DrainReport, Reconcile};
 use crate::note;
-use crate::serve::{self, ShareInfo};
+use crate::serve::ShareInfo;
 use crate::theme::{self, Theme};
 use crate::todo::Task;
 
@@ -108,20 +110,17 @@ pub struct App {
     pub share_state: ShareState,
     /// Archive autocomplete cache (projects and contexts from done.txt).
     pub archive_cache: ArchiveCache,
-    /// Saved-filter picker state for the `ff` picker.
-    pub saved_picker: SavedFilterPicker,
     /// Update checker: latest release tag and background receiver.
     pub update_checker: UpdateChecker,
 
-    visible_cache: Vec<usize>,
-    /// Parallel to `visible_cache`: `visible_groups[i]` is the group key for
-    /// the row at `visible_cache[i]`. `GroupKey::None` for List under
-    /// `Sort::File`; priority/due bucket keys under other List sorts; date
-    /// keys for Archive. Renderers read this to draw section headers.
-    visible_groups: Vec<crate::app::visibility::GroupKey>,
-    /// User-named saved searches, loaded from config at startup and
-    /// upserted via `fs`. Recalled with the `ff` picker.
-    pub saved_filters: Vec<SavedFilter>,
+    /// Filtered + sorted visible index list and its parallel group keys.
+    /// Owns the same-length invariant between the two arrays; see
+    /// `VisibleList`.
+    list: VisibleList,
+    /// User-named saved searches plus the `ff` picker's transient state.
+    /// Loaded from config at startup, upserted via `fs`, recalled with the
+    /// `ff` picker.
+    pub(crate) saved: SavedFilterState,
     pub command_palette: CommandPaletteState,
     pub week_start: WeekStart,
     /// Timesheet state bundle: anchor date, cursor, sort, calendar picker,
@@ -155,14 +154,7 @@ impl App {
     fn from_store(store: Store, file_path: PathBuf, cfg: Config) -> Self {
         // Read saved filters and week_start before `cfg` is moved into `Prefs::from_config`.
         let note_dir = note::notes_dir_from_config(cfg.notes_dir.as_deref());
-        let saved_filters = cfg
-            .filters
-            .iter()
-            .map(|(name, query)| SavedFilter {
-                name: name.clone(),
-                query: query.clone(),
-            })
-            .collect();
+        let saved = SavedFilterState::from_config(&cfg.filters);
         let week_start = cfg.week_start.unwrap_or(WeekStart::Sunday);
         let today = store.today().to_string();
         let mut app = Self {
@@ -180,11 +172,9 @@ impl App {
             project_manager: ProjectManager::new(Self::load_archived_projects()),
             share_state: ShareState::new(note_dir),
             archive_cache: ArchiveCache::default(),
-            saved_picker: SavedFilterPicker::default(),
             update_checker: UpdateChecker::default(),
-            visible_cache: Vec::new(),
-            visible_groups: Vec::new(),
-            saved_filters,
+            list: VisibleList::default(),
+            saved,
             command_palette: CommandPaletteState::default(),
             week_start,
             timesheet: TimesheetState::new(&today),
@@ -207,61 +197,6 @@ impl App {
         self.file_path = file_path;
         self.nav.move_top();
         self.recompute_visible();
-    }
-
-    /// Idempotent: bind the capture server on first call, then store
-    /// the [`ShareInfo`] so subsequent calls just re-show the overlay.
-    ///
-    /// First-call behavior: if the user has a persisted token + port in
-    /// config, reuse them so phone bookmarks survive across sessions.
-    /// Otherwise, generate a fresh token, let the OS pick a port, and
-    /// write both back to the config. If the persisted port is taken
-    /// (another tuxtime instance on the same machine, say), fall back to
-    /// an OS-assigned port and rewrite the config so the next session
-    /// starts fresh.
-    pub fn ensure_share_started(&mut self) -> Result<&ShareInfo, String> {
-        // Two-step to dodge stable's lack of Polonius: do the bind work
-        // first (which needs `&mut self`), then the unconditional final
-        // borrow returns the now-present `ShareInfo`.
-        if self.share_state.share.is_none() {
-            let info = self.bind_share()?;
-            self.share_state.share = Some(info);
-        }
-        Ok(self
-            .share_state
-            .share
-            .as_ref()
-            .expect("share is Some after the bind branch"))
-    }
-
-    fn bind_share(&mut self) -> Result<ShareInfo, String> {
-        let cfg = Config::load();
-        let token = match cfg.share_token {
-            Some(t) => t,
-            None => serve::net::generate_token().map_err(|e| format!("token: {e}"))?,
-        };
-        let requested_port = cfg.share_port.unwrap_or(0);
-        let info = match serve::start(self.file_path.clone(), token.clone(), requested_port) {
-            Ok(info) => info,
-            Err(_) if requested_port != 0 => {
-                // Configured port is taken — fall back to OS-assigned.
-                serve::start(self.file_path.clone(), token.clone(), 0)
-                    .map_err(|e| format!("bind: {e}"))?
-            }
-            Err(e) => return Err(format!("bind: {e}")),
-        };
-        // Persist token + port back to config so phone bookmarks survive.
-        // Config::update re-reads the file under an advisory lock, so prefs
-        // the user toggled since this App was constructed (or a concurrent
-        // save from another instance) survive instead of being clobbered by
-        // a whole-file rewrite from a stale read.
-        if let Err(e) = Config::update(|to_save| {
-            to_save.share_token = Some(info.token.clone());
-            to_save.share_port = Some(info.port);
-        }) {
-            self.flash(format!("share config save failed: {e}"));
-        }
-        Ok(info)
     }
 
     /// Install the receiver from [`update::spawn_check`](crate::update::spawn_check).
@@ -652,7 +587,9 @@ impl App {
     /// Reload config, updating prefs, saved filters, week start, and nudge thresholds.
     pub fn reload_config(&mut self, new_cfg: Config) {
         self.prefs = Prefs::from_config(new_cfg.clone());
-        self.saved_filters = new_cfg
+        // Replace the filter list in place so the `ff` picker's transient
+        // restore-point/cursor survive a mid-picker reload.
+        self.saved.list = new_cfg
             .filters
             .iter()
             .map(|(name, query)| SavedFilter {

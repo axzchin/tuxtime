@@ -1,10 +1,11 @@
 use super::App;
-use super::types::{Sort, View};
+use super::WeekStart;
+use super::types::{Filter, Sort, View};
 use crate::core::filter::{self, ListDueBucket};
 
-/// One entry per visible row, parallel to `visible_cache`. Renderers detect
-/// group transitions by comparing successive entries; under `Sort::File` every
-/// row is `None` so the renderer skips headers.
+/// One entry per visible row, parallel to `VisibleList::cache`. Renderers
+/// detect group transitions by comparing successive entries; under
+/// `Sort::File` every row is `None` so the renderer skips headers.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GroupKey {
     None,
@@ -14,56 +15,76 @@ pub enum GroupKey {
     ListDue(ListDueBucket),
 }
 
-impl App {
-    /// Indices into the active view's task source after filter + sort, in
-    /// display order. The source is `archive().tasks()` in Archive view,
-    /// `tasks()` otherwise. Reads the cache populated by `recompute_visible`.
-    pub fn visible_indices(&self) -> &[usize] {
-        &self.visible_cache
+/// The filtered + sorted visible index list and its parallel group keys.
+/// Owns the invariant that both vectors always have the same length: every
+/// write goes through `rebuild_list`/`rebuild_archive`, which produce the
+/// groups in the same pass as the indices. This bundle used to be two naked
+/// parallel `Vec`s on `App` (the sibling of the per-view cursor map, which
+/// lives in `Navigation`).
+#[derive(Debug, Default, Clone)]
+pub(crate) struct VisibleList {
+    cache: Vec<usize>,
+    groups: Vec<GroupKey>,
+}
+
+impl VisibleList {
+    pub(crate) fn indices(&self) -> &[usize] {
+        &self.cache
     }
 
-    /// Group key per row, parallel to `visible_indices()`.
-    pub fn visible_groups(&self) -> &[GroupKey] {
-        &self.visible_groups
+    pub(crate) fn groups(&self) -> &[GroupKey] {
+        &self.groups
     }
 
-    /// Recompute the cached visible-index list and parallel group keys. Call
-    /// after any mutation that affects filter/sort/view/tasks/archive.
-    /// Also invalidates the timesheet groups cache so the next timesheet
-    /// render forces a fresh computation — no more stale views after
-    /// archive/unarchive.
-    pub fn recompute_visible(&mut self) {
-        match self.nav.view {
-            View::List => self.rebuild_list_cache(),
-            View::Archive => self.rebuild_archive_cache(),
-            View::Timesheet => {}
+    /// The absolute task index under `cursor`, or `None` when the list is
+    /// empty.
+    pub(crate) fn cur(&self, cursor: usize) -> Option<usize> {
+        self.cache.get(cursor).copied()
+    }
+
+    /// Clamp `cursor` into `[0, len)`; an empty list pins it at 0.
+    pub(crate) fn clamp(&mut self, cursor: &mut usize) {
+        let len = self.cache.len();
+        if len == 0 {
+            *cursor = 0;
+        } else if *cursor >= len {
+            *cursor = len - 1;
         }
-        self.timesheet.invalidate_cache();
     }
 
-    fn rebuild_list_cache(&mut self) {
-        let needle = (!self.filter.search.is_empty()).then_some(self.filter.search.as_str());
-        let tasks = self.store.tasks();
-        let today = self.store.today();
+    /// Move `cursor` to wherever `abs` lives in the current list. Falls back
+    /// to clamping if `abs` was filtered out.
+    pub(crate) fn follow(&mut self, abs: usize, cursor: &mut usize) {
+        if let Some(pos) = self.cache.iter().position(|&i| i == abs) {
+            *cursor = pos;
+        } else {
+            self.clamp(cursor);
+        }
+    }
+
+    /// Compute a fresh List-view list under the active filter + sort. Reads
+    /// the task slice through `tasks` so callers can pass `store.tasks()`
+    /// without borrowing `App` twice.
+    pub(crate) fn rebuild_list(
+        tasks: &[crate::todo::Task],
+        filter: &Filter,
+        show_done: bool,
+        show_future: bool,
+        today: &str,
+        sort: Sort,
+        week_start: &WeekStart,
+    ) -> Self {
+        let needle = (!filter.search.is_empty()).then_some(filter.search.as_str());
 
         let mut idxs: Vec<usize> = (0..tasks.len())
             .filter(|&i| {
-                filter::list_predicate(
-                    &tasks[i],
-                    self.prefs.show_done,
-                    self.prefs.show_future,
-                    today,
-                    &self.filter,
-                    needle,
-                )
+                filter::list_predicate(&tasks[i], show_done, show_future, today, filter, needle)
             })
             .collect();
 
-        filter::sort_by_prefs(&mut idxs, tasks, self.prefs.sort);
+        filter::sort_by_prefs(&mut idxs, tasks, sort);
 
-        let week_start = &self.week_start;
-
-        let groups: Vec<GroupKey> = match self.prefs.sort {
+        let groups: Vec<GroupKey> = match sort {
             Sort::File => vec![GroupKey::None; idxs.len()],
             Sort::Priority => idxs
                 .iter()
@@ -74,12 +95,14 @@ impl App {
                 .map(|&i| GroupKey::ListDue(filter::due_bucket(&tasks[i], today, week_start)))
                 .collect(),
         };
-        self.visible_groups = groups;
-        self.visible_cache = idxs;
+        Self {
+            cache: idxs,
+            groups,
+        }
     }
 
-    fn rebuild_archive_cache(&mut self) {
-        let archive = self.store.archive().tasks();
+    /// Compute a fresh Archive-view list, sorted by done-date descending.
+    pub(crate) fn rebuild_archive(archive: &[crate::todo::Task]) -> Self {
         let mut idxs: Vec<usize> = (0..archive.len()).collect();
         idxs.sort_by(|&a, &b| {
             archive[b]
@@ -98,31 +121,68 @@ impl App {
                 GroupKey::ArchiveDate(date)
             })
             .collect();
-        self.visible_cache = idxs;
-        self.visible_groups = groups;
+        Self {
+            cache: idxs,
+            groups,
+        }
+    }
+}
+
+impl App {
+    /// Indices into the active view's task source after filter + sort, in
+    /// display order. The source is `archive().tasks()` in Archive view,
+    /// `tasks()` otherwise. Reads the cache populated by `recompute_visible`.
+    pub fn visible_indices(&self) -> &[usize] {
+        self.list.indices()
+    }
+
+    /// Group key per row, parallel to `visible_indices()`.
+    pub fn visible_groups(&self) -> &[GroupKey] {
+        self.list.groups()
+    }
+
+    /// Recompute the cached visible-index list and parallel group keys. Call
+    /// after any mutation that affects filter/sort/view/tasks/archive.
+    /// Also invalidates the timesheet groups cache so the next timesheet
+    /// render forces a fresh computation — no more stale views after
+    /// archive/unarchive.
+    pub fn recompute_visible(&mut self) {
+        match self.nav.view {
+            View::List => {
+                let tasks = self.store.tasks();
+                let today = self.store.today();
+                let filter = &self.filter;
+                self.list = VisibleList::rebuild_list(
+                    tasks,
+                    filter,
+                    self.prefs.show_done,
+                    self.prefs.show_future,
+                    today,
+                    self.prefs.sort,
+                    &self.week_start,
+                );
+            }
+            View::Archive => {
+                let archive = self.store.archive().tasks();
+                self.list = VisibleList::rebuild_archive(archive);
+            }
+            View::Timesheet => {}
+        }
+        self.timesheet.invalidate_cache();
     }
 
     pub fn cur_abs(&self) -> Option<usize> {
-        self.visible_cache.get(self.nav.cursor).copied()
+        self.list.cur(self.nav.cursor)
     }
 
     pub fn clamp_cursor(&mut self) {
-        let len = self.visible_cache.len();
-        if len == 0 {
-            self.nav.cursor = 0;
-        } else if self.nav.cursor >= len {
-            self.nav.cursor = len - 1;
-        }
+        self.list.clamp(&mut self.nav.cursor);
     }
 
     /// Move the cursor to wherever `abs` lives in the current visible list.
     /// Falls back to clamping if `abs` was filtered out.
     pub(super) fn follow_cursor(&mut self, abs: usize) {
-        if let Some(pos) = self.visible_cache.iter().position(|&i| i == abs) {
-            self.nav.cursor = pos;
-        } else {
-            self.clamp_cursor();
-        }
+        self.list.follow(abs, &mut self.nav.cursor);
     }
 }
 
@@ -183,6 +243,23 @@ mod tests {
         for &i in idxs {
             assert!(app.archive().tasks().get(i).is_some());
         }
+    }
+
+    /// The invariant the bundle exists to own: indices and group keys are
+    /// always the same length, for both views.
+    #[test]
+    fn indices_and_groups_stay_parallel() {
+        let mut app = build_app("(A) a\n(B) b\nc\n");
+        app.recompute_visible();
+        assert_eq!(app.visible_indices().len(), app.visible_groups().len());
+
+        app.set_view(View::Archive);
+        assert_eq!(app.visible_indices().len(), app.visible_groups().len());
+
+        app.set_view(View::List);
+        app.prefs.sort = Sort::Due;
+        app.recompute_visible();
+        assert_eq!(app.visible_indices().len(), app.visible_groups().len());
     }
 
     #[test]

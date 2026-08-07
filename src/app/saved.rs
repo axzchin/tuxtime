@@ -1,21 +1,38 @@
 //! Named saved searches: upsert + persistence. The `ff` recall picker lives
 //! in `picker.rs` alongside its project/context siblings.
-use super::App;
-use super::types::SavedFilter;
+use super::saved_filter_picker::SavedFilterPicker;
+use super::{App, SavedFilter};
 use crate::config::Config;
 
-impl App {
-    /// Read-only view of the user's saved searches.
-    pub fn saved_filters(&self) -> &[SavedFilter] {
-        &self.saved_filters
+/// The saved-search domain bundle: the named filter list plus the `ff`
+/// picker's transient state (restore point + cursor). Owns the upsert rules
+/// so `App` stays a thin composition root over its domain bundles.
+#[derive(Debug, Default)]
+pub(crate) struct SavedFilterState {
+    pub list: Vec<SavedFilter>,
+    pub picker: SavedFilterPicker,
+}
+
+impl SavedFilterState {
+    pub(crate) fn from_config(pairs: &[(String, String)]) -> Self {
+        Self {
+            list: pairs
+                .iter()
+                .map(|(name, query)| SavedFilter {
+                    name: name.clone(),
+                    query: query.clone(),
+                })
+                .collect(),
+            picker: SavedFilterPicker::default(),
+        }
     }
 
-    /// Validate `name` and upsert `{name, query: <current search>}` into the
+    /// Validate `name` and upsert `{name, query: <active search>}` into the
     /// in-memory list. Pure (no I/O) so it can be unit-tested without
     /// touching the user's real config. Re-saving an existing name replaces
     /// its query in place. Returns the trimmed name on success, or a
     /// user-facing error message.
-    pub(crate) fn upsert_saved_filter(&mut self, name: &str) -> Result<String, String> {
+    pub(crate) fn upsert(&mut self, name: &str, search: &str) -> Result<String, String> {
         let name = name.trim();
         if name.is_empty() {
             return Err("filter name required".into());
@@ -28,18 +45,29 @@ impl App {
         // Trim so the stored value equals what survives the config
         // round-trip (`parse` does `value.trim()`); a whitespace-only
         // search trims to empty and is rejected like a blank one.
-        let query = self.filter.search.trim().to_string();
+        let query = search.trim().to_string();
         if query.is_empty() {
             return Err("no active search to save".into());
         }
-        match self.saved_filters.iter_mut().find(|f| f.name == name) {
+        match self.list.iter_mut().find(|f| f.name == name) {
             Some(existing) => existing.query = query,
-            None => self.saved_filters.push(SavedFilter {
+            None => self.list.push(SavedFilter {
                 name: name.to_string(),
                 query,
             }),
         }
         Ok(name.to_string())
+    }
+}
+
+impl App {
+    /// Read-only view of the user's saved searches.
+    pub fn saved_filters(&self) -> &[SavedFilter] {
+        &self.saved.list
+    }
+
+    pub(crate) fn upsert_saved_filter(&mut self, name: &str) -> Result<String, String> {
+        self.saved.upsert(name, &self.filter.search)
     }
 
     /// Name the current `/`-search and persist it. Flashes the outcome.
@@ -58,7 +86,7 @@ impl App {
         match self.upsert_saved_filter(name) {
             Ok(saved) => {
                 if let Err(e) = Config::update(|cfg| {
-                    cfg.filters = merge_saved(&cfg.filters, &self.saved_filters);
+                    cfg.filters = merge_saved(&cfg.filters, &self.saved.list);
                 }) {
                     self.flash(format!("save failed: {e}"));
                 } else {

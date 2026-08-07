@@ -54,19 +54,20 @@ impl App {
     /// else the first. Stashes the pre-picker search so `pick_cancel` can
     /// revert. Inside the picker, j/k cycle through saved searches.
     pub fn enter_pick_saved(&mut self) {
-        if self.saved_filters.is_empty() {
+        if self.saved.list.is_empty() {
             self.flash("no saved filters");
             return;
         }
-        self.saved_picker.restore = Some(self.filter.search.clone());
+        self.saved.picker.restore = Some(self.filter.search.clone());
         // Highlight the saved filter matching the active search, else the
         // first; track the index so duplicate queries stay distinguishable.
-        self.saved_picker.idx = self
-            .saved_filters
+        self.saved.picker.idx = self
+            .saved
+            .list
             .iter()
             .position(|f| f.query == self.filter.search)
             .unwrap_or(0);
-        self.filter.search = self.saved_filters[self.saved_picker.idx].query.clone();
+        self.filter.search = self.saved.list[self.saved.picker.idx].query.clone();
         self.nav.cursor = 0;
         self.nav.mode = Mode::PickSavedFilter;
         self.recompute_visible();
@@ -78,7 +79,7 @@ impl App {
     /// snapshot so a later cancel elsewhere can't resurrect it.
     pub fn pick_accept(&mut self) {
         if self.nav.mode == Mode::PickSavedFilter {
-            self.saved_picker.restore = None;
+            self.saved.picker.restore = None;
         }
         self.nav.mode = Mode::Normal;
     }
@@ -92,7 +93,7 @@ impl App {
             Mode::PickProject => self.filter.project = None,
             Mode::PickContext => self.filter.context = None,
             Mode::PickSavedFilter => {
-                self.filter.search = self.saved_picker.restore.take().unwrap_or_default();
+                self.filter.search = self.saved.picker.restore.take().unwrap_or_default();
             }
             _ => {}
         }
@@ -128,16 +129,16 @@ impl App {
                 self.flash_pick_context();
             }
             Mode::PickSavedFilter => {
-                let len = self.saved_filters.len();
+                let len = self.saved.list.len();
                 if len == 0 {
                     return;
                 }
-                self.saved_picker.idx = if forward {
-                    (self.saved_picker.idx + 1) % len
+                self.saved.picker.idx = if forward {
+                    (self.saved.picker.idx + 1) % len
                 } else {
-                    (self.saved_picker.idx + len - 1) % len
+                    (self.saved.picker.idx + len - 1) % len
                 };
-                self.filter.search = self.saved_filters[self.saved_picker.idx].query.clone();
+                self.filter.search = self.saved.list[self.saved.picker.idx].query.clone();
                 self.nav.cursor = 0;
                 self.recompute_visible();
                 self.flash_pick_saved();
@@ -166,10 +167,10 @@ impl App {
     }
 
     fn flash_pick_saved(&mut self) {
-        let len = self.saved_filters.len();
-        if let Some(f) = self.saved_filters.get(self.saved_picker.idx) {
+        let len = self.saved.list.len();
+        if let Some(f) = self.saved.list.get(self.saved.picker.idx) {
             let name = f.name.clone();
-            self.flash(format!("{}  ({}/{})", name, self.saved_picker.idx + 1, len));
+            self.flash(format!("{}  ({}/{})", name, self.saved.picker.idx + 1, len));
         }
     }
 }
@@ -240,7 +241,7 @@ mod tests {
     fn pick_saved_seeds_first_steps_and_cancel_reverts() {
         use crate::app::SavedFilter;
         let mut app = build_app(crate::sample::TODO_RAW);
-        app.saved_filters = vec![
+        app.saved.list = vec![
             SavedFilter {
                 name: "a".into(),
                 query: "alpha".into(),
@@ -268,7 +269,7 @@ mod tests {
     fn pick_saved_seeds_from_active_query_and_commit_keeps() {
         use crate::app::SavedFilter;
         let mut app = build_app(crate::sample::TODO_RAW);
-        app.saved_filters = vec![
+        app.saved.list = vec![
             SavedFilter {
                 name: "a".into(),
                 query: "alpha".into(),
@@ -304,7 +305,7 @@ mod tests {
         // and would strand j/k on the first match).
         use crate::app::SavedFilter;
         let mut app = build_app(crate::sample::TODO_RAW);
-        app.saved_filters = vec![
+        app.saved.list = vec![
             SavedFilter {
                 name: "a".into(),
                 query: "dup".into(),
