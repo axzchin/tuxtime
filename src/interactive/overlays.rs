@@ -6,7 +6,7 @@
 //! - [`handle_autocomplete_keys`] — shared by Insert, Search, Prompt modes
 //! - All other handlers are `pub(crate)` for use by [`handle_key`].
 
-use crate::app::{App, Mode, View};
+use crate::app::{App, DayBoundaryAction, Mode, View};
 use crate::cli;
 use crate::todo;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -387,6 +387,47 @@ pub(crate) fn handle_manual_entry_choice(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Esc => {
             app.nav.enter_normal();
+        }
+        _ => {}
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Day-boundary prompt — starting a timer (or adding time) on a task whose
+// time belongs to a previous day. One line per task-day (tuxtime-spec §3.5).
+// ---------------------------------------------------------------------------
+
+pub(crate) fn handle_day_boundary(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Char('c' | 'C') => {
+            // Continue the same entry: normal toggle/add — the user accepted
+            // that this moves the entry onto today's sheet.
+            let pending = app.session.pending_day_boundary.take();
+            app.nav.pop_mode();
+            if let Some((abs, action)) = pending {
+                match action {
+                    DayBoundaryAction::StartTimer => app.toggle_timer_at(abs),
+                    DayBoundaryAction::AddTime { input } => app.add_time_to_current_at(abs, &input),
+                }
+            }
+        }
+        KeyCode::Char('n' | 'N') => {
+            // New entry for today: carry forward (consuming the old line),
+            // then start the timer / add the time on the fresh line.
+            let pending = app.session.pending_day_boundary.take();
+            app.nav.pop_mode();
+            if let Some((abs, action)) = pending {
+                match action {
+                    DayBoundaryAction::StartTimer => app.day_boundary_new_entry(abs),
+                    DayBoundaryAction::AddTime { input } => {
+                        app.day_boundary_new_entry_add_time(abs, &input);
+                    }
+                }
+            }
+        }
+        KeyCode::Esc => {
+            app.session.pending_day_boundary.take();
+            app.nav.pop_mode();
         }
         _ => {}
     }

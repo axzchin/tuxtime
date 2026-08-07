@@ -297,6 +297,44 @@ pub fn draw(frame: &mut Frame, app: &App) {
             ];
             frame.render_widget(Paragraph::new(lines).centered(), inner);
         }
+        // Day-boundary prompt — starting a timer (or adding time) on a task
+        // whose accumulated time belongs to a previous day (one line per
+        // task-day). The task's narrative is shown so the user knows what
+        // they're carrying forward.
+        Mode::PromptDayBoundary => {
+            let r = centered_in(area, 68, 7);
+            frame.render_widget(Clear, r);
+            let theme = app.theme();
+            let block = Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.accent).bg(theme.panel))
+                .title(" 📅 Day Boundary ")
+                .style(Style::default().bg(theme.panel));
+            let inner = block.inner(r);
+            frame.render_widget(block, r);
+            let narrative = app
+                .session
+                .pending_day_boundary
+                .as_ref()
+                .and_then(|(abs, _)| app.store.tasks().get(*abs))
+                .map(|t| crate::todo::body_only(&t.raw))
+                .unwrap_or_default();
+            let lines = vec![
+                Line::from(Span::styled(
+                    format!("\"{narrative}\" has time from a previous day."),
+                    Style::default()
+                        .fg(theme.fg)
+                        .bg(theme.panel)
+                        .add_modifier(Modifier::BOLD),
+                )),
+                Line::raw(""),
+                Line::from(Span::styled(
+                    "[C]ontinue same entry  [N]ew entry for today  [Esc] cancel",
+                    Style::default().fg(theme.dim).bg(theme.panel),
+                )),
+            ];
+            frame.render_widget(Paragraph::new(lines).centered(), inner);
+        }
         Mode::ManageProjects => {
             frame.render_widget(Clear, body_area);
             render_manage_projects(frame, body_area, app);

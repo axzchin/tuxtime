@@ -40,6 +40,10 @@ pub enum Mode {
     PromptIdleNudge,
     /// Prompt to set the long-timer nudge threshold (minutes).
     PromptLongTimerNudge,
+    /// Day-boundary prompt — starting a timer (or adding time) on a task
+    /// whose accumulated time belongs to a previous day. `[c]ontinue same
+    /// entry / [n]ew entry for today / [esc] cancel`.
+    PromptDayBoundary,
     /// Calendar picker → jump the timesheet to a selected date.
     PickTimesheetDate,
     CommandPalette,

@@ -8,8 +8,8 @@ use super::types::{AddOutcome, View};
 use crate::app::WeekStart;
 use crate::core::AddOutcome as CoreAdd;
 use crate::core::{
-    ArchiveDeleteOutcome, ArchiveOneOutcome, ArchiveOutcome, CompleteOutcome, DeleteOutcome,
-    EditOutcome, PriorityOutcome, TagOutcome, UnarchiveOutcome, UndoOutcome,
+    ArchiveDeleteOutcome, ArchiveOneOutcome, ArchiveOutcome, CarryForwardOutcome, CompleteOutcome,
+    DeleteOutcome, EditOutcome, PriorityOutcome, TagOutcome, UnarchiveOutcome, UndoOutcome,
 };
 use crate::nl;
 use crate::note;
@@ -61,6 +61,13 @@ impl App {
         let text = self.draft.text().trim().to_string();
         if text.is_empty() {
             return AddOutcome::Empty;
+        }
+
+        // Carry-forward save (upgraded `N`): the source task is consumed and
+        // this line becomes today's entry. Skipped from the NL pre-pass — the
+        // carried narrative is already canonical and must not be reinterpreted.
+        if let Some(from) = self.session.carry_forward_from.take() {
+            return self.save_carry_forward(from, &text);
         }
 
         // Natural-language pre-pass. If the buffer reads like prose and the
@@ -115,6 +122,38 @@ impl App {
             }
             CoreAdd::Error(e) => {
                 self.flash(format!("invalid: {e}"));
+                AddOutcome::Invalid
+            }
+        }
+    }
+
+    /// Save path for the upgraded `N` carry-forward: completes the source line
+    /// and inserts the (user-polished) draft as today's entry. No timer is
+    /// started — the user presses `t` when ready.
+    fn save_carry_forward(&mut self, from: usize, text: &str) -> AddOutcome {
+        match self.store.carry_forward_to(from, text) {
+            CarryForwardOutcome::Carried { new, .. } => {
+                self.flash("new entry — previous day completed");
+                self.after_mutation(new);
+                AddOutcome::Saved
+            }
+            CarryForwardOutcome::Aborted(r) => {
+                self.handle_reconcile_abort(r);
+                AddOutcome::Invalid
+            }
+            CarryForwardOutcome::OutOfRange => {
+                self.flash("task vanished");
+                AddOutcome::Invalid
+            }
+            // `carry_forward_to` never returns CarriedStarted; the arm exists
+            // so the match stays exhaustive if the enum grows a new returner.
+            #[allow(unreachable_patterns)]
+            CarryForwardOutcome::CarriedStarted { .. } => {
+                self.flash("carry failed");
+                AddOutcome::Invalid
+            }
+            CarryForwardOutcome::Error(e) => {
+                self.flash(format!("carry failed: {e}"));
                 AddOutcome::Invalid
             }
         }
@@ -350,6 +389,13 @@ mod tests {
         test_support::{build_app, build_app_with_config, test_path},
     };
     use crate::config::Config;
+
+    fn key(c: char) -> ratatui::crossterm::event::KeyEvent {
+        ratatui::crossterm::event::KeyEvent::new(
+            ratatui::crossterm::event::KeyCode::Char(c),
+            ratatui::crossterm::event::KeyModifiers::NONE,
+        )
+    }
 
     #[test]
     fn open_file_rebinds_path_body_and_resets_cursor() {
@@ -588,11 +634,15 @@ mod tests {
 
     #[test]
     fn add_time_replaces_existing_log_date_without_duplicating() {
+        // Adding time to a task whose time belongs to a previous day now asks
+        // first; "continue same entry" moves the log to today exactly once.
         let mut app = build_app("Draft motion +Smith @drafting dur:3600 log:2026-05-01\n");
         app.nav.cursor = 0;
         app.recompute_visible();
 
         app.add_time_to_current_from_input("30");
+        assert_eq!(app.nav.mode(), crate::app::Mode::PromptDayBoundary);
+        crate::interactive::handle_day_boundary(&mut app, key('c'));
 
         let raw = &app.tasks()[0].raw;
         assert_eq!(

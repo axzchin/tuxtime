@@ -214,15 +214,40 @@ pub fn apply_action(app: &mut App, action: Action) {
         Action::TimerStartStop => app.toggle_timer(),
         Action::ManualTimeEntry => app.nav.set_mode(Mode::ManualEntryChoice),
         Action::BeginSessionFromCurrent => {
-            if let Some(t) = app.cur_task() {
-                let body = todo::body_only(&t.raw);
+            let Some(abs) = app.cur_abs() else {
+                app.flash("no task to start session from");
+                return;
+            };
+            let (done, running, raw, priority) = {
+                let t = &app.store.tasks()[abs];
+                (
+                    t.done,
+                    app.is_timer_running_on(abs),
+                    t.raw.clone(),
+                    t.priority,
+                )
+            };
+            if done {
+                app.flash("cannot carry a completed task");
+            } else if running {
+                app.flash("stop the timer first (t)");
+            } else {
+                // Upgraded carry-forward: pre-fill the Insert dialog with the
+                // carried-over line (body + projects + contexts + billable,
+                // priority preserved) so the narrative can be polished. On
+                // save the source line is consumed and this becomes today's
+                // entry; no timer is started.
+                let body = crate::core::carry_forward_body(&raw);
+                let draft = match priority {
+                    Some(p) => format!("({p}) {body}"),
+                    None => body,
+                };
+                app.session.carry_forward_from = Some(abs);
                 app.draft_clear();
-                app.draft_set_insert(format!("{body} dur:"));
-                app.session.manual_time_entry = true;
+                app.draft_set_insert(draft);
+                app.session.manual_time_entry = false;
                 app.nav.set_mode(Mode::Insert);
                 app.selection.exit_edit();
-            } else {
-                app.flash("no task to start session from");
             }
         }
         Action::OpenProjectManager => app.nav.set_mode(Mode::ManageProjects),

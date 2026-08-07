@@ -38,6 +38,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         Mode::ManualEntryChoice => "MANUAL ENTRY".into(),
         Mode::ManageProjects => "PROJECTS".into(),
         Mode::PromptRenameProject => "RENAME PROJECT".into(),
+        Mode::PromptDayBoundary => "DAY BOUNDARY".into(),
     };
     if matches!(app.nav.view, View::Timesheet) {
         mode_label = "TIMESHEET".into();

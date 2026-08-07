@@ -6,6 +6,16 @@ use std::time::Instant;
 
 use super::types::View;
 
+/// What the day-boundary prompt's "new entry" choice should do after the
+/// fresh line is created (one line per task-day, tuxtime-spec.md §3.5).
+#[derive(Debug, Clone)]
+pub enum DayBoundaryAction {
+    /// Pressing `t`: start the timer on the new line.
+    StartTimer,
+    /// `M A` add-time: add this duration input to the new line.
+    AddTime { input: String },
+}
+
 /// Timer and nudge session state. All fields are `pub` so handlers
 /// can mutate them directly through `app.session`, following the same
 /// pattern as [`super::Navigation`].
@@ -25,6 +35,12 @@ pub struct Session {
     /// True when the current Insert session was entered via `M` (manual time
     /// entry). Drives `dur:` value conversion on save.
     pub manual_time_entry: bool,
+    /// Day-boundary prompt state: the task being started + what "new entry"
+    /// should do once the fresh line exists. `None` when no prompt is showing.
+    pub pending_day_boundary: Option<(usize, DayBoundaryAction)>,
+    /// Source task index for the upgraded `N` carry-forward insert. Cleared
+    /// on save or cancel.
+    pub carry_forward_from: Option<usize>,
 }
 
 impl Session {
@@ -36,6 +52,8 @@ impl Session {
             auto_start_on_save: false,
             pre_nudge_view: None,
             manual_time_entry: false,
+            pending_day_boundary: None,
+            carry_forward_from: None,
         }
     }
 }

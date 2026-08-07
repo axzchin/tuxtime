@@ -5,11 +5,25 @@
 //! for timer operations, `flash()` for user feedback, and `prefs` for
 //! nudge thresholds.
 
+use super::session::DayBoundaryAction;
 use super::{App, Mode, format_duration, parse_duration_input};
-use crate::core::outcome::{TimerOutcome, TimerQuitOutcome};
+use crate::core::outcome::{CarryForwardOutcome, EditOutcome, TimerOutcome, TimerQuitOutcome};
 use crate::core::rebuild_token_line;
 use crate::todo::Task;
 use std::time::Instant;
+
+/// The day a task's accumulated time belongs to: its `log:` value when valid,
+/// else its creation date. `None` when neither is a usable calendar date.
+fn effective_log_date(t: &Task) -> Option<&str> {
+    t.log
+        .as_deref()
+        .filter(|s| crate::todo::is_iso_date(s))
+        .or_else(|| {
+            t.created_date
+                .as_deref()
+                .filter(|s| crate::todo::is_iso_date(s))
+        })
+}
 
 impl App {
     // ---- timer helpers ----
@@ -124,13 +138,110 @@ impl App {
         result.join(" ")
     }
 
-    /// Toggle timer on the task under the cursor (List view only).
+    /// Toggle timer on the task under the cursor (List view only). When the
+    /// task already carries time from a previous day (and the day-boundary
+    /// prompt is enabled), asks first whether to continue the same entry or
+    /// start a fresh entry for today, instead of silently moving the entry.
     pub fn toggle_timer(&mut self) {
         let Some(abs) = self.cur_task_index_in_tasks() else {
             self.flash("no task selected");
             return;
         };
+        if self.should_prompt_day_boundary(abs) {
+            self.session.pending_day_boundary = Some((abs, DayBoundaryAction::StartTimer));
+            self.nav.push_mode(Mode::PromptDayBoundary);
+            return;
+        }
         self.toggle_timer_at(abs);
+    }
+
+    /// True when starting a timer on `abs` should first ask about the day
+    /// boundary: the task has accumulated time whose effective log date is
+    /// before today, so a plain continue would move that time onto today's
+    /// sheet. Never fires when the timer is already running on the task
+    /// (that would be a stop, not a start).
+    pub fn should_prompt_day_boundary(&self, abs: usize) -> bool {
+        if !self.prefs.prompt_on_day_boundary {
+            return false;
+        }
+        if self.store.is_timer_running_on(abs) {
+            return false;
+        }
+        let Some(t) = self.store.tasks().get(abs) else {
+            return false;
+        };
+        if t.dur.unwrap_or(0) == 0 {
+            return false;
+        }
+        let Some(eff) = effective_log_date(t) else {
+            return false;
+        };
+        eff < self.store.today()
+    }
+
+    /// Day-boundary prompt "new entry" choice (timer path): carry the task
+    /// forward to a fresh line for today and start the timer on it. Any timer
+    /// running on another task is stopped first (its time captured).
+    pub fn day_boundary_new_entry(&mut self, abs: usize) {
+        match self.store.carry_forward_and_start(abs) {
+            CarryForwardOutcome::CarriedStarted {
+                new,
+                project,
+                activity,
+                body,
+                ..
+            } => {
+                let proj = project.map(|p| format!("+{p} ")).unwrap_or_default();
+                let act = activity.map(|a| format!("@{a} ")).unwrap_or_default();
+                self.flash(format!("▶ {proj}{act}{body} — new entry for today"));
+                self.session.last_timer_activity = Instant::now();
+                self.after_mutation(new);
+            }
+            CarryForwardOutcome::Carried { .. } | CarryForwardOutcome::OutOfRange => {
+                self.flash("could not start new entry");
+            }
+            CarryForwardOutcome::Aborted(r) => self.handle_reconcile_abort(r),
+            CarryForwardOutcome::Error(e) => self.flash(format!("carry failed: {e}")),
+        }
+        self.recompute_visible();
+    }
+
+    /// Day-boundary prompt "new entry" choice (add-time path): carry the task
+    /// forward, then add `input` as `dur:` on the fresh line.
+    pub fn day_boundary_new_entry_add_time(&mut self, abs: usize, input: &str) {
+        let secs = parse_duration_input(input);
+        if secs == 0 {
+            self.flash(format!("invalid duration: {input}"));
+            return;
+        }
+        match self.store.carry_forward(abs) {
+            CarryForwardOutcome::Carried { new, .. } => {
+                let raw = self.store.task_raw(new).unwrap_or_default();
+                let updated = rebuild_token_line(&raw, "dur:", None, &format!("dur:{secs}"));
+                let updated =
+                    rebuild_token_line(&updated, "log:", None, &format!("log:{}", self.today()));
+                match self.store.edit_line(new, &updated) {
+                    EditOutcome::Saved { .. } => {
+                        self.flash(format!(
+                            "added {} — new entry for today",
+                            format_duration(secs)
+                        ));
+                        self.after_mutation(new);
+                    }
+                    EditOutcome::Aborted(r) => self.handle_reconcile_abort(r),
+                    EditOutcome::Error(e) => self.flash(format!("edit failed: {e}")),
+                    EditOutcome::Empty | EditOutcome::OutOfRange | EditOutcome::TermNotFound => {}
+                }
+            }
+            CarryForwardOutcome::Aborted(r) => self.handle_reconcile_abort(r),
+            CarryForwardOutcome::OutOfRange => self.flash("task vanished"),
+            CarryForwardOutcome::Error(e) => self.flash(format!("carry failed: {e}")),
+            // `carry_forward` never returns CarriedStarted; the arm exists so
+            // the match stays exhaustive if the enum grows a new returner.
+            #[allow(unreachable_patterns)]
+            CarryForwardOutcome::CarriedStarted { .. } => self.flash("carry failed"),
+        }
+        self.recompute_visible();
     }
 
     /// Toggle timer on the task at `abs` without requiring cursor context.
@@ -161,6 +272,32 @@ impl App {
                 let proj = project.map(|p| format!("+{p} ")).unwrap_or_default();
                 let act = activity.map(|a| format!("@{a} ")).unwrap_or_default();
                 self.flash(format!("■ {proj}{act}{body} — {elapsed} (total {total})"));
+                self.session.last_timer_activity = Instant::now();
+            }
+            // A midnight-crossing stop was split into one line per day; the
+            // flash reports the per-day breakdown so the user sees where the
+            // time landed (and that a new entry was created).
+            TimerOutcome::StoppedSplit {
+                elapsed_secs,
+                total_secs,
+                chunks,
+                project,
+                activity,
+                body,
+                ..
+            } => {
+                let elapsed = format_duration(elapsed_secs);
+                let total = format_duration(total_secs);
+                let proj = project.map(|p| format!("+{p} ")).unwrap_or_default();
+                let act = activity.map(|a| format!("@{a} ")).unwrap_or_default();
+                let days = chunks
+                    .iter()
+                    .map(|(d, s)| format!("{d} {}", format_duration(*s)))
+                    .collect::<Vec<_>>()
+                    .join(" · ");
+                self.flash(format!(
+                    "■ {proj}{act}{body} — split across midnight: {days} ({elapsed} total {total})"
+                ));
                 self.session.last_timer_activity = Instant::now();
             }
             TimerOutcome::Switched {
@@ -236,17 +373,36 @@ impl App {
     }
 
     /// Add time to the current task's `dur:` field from a user-supplied
-    /// duration string (minutes, hours, or clock time). Flashes the result.
+    /// duration string (minutes, hours, or clock time). When the task's time
+    /// belongs to a previous day, prompts to carry forward first so the
+    /// existing entry isn't silently moved onto today's sheet.
     pub fn add_time_to_current_from_input(&mut self, input: &str) {
+        let Some(abs) = self.cur_task_index_in_tasks() else {
+            self.flash("no task selected");
+            return;
+        };
+        if self.should_prompt_day_boundary(abs) {
+            self.session.pending_day_boundary = Some((
+                abs,
+                DayBoundaryAction::AddTime {
+                    input: input.to_string(),
+                },
+            ));
+            self.nav.push_mode(Mode::PromptDayBoundary);
+            return;
+        }
+        self.add_time_to_current_at(abs, input);
+    }
+
+    /// Add `input` (minutes, hours, or clock time) as `dur:` to the task at
+    /// `abs`, stamping today's `log:`. Shared by the direct add-time path and
+    /// the day-boundary prompt's "continue same entry" choice.
+    pub fn add_time_to_current_at(&mut self, abs: usize, input: &str) {
         let secs = parse_duration_input(input);
         if secs == 0 {
             self.flash(format!("invalid duration: {input}"));
             return;
         }
-        let Some(abs) = self.cur_task_index_in_tasks() else {
-            self.flash("no task selected");
-            return;
-        };
         let current = self.store.tasks()[abs].dur.unwrap_or(0);
         let total = current + secs;
         // Replace/add the `dur:` token and stamp the `log:` date through the
@@ -256,7 +412,6 @@ impl App {
         let raw = self.store.task_raw(abs).unwrap_or_default();
         let updated = rebuild_token_line(&raw, "dur:", None, &format!("dur:{total}"));
         let updated = rebuild_token_line(&updated, "log:", None, &format!("log:{}", self.today()));
-        use crate::core::EditOutcome;
         match self.store.edit_line(abs, &updated) {
             EditOutcome::Saved { abs } => {
                 let added = format_duration(secs);
@@ -296,7 +451,6 @@ impl App {
         } else {
             (format!("{raw} bill:n"), true)
         };
-        use crate::core::EditOutcome;
         match self.store.edit_line(abs, &updated) {
             EditOutcome::Saved { abs } => {
                 if became_nonbillable {
@@ -326,5 +480,193 @@ impl App {
                 self.flash(format!("timer stop failed: {e}"));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::test_support::build_app;
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    fn key(c: char) -> KeyEvent {
+        KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)
+    }
+
+    fn esc() -> KeyEvent {
+        KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)
+    }
+
+    // ---- day-boundary prompt (one line per task-day) ----
+
+    #[test]
+    fn toggle_timer_prompts_on_previous_day_task() {
+        let mut app = build_app("Draft +Smith dur:7200 log:2026-05-05\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+
+        app.toggle_timer();
+
+        assert_eq!(app.nav.mode(), Mode::PromptDayBoundary);
+        assert!(!app.timer_running(), "no timer until the prompt resolves");
+        // Esc cancels: back to Normal, task untouched.
+        crate::interactive::handle_day_boundary(&mut app, esc());
+        assert_eq!(app.nav.mode(), Mode::Normal);
+        assert_eq!(app.tasks().len(), 1);
+        assert!(!app.tasks()[0].done);
+        assert!(app.session.pending_day_boundary.is_none());
+    }
+
+    #[test]
+    fn toggle_timer_prompts_not_for_same_day_or_no_time() {
+        let app = build_app("Today +W dur:1800 log:2026-05-06\nNo time yet\nFresh dur:0\n");
+        assert!(
+            !app.should_prompt_day_boundary(0),
+            "log == today: no prompt"
+        );
+        assert!(!app.should_prompt_day_boundary(1), "no dur: no prompt");
+        assert!(!app.should_prompt_day_boundary(2), "dur:0: no prompt");
+        assert!(
+            !app.should_prompt_day_boundary(99),
+            "out of range: no prompt"
+        );
+        // Previous-day time but the feature disabled: no prompt either.
+        let mut app2 = build_app("Old +W dur:7200 log:2026-05-05\n");
+        app2.prefs.prompt_on_day_boundary = false;
+        assert!(!app2.should_prompt_day_boundary(0));
+    }
+
+    #[test]
+    fn day_boundary_continue_starts_timer_without_carrying() {
+        let mut app = build_app("Draft +Smith dur:7200 log:2026-05-05\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+        app.toggle_timer();
+        assert_eq!(app.nav.mode(), Mode::PromptDayBoundary);
+
+        crate::interactive::handle_day_boundary(&mut app, key('c'));
+
+        assert!(app.timer_running());
+        assert_eq!(app.tasks().len(), 1, "no carry on continue");
+        assert!(!app.tasks()[0].done);
+        assert_eq!(app.nav.mode(), Mode::Normal);
+    }
+
+    #[test]
+    fn day_boundary_new_entry_carries_and_starts_timer() {
+        let mut app = build_app("(A) Draft +Smith @drafting dur:7200 log:2026-05-05\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+        app.toggle_timer();
+        assert_eq!(app.nav.mode(), Mode::PromptDayBoundary);
+
+        crate::interactive::handle_day_boundary(&mut app, key('n'));
+
+        assert_eq!(app.tasks().len(), 2);
+        assert!(app.tasks()[0].done, "old line consumed");
+        assert_eq!(app.tasks()[0].dur, Some(7200), "old line keeps its time");
+        let new_raw = &app.tasks()[1].raw;
+        assert!(
+            new_raw.starts_with("(A) 2026-05-06"),
+            "priority + fresh date: {new_raw}"
+        );
+        assert!(new_raw.contains("Draft"), "narrative carried: {new_raw}");
+        assert!(new_raw.contains("+Smith"));
+        assert!(new_raw.contains("@drafting"));
+        assert!(app.timer_running(), "timer started on the new line");
+        assert_eq!(app.store.active_timer_abs(), Some(1));
+        assert_eq!(app.nav.mode(), Mode::Normal);
+    }
+
+    #[test]
+    fn add_time_prompts_on_previous_day_and_new_entry_carries_time() {
+        let mut app = build_app("Draft +Smith dur:7200 log:2026-05-05\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+
+        app.add_time_to_current_from_input("30");
+        assert_eq!(app.nav.mode(), Mode::PromptDayBoundary);
+
+        crate::interactive::handle_day_boundary(&mut app, key('n'));
+
+        assert_eq!(app.tasks().len(), 2);
+        assert!(app.tasks()[0].done);
+        let new_raw = &app.tasks()[1].raw;
+        assert!(
+            new_raw.contains("dur:1800"),
+            "30m added to new entry: {new_raw}"
+        );
+        assert!(
+            new_raw.contains("log:2026-05-06"),
+            "log stamped today: {new_raw}"
+        );
+    }
+
+    #[test]
+    fn add_time_continue_adds_to_same_entry() {
+        let mut app = build_app("Draft +Smith dur:7200 log:2026-05-05\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+
+        app.add_time_to_current_from_input("30");
+        assert_eq!(app.nav.mode(), Mode::PromptDayBoundary);
+
+        crate::interactive::handle_day_boundary(&mut app, key('c'));
+
+        assert_eq!(app.tasks().len(), 1);
+        assert!(app.tasks()[0].raw.contains("dur:9000"));
+        assert!(app.tasks()[0].raw.contains("log:2026-05-06"));
+    }
+
+    #[test]
+    fn day_boundary_prompt_over_running_switch_captures_other_timer() {
+        // Timer running on task 0 (today); user presses t on task 1 whose time
+        // is from a previous day → prompt → 'n' carries task 1 and starts the
+        // timer on the new line, while task 0's elapsed is captured.
+        let start = (chrono::Local::now() - chrono::Duration::seconds(65))
+            .format("%Y-%m-%dT%H:%M:%S")
+            .to_string();
+        let mut app = build_app(&format!(
+            "First +A start:{start}\nSecond +B dur:7200 log:2026-05-05\n"
+        ));
+        app.nav.cursor = 1;
+        app.recompute_visible();
+
+        app.toggle_timer();
+        assert_eq!(app.nav.mode(), Mode::PromptDayBoundary);
+
+        crate::interactive::handle_day_boundary(&mut app, key('n'));
+
+        assert_eq!(app.tasks().len(), 3);
+        assert!(app.tasks()[1].done, "carried task consumed");
+        assert!(
+            app.tasks()[0].dur.unwrap_or(0) >= 60,
+            "other timer's elapsed captured: {:?}",
+            app.tasks()[0].dur
+        );
+        assert!(app.tasks()[0].start.is_none(), "other timer stopped");
+        assert_eq!(app.store.active_timer_abs(), Some(2));
+        assert!(app.tasks()[2].raw.contains("Second"));
+        assert!(app.tasks()[2].start.is_some());
+    }
+
+    #[test]
+    fn carry_forward_save_completes_old_and_creates_today_entry() {
+        let mut app = build_app("(A) Draft motion +Smith @drafting dur:7200 log:2026-05-05\n");
+        // The upgraded N flow pre-fills the draft with the carried line,
+        // including the priority; here we simulate a polished save.
+        app.session.carry_forward_from = Some(0);
+        app.draft_set("(A) Draft motion revised +Smith @drafting".into());
+
+        let outcome = app.add_from_draft();
+
+        assert_eq!(outcome, crate::app::AddOutcome::Saved);
+        assert_eq!(app.tasks().len(), 2);
+        assert!(app.tasks()[0].done);
+        assert_eq!(
+            app.tasks()[1].raw,
+            "(A) 2026-05-06 Draft motion revised +Smith @drafting"
+        );
+        assert_eq!(app.session.carry_forward_from, None, "cleared on save");
     }
 }

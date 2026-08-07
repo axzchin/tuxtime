@@ -53,6 +53,10 @@ pub struct Config {
     pub idle_nudge_seconds: Option<u64>,
     /// Seconds a timer can run before nudging (default 7200 = 2 hours).
     pub long_timer_nudge_seconds: Option<u64>,
+    /// Ask before starting a timer (or adding time) on a task whose accumulated
+    /// time belongs to a previous day, offering to carry the task forward to a
+    /// fresh entry instead of silently moving the entry (default true).
+    pub prompt_on_day_boundary: Option<bool>,
 }
 
 impl Config {
@@ -178,6 +182,7 @@ fn parse(s: &str) -> Config {
             "week_start" => c.week_start = v.parse().ok(),
             "idle_nudge_seconds" => c.idle_nudge_seconds = v.parse().ok(),
             "long_timer_nudge_seconds" => c.long_timer_nudge_seconds = v.parse().ok(),
+            "prompt_on_day_boundary" => c.prompt_on_day_boundary = parse_bool(v),
             // Saved searches: `filter.<name> = <query>`. The name is the
             // (trimmed) text after the `filter.` prefix; the query is the
             // (unquoted) value, which may itself contain `=`. A repeated
@@ -253,6 +258,9 @@ fn serialize(c: &Config) -> String {
     if let Some(v) = c.long_timer_nudge_seconds {
         let _ = writeln!(out, "long_timer_nudge_seconds = {v}");
     }
+    if let Some(v) = c.prompt_on_day_boundary {
+        let _ = writeln!(out, "prompt_on_day_boundary = {v}");
+    }
     out
 }
 
@@ -300,6 +308,7 @@ mod tests {
             week_start: Some(WeekStart::Sunday),
             idle_nudge_seconds: Some(900),
             long_timer_nudge_seconds: Some(7200),
+            prompt_on_day_boundary: Some(true),
         };
 
         let s = serialize(&c);
@@ -458,6 +467,7 @@ mod tests {
             week_start: Some(WeekStart::Sunday),
             idle_nudge_seconds: None,
             long_timer_nudge_seconds: None,
+            prompt_on_day_boundary: Some(false),
         };
         written.save_to(&path).expect("save should succeed");
         assert!(path.exists());

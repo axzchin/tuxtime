@@ -16,9 +16,10 @@ use ratatui::crossterm::event::KeyEvent;
 use super::action_dispatch::handle_normal;
 use super::insert::handle_insert;
 use super::overlays::{
-    handle_command_palette, handle_help, handle_idle_nudge, handle_manage_projects,
-    handle_manual_entry_choice, handle_pick, handle_pick_theme, handle_pick_timesheet_date,
-    handle_prompt, handle_search, handle_settings, handle_share, handle_welcome,
+    handle_command_palette, handle_day_boundary, handle_help, handle_idle_nudge,
+    handle_manage_projects, handle_manual_entry_choice, handle_pick, handle_pick_theme,
+    handle_pick_timesheet_date, handle_prompt, handle_search, handle_settings, handle_share,
+    handle_welcome,
 };
 
 /// Owns the keybindings and routes each keypress to the handler for the
@@ -57,6 +58,7 @@ impl<'a> ModeDispatcher<'a> {
             | Mode::PromptRenameProject => {
                 handle_prompt(app, key);
             }
+            Mode::PromptDayBoundary => handle_day_boundary(app, key),
             Mode::PickTimesheetDate => handle_pick_timesheet_date(app, key),
             Mode::PickProject | Mode::PickContext | Mode::PickSavedFilter => handle_pick(app, key),
             Mode::PickTheme => handle_pick_theme(app, key),

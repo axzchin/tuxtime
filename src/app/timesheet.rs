@@ -294,8 +294,10 @@ impl App {
 /// True when `s` is a parseable `YYYY-MM-DD` date. Guards the timesheet
 /// against hand-typed `log:` garbage, which would otherwise put a
 /// non-comparable "date" on every entry and hide it from all ranges.
+/// Delegates to the shared validator so the fallback semantics can't drift
+/// from the day-boundary prompt's effective-log-date check.
 fn is_log_date(s: &str) -> bool {
-    s.len() == 10 && chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").is_ok()
+    crate::todo::is_iso_date(s)
 }
 
 impl App {

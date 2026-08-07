@@ -31,8 +31,8 @@ pub(crate) use insert::{EditAction, handle_insert, resolve_edit_key};
 pub(crate) use key_resolve::resolve_normal_key;
 #[cfg(test)]
 pub(crate) use overlays::{
-    handle_manage_projects, handle_pick_timesheet_date, handle_prompt, handle_search,
-    handle_settings, handle_welcome,
+    handle_day_boundary, handle_manage_projects, handle_pick_timesheet_date, handle_prompt,
+    handle_search, handle_settings, handle_welcome,
 };
 #[cfg(test)]
 pub(crate) use timesheet_handler::handle_timesheet_keys;

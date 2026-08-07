@@ -189,6 +189,10 @@ fn exit_insert(app: &mut App) {
     app.draft_clear();
     app.selection.exit_edit();
     app.session.manual_time_entry = false;
+    // A cancelled carry-forward (upgraded `N`) must not leak its source
+    // index into a later unrelated save. On a successful save the field was
+    // already consumed by `add_from_draft`.
+    app.session.carry_forward_from = None;
 }
 
 pub(crate) fn handle_insert_normal(app: &mut App, key: KeyEvent) {

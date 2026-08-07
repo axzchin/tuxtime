@@ -41,6 +41,9 @@ pub struct Prefs {
     pub idle_nudge_seconds: u64,
     /// Seconds a timer can run before nudging the user.
     pub long_timer_nudge_seconds: u64,
+    /// Ask before starting a timer (or adding time) on a task whose time
+    /// belongs to a previous day (carry-forward prompt). Default true.
+    pub prompt_on_day_boundary: bool,
 }
 
 impl Prefs {
@@ -66,6 +69,7 @@ impl Prefs {
             hidden_keys: cfg.hidden_keys,
             idle_nudge_seconds: cfg.idle_nudge_seconds.unwrap_or(900),
             long_timer_nudge_seconds: cfg.long_timer_nudge_seconds.unwrap_or(7200),
+            prompt_on_day_boundary: cfg.prompt_on_day_boundary.unwrap_or(true),
         }
     }
 
@@ -160,6 +164,7 @@ impl Prefs {
         cfg.week_start = Some(week_start);
         cfg.idle_nudge_seconds = Some(self.idle_nudge_seconds);
         cfg.long_timer_nudge_seconds = Some(self.long_timer_nudge_seconds);
+        cfg.prompt_on_day_boundary = Some(self.prompt_on_day_boundary);
         cfg.save()
     }
 }

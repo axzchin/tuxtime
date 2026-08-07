@@ -558,6 +558,17 @@ fn manage_projects_with_rename_prompt() {
 }
 
 #[test]
+fn day_boundary_prompt() {
+    // Starting a timer on a task whose time belongs to a previous day opens
+    // the day-boundary prompt (one line per task-day): continue the same
+    // entry, start a new entry for today, or cancel.
+    let mut app = make_app();
+    app.nav.mode = Mode::PromptDayBoundary;
+    app.session.pending_day_boundary = Some((0, tuxtime::app::DayBoundaryAction::StartTimer));
+    snapshot_app("day_boundary_prompt", &app);
+}
+
+#[test]
 fn list_scrolls_to_keep_cursor_visible_when_below_fold() {
     // 50 rows of tasks rendered into a viewport that only fits a handful.
     // Without scrolling, advancing the cursor past the fold would leave the
