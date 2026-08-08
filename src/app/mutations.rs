@@ -92,13 +92,11 @@ impl App {
 
         match self.store.add_finalized(&text) {
             CoreAdd::Added { abs } => {
+                self.commit("added", abs);
                 if self.session.auto_start_on_save {
                     self.session.auto_start_on_save = false;
-                    self.commit("added", abs);
                     // Start the timer on the newly-created interruption entry.
                     self.toggle_timer_at(abs);
-                } else {
-                    self.commit("added", abs);
                 }
                 AddOutcome::Saved
             }
