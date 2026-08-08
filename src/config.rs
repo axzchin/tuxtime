@@ -16,7 +16,7 @@ use crate::app::WeekStart;
 use crate::app::{Density, Sort};
 use crate::toml_lite::split_key_value;
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct Config {
     pub theme: Option<String>,
     pub density: Option<Density>,
@@ -58,6 +58,10 @@ pub struct Config {
     /// time belongs to a previous day, offering to carry the task forward to a
     /// fresh entry instead of silently moving the entry (default true).
     pub prompt_on_day_boundary: Option<bool>,
+    /// Billable rounding increment in decimal hours: `0.1` (6 min, default),
+    /// `0.25` (15 min), or `0` for no rounding (exact decimal hours shown).
+    /// Applies to timesheet display and copy, never to the raw tracking.
+    pub rounding_increment: Option<f64>,
 }
 
 impl Config {
@@ -215,6 +219,12 @@ fn parse(s: &str) -> Config {
             "idle_nudge_seconds" => c.idle_nudge_seconds = v.parse().ok(),
             "long_timer_nudge_seconds" => c.long_timer_nudge_seconds = v.parse().ok(),
             "prompt_on_day_boundary" => c.prompt_on_day_boundary = parse_bool(v),
+            "rounding_increment" => {
+                // Accept any finite non-negative decimal-hours value; NaN,
+                // infinity, and negatives are rejected so a typo can't
+                // silently mean "no rounding" (or corrupt the formatters).
+                c.rounding_increment = v.parse::<f64>().ok().filter(|x| x.is_finite() && *x >= 0.0);
+            }
             // Saved searches: `filter.<name> = <query>`. The name is the
             // (trimmed) text after the `filter.` prefix; the query is the
             // (unquoted) value, which may itself contain `=`. A repeated
@@ -293,6 +303,9 @@ fn serialize(c: &Config) -> String {
     if let Some(v) = c.prompt_on_day_boundary {
         let _ = writeln!(out, "prompt_on_day_boundary = {v}");
     }
+    if let Some(v) = c.rounding_increment {
+        let _ = writeln!(out, "rounding_increment = {v}");
+    }
     out
 }
 
@@ -332,11 +345,34 @@ mod tests {
             idle_nudge_seconds: Some(900),
             long_timer_nudge_seconds: Some(7200),
             prompt_on_day_boundary: Some(true),
+            rounding_increment: Some(0.25),
         };
 
         let s = serialize(&c);
         let parsed = parse(&s);
         assert_eq!(parsed, c);
+    }
+
+    #[test]
+    fn parses_rounding_increment_and_rejects_negative() {
+        let c = parse("rounding_increment = 0.25\n");
+        assert_eq!(c.rounding_increment, Some(0.25));
+
+        let c = parse("rounding_increment = 0\n");
+        assert_eq!(c.rounding_increment, Some(0.0));
+
+        // A negative typo must not silently mean "no rounding".
+        let c = parse("rounding_increment = -0.5\n");
+        assert_eq!(c.rounding_increment, None);
+
+        // Non-finite values would corrupt the formatters — reject them.
+        let c = parse("rounding_increment = inf\n");
+        assert_eq!(c.rounding_increment, None);
+        let c = parse("rounding_increment = NaN\n");
+        assert_eq!(c.rounding_increment, None);
+
+        let c = parse("rounding_increment = banana\n");
+        assert_eq!(c.rounding_increment, None);
     }
 
     #[test]
@@ -491,6 +527,7 @@ mod tests {
             idle_nudge_seconds: None,
             long_timer_nudge_seconds: None,
             prompt_on_day_boundary: Some(false),
+            rounding_increment: Some(0.1),
         };
         written.save_to(&path).expect("save should succeed");
         assert!(path.exists());

@@ -56,7 +56,9 @@ pub use draft_overlay::{
     SLASH_ENTRIES, SlashEntry, SlashKind, SlashMenuState, format_rec_value,
     recurrence_next_preview,
 };
-pub use duration::{format_billable, format_billable_tenths};
+pub use duration::{
+    billable_units, format_billable, format_billable_units, rounding_increment_label,
+};
 pub(crate) use duration::{format_duration, parse_duration_input};
 pub use env::Env;
 pub use flash::Flash;
@@ -274,6 +276,14 @@ impl App {
 
     pub fn cycle_density(&mut self) {
         let msg = self.prefs.cycle_density();
+        self.flash(msg);
+        self.save_prefs();
+    }
+
+    /// Cycle the billable rounding increment (0.1h → 0.25h → exact) and
+    /// persist. See [`Prefs::cycle_rounding_increment`].
+    pub fn cycle_rounding_increment(&mut self) {
+        let msg = self.prefs.cycle_rounding_increment();
         self.flash(msg);
         self.save_prefs();
     }

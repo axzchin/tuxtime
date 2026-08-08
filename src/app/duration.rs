@@ -1,15 +1,34 @@
 //! Duration formatting and parsing: format seconds as hours+minutes with
-//! billable tenths, parse user-supplied duration strings (minutes, decimal
+//! billable rounding, parse user-supplied duration strings (minutes, decimal
 //! hours, clock time, am/pm shorthand) into seconds.
 //!
 //! Pure functions with no `App` dependency — usable from anywhere.
+//!
+//! Billable rounding is configurable via `rounding_increment` (decimal hours):
+//! `0.1` (six-minute units, the default), `0.25` (fifteen-minute units), or
+//! `0` for no rounding (exact decimal hours shown). Rounding always rounds
+//! *up* so a client can never be shorted.
 
 use chrono::Timelike;
 
-pub(crate) fn format_duration(total_secs: u64) -> String {
+/// Seconds in one billable unit for the configured increment. `None` when
+/// the increment is 0 — the caller shows exact decimal hours instead.
+fn unit_secs(increment_hours: f64) -> Option<u64> {
+    (increment_hours > 0.0).then(|| (increment_hours * 3600.0).round() as u64)
+}
+
+/// Decimal places to show for a given increment (0.1 → 1, 0.25 → 2, 1 → 0).
+fn decimals_for(increment_hours: f64) -> usize {
+    match format!("{increment_hours}").split_once('.') {
+        Some((_, frac)) => frac.len(),
+        None => 0,
+    }
+}
+
+pub(crate) fn format_duration(total_secs: u64, increment_hours: f64) -> String {
     let hours = total_secs / 3600;
     let minutes = (total_secs % 3600) / 60;
-    let billable = format_billable(total_secs);
+    let billable = format_billable(total_secs, increment_hours);
     if hours > 0 {
         format!("{hours}h {minutes}m ({billable})")
     } else {
@@ -17,25 +36,49 @@ pub(crate) fn format_duration(total_secs: u64) -> String {
     }
 }
 
-/// Format seconds as billable units (0.1h increments, rounded up).
-/// 1 minute = 0.1h, 6 minutes = 0.1h, 30 minutes = 0.5h, etc.
+/// Format seconds as billable units at the configured increment, rounded up.
+/// 1 minute = 0.1h, 6 minutes = 0.1h, 30 minutes = 0.5h (at 0.1); 8 minutes =
+/// 0.25h (at 0.25); increment 0 shows exact decimal hours (e.g. 1.12h).
 #[must_use]
-pub fn format_billable(total_secs: u64) -> String {
-    // Round up to nearest 0.1 hour (6 minutes / 360 seconds).
-    format_billable_tenths(total_secs.div_ceil(360))
+pub fn format_billable(total_secs: u64, increment_hours: f64) -> String {
+    format_billable_units(billable_units(total_secs, increment_hours), increment_hours)
 }
 
-/// Format pre-computed billable tenths. Use this when summing rounded
-/// values across groups so that each project+activity rounds independently
-/// (1 min × 5 matters = 0.5h, not 0.1h).
+/// Rounded-up billable units for a duration at the given increment. When the
+/// increment is 0 the raw seconds are returned unchanged, so summing units
+/// across groups reproduces the exact total (no per-group rounding applies).
 #[must_use]
-pub fn format_billable_tenths(tenths: u64) -> String {
-    let whole = tenths / 10;
-    let frac = tenths % 10;
-    if whole > 0 || frac > 0 {
-        format!("{whole}.{frac}h")
+pub fn billable_units(total_secs: u64, increment_hours: f64) -> u64 {
+    match unit_secs(increment_hours) {
+        Some(unit) => total_secs.div_ceil(unit),
+        None => total_secs,
+    }
+}
+
+/// Format pre-computed billable units. Use this when summing rounded values
+/// across groups so that each project+activity rounds independently (1 min ×
+/// 5 matters = 0.5h, not 0.1h).
+#[must_use]
+#[allow(clippy::cast_precision_loss)] // display-only: units are tiny relative to f64 mantissa
+pub fn format_billable_units(units: u64, increment_hours: f64) -> String {
+    match unit_secs(increment_hours) {
+        Some(_) => format!(
+            "{:.decimals$}h",
+            units as f64 * increment_hours,
+            decimals = decimals_for(increment_hours)
+        ),
+        None => format!("{:.2}h", units as f64 / 3600.0),
+    }
+}
+
+/// Human-readable label for a rounding increment: `0.1h`, `0.25h`, or
+/// `exact` for no rounding. Used by the settings row and cycle flash.
+#[must_use]
+pub fn rounding_increment_label(increment_hours: f64) -> String {
+    if increment_hours <= 0.0 {
+        "exact".to_string()
     } else {
-        "0.0h".to_string()
+        format!("{increment_hours}h")
     }
 }
 
@@ -158,4 +201,60 @@ fn parse_ampm_time(s: &str) -> Option<u64> {
         now_secs + 24 * 3600 - target_secs
     };
     Some(u64::from(diff))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn billable_default_tenths_rounds_up() {
+        // 6 minutes → 0.1h; 1 minute → 0.1h (round up); 30 min → 0.5h.
+        assert_eq!(format_billable(360, 0.1), "0.1h");
+        assert_eq!(format_billable(60, 0.1), "0.1h");
+        assert_eq!(format_billable(1800, 0.1), "0.5h");
+        assert_eq!(format_billable(4020, 0.1), "1.2h");
+        assert_eq!(format_billable(0, 0.1), "0.0h");
+    }
+
+    #[test]
+    fn billable_quarters_round_up_to_15_min() {
+        // 15 min → 0.25h; 8 min → 0.25h (round up); 30 min → 0.5h;
+        // 62.5 min → 5 units → 1.25h; exactly 1h → 4 units → 1.00h.
+        assert_eq!(format_billable(900, 0.25), "0.25h");
+        assert_eq!(format_billable(480, 0.25), "0.25h");
+        assert_eq!(format_billable(1800, 0.25), "0.50h");
+        assert_eq!(format_billable(3750, 0.25), "1.25h");
+        assert_eq!(format_billable(3600, 0.25), "1.00h");
+    }
+
+    #[test]
+    fn billable_zero_increment_shows_exact_decimal() {
+        // No rounding: exact decimal hours, two decimals.
+        assert_eq!(format_billable(4020, 0.0), "1.12h");
+        assert_eq!(format_billable(3600, 0.0), "1.00h");
+    }
+
+    #[test]
+    fn billable_units_per_group_round_independently() {
+        // 1 min × 5 matters = 5 × 0.1h units = 0.5h, not the 0.1h a raw sum
+        // would round to.
+        let units = (0..5).map(|_| billable_units(60, 0.1)).sum::<u64>();
+        assert_eq!(units, 5);
+        assert_eq!(format_billable_units(units, 0.1), "0.5h");
+    }
+
+    #[test]
+    fn rounding_increment_label_renders() {
+        assert_eq!(rounding_increment_label(0.1), "0.1h");
+        assert_eq!(rounding_increment_label(0.25), "0.25h");
+        assert_eq!(rounding_increment_label(0.0), "exact");
+    }
+
+    #[test]
+    fn format_duration_embeds_rounded_billable() {
+        assert_eq!(format_duration(4020, 0.1), "1h 7m (1.2h)");
+        assert_eq!(format_duration(4020, 0.25), "1h 7m (1.25h)");
+        assert_eq!(format_duration(4020, 0.0), "1h 7m (1.12h)");
+    }
 }

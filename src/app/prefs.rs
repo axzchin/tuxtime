@@ -44,6 +44,9 @@ pub struct Prefs {
     /// Ask before starting a timer (or adding time) on a task whose time
     /// belongs to a previous day (carry-forward prompt). Default true.
     pub prompt_on_day_boundary: bool,
+    /// Billable rounding increment in decimal hours: `0.1` (6 min, default),
+    /// `0.25` (15 min), or `0` for no rounding (exact decimal hours).
+    pub rounding_increment: f64,
 }
 
 impl Prefs {
@@ -70,6 +73,7 @@ impl Prefs {
             idle_nudge_seconds: cfg.idle_nudge_seconds.unwrap_or(900),
             long_timer_nudge_seconds: cfg.long_timer_nudge_seconds.unwrap_or(7200),
             prompt_on_day_boundary: cfg.prompt_on_day_boundary.unwrap_or(true),
+            rounding_increment: cfg.rounding_increment.unwrap_or(0.1),
         }
     }
 
@@ -108,6 +112,22 @@ impl Prefs {
             Density::Cozy => Density::Compact,
         };
         format!("density: {}", self.density)
+    }
+
+    /// Cycle the billable rounding increment: `0.1h → 0.25h → exact → 0.1h`.
+    /// Returns the flash message with the new label. The f64 comparisons are
+    /// safe because the value always comes from one of the three literals
+    /// below (or the config default), never from computation.
+    pub fn cycle_rounding_increment(&mut self) -> String {
+        self.rounding_increment = match self.rounding_increment {
+            x if x <= 0.0 => 0.1,
+            x if (x - 0.1).abs() < f64::EPSILON => 0.25,
+            _ => 0.0,
+        };
+        format!(
+            "rounding: {}",
+            crate::app::rounding_increment_label(self.rounding_increment)
+        )
     }
 
     pub fn cycle_sort(&mut self) -> String {
@@ -167,6 +187,7 @@ impl Prefs {
             cfg.idle_nudge_seconds = Some(self.idle_nudge_seconds);
             cfg.long_timer_nudge_seconds = Some(self.long_timer_nudge_seconds);
             cfg.prompt_on_day_boundary = Some(self.prompt_on_day_boundary);
+            cfg.rounding_increment = Some(self.rounding_increment);
         })
     }
 }

@@ -40,6 +40,9 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
     let inner = msgbox::frame_box(frame, area, theme.border, theme.panel, title);
 
     let groups = app.build_timesheet_groups();
+    // Billable rounding increment (decimal hours) from prefs — 0.1 default,
+    // 0.25 for fifteen-minute billing, 0 for exact.
+    let increment = app.prefs.rounding_increment;
 
     let mut lines: Vec<Line> = Vec::new();
     if groups.is_empty() {
@@ -62,11 +65,13 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
         let mut billable_total: u64 = 0;
         let mut dnb_total: u64 = 0;
         let mut day_total: u64 = 0;
-        // Billable tenths (per-group rounding, summed): 1 min × 5 matters = 0.5h.
-        let mut grand_billable_tenths: u64 = 0;
-        let mut billable_billable_tenths: u64 = 0;
-        let mut dnb_billable_tenths: u64 = 0;
-        let mut day_billable_tenths: u64 = 0;
+        // Billable units (per-group rounding, summed): 1 min × 5 matters = 0.5h
+        // at the 0.1 increment. Computed via `billable_units` so a non-default
+        // increment (0.25, exact) changes every group's unit consistently.
+        let mut grand_billable_units: u64 = 0;
+        let mut billable_billable_units: u64 = 0;
+        let mut dnb_billable_units: u64 = 0;
+        let mut day_billable_units: u64 = 0;
         let mut last_date: Option<&str> = None;
         for (i, entry) in groups.iter().enumerate() {
             let is_selected = selected_group == Some(i);
@@ -81,14 +86,14 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                     lines.push(Line::from(Span::styled(
                         format!(
                             "    ──  {} ({})",
-                            crate::app::format_duration(day_total),
-                            crate::app::format_billable_tenths(day_billable_tenths)
+                            crate::app::format_duration(day_total, increment),
+                            crate::app::format_billable_units(day_billable_units, increment)
                         ),
                         Style::default().fg(theme.dim).bg(theme.panel),
                     )));
                     lines.push(Line::raw(""));
                     day_total = 0;
-                    day_billable_tenths = 0;
+                    day_billable_units = 0;
                 }
                 let date_dow = chrono::NaiveDate::parse_from_str(&entry.date, "%Y-%m-%d")
                     .map_or_else(
@@ -105,8 +110,8 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                 last_date = Some(&entry.date);
             }
 
-            let formatted = crate::app::format_duration(entry.total_secs);
-            let billable_str = crate::app::format_billable(entry.total_secs);
+            let formatted = crate::app::format_duration(entry.total_secs, increment);
+            let billable_str = crate::app::format_billable(entry.total_secs, increment);
             // Copy-flash: briefly highlight the entire group white after copy.
             let copy_flash_active = app
                 .timesheet
@@ -179,17 +184,17 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                     narr_style,
                 )));
             }
-            let tenths = entry.total_secs.div_ceil(360);
+            let units = crate::app::billable_units(entry.total_secs, increment);
             grand_total += entry.total_secs;
-            grand_billable_tenths += tenths;
+            grand_billable_units += units;
             day_total += entry.total_secs;
-            day_billable_tenths += tenths;
+            day_billable_units += units;
             if entry.billable {
                 billable_total += entry.total_secs;
-                billable_billable_tenths += tenths;
+                billable_billable_units += units;
             } else {
                 dnb_total += entry.total_secs;
-                dnb_billable_tenths += tenths;
+                dnb_billable_units += units;
             }
         }
         // Flush the final day's subtotal (if date headers were shown).
@@ -199,8 +204,8 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
             lines.push(Line::from(Span::styled(
                 format!(
                     "    ──  {} ({})",
-                    crate::app::format_duration(day_total),
-                    crate::app::format_billable_tenths(day_billable_tenths)
+                    crate::app::format_duration(day_total, increment),
+                    crate::app::format_billable_units(day_billable_units, increment)
                 ),
                 Style::default().fg(theme.dim).bg(theme.panel),
             )));
@@ -213,11 +218,11 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
         } else {
             " (filtered)"
         };
-        let billable_str = crate::app::format_billable_tenths(billable_billable_tenths);
+        let billable_str = crate::app::format_billable_units(billable_billable_units, increment);
         lines.push(Line::from(Span::styled(
             format!(
                 "  Billable: {} ({billable_str})",
-                crate::app::format_duration(billable_total),
+                crate::app::format_duration(billable_total, increment),
             ),
             Style::default()
                 .fg(theme.accent)
@@ -225,11 +230,11 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                 .add_modifier(Modifier::BOLD),
         )));
         if dnb_total > 0 {
-            let dnb_str = crate::app::format_billable_tenths(dnb_billable_tenths);
+            let dnb_str = crate::app::format_billable_units(dnb_billable_units, increment);
             lines.push(Line::from(Span::styled(
                 format!(
                     "  DNB:      {} ({dnb_str})",
-                    crate::app::format_duration(dnb_total)
+                    crate::app::format_duration(dnb_total, increment)
                 ),
                 Style::default()
                     .fg(theme.dim)
@@ -237,11 +242,11 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                     .add_modifier(Modifier::BOLD),
             )));
         }
-        let total_str = crate::app::format_billable_tenths(grand_billable_tenths);
+        let total_str = crate::app::format_billable_units(grand_billable_units, increment);
         lines.push(Line::from(Span::styled(
             format!(
                 "  Total:    {} ({total_str}){search_note}",
-                crate::app::format_duration(grand_total)
+                crate::app::format_duration(grand_total, increment)
             ),
             Style::default()
                 .fg(theme.accent)

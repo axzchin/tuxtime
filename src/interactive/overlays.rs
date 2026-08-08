@@ -98,6 +98,7 @@ pub(crate) fn handle_settings(app: &mut App, key: KeyEvent) {
             // Open the prompt over Settings so Esc/Enter returns to Settings.
             app.nav.push_mode(Mode::PromptLongTimerNudge);
         }
+        KeyCode::Char('r') => app.cycle_rounding_increment(),
         _ => {}
     }
 }

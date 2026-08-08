@@ -372,17 +372,17 @@ fn build_timesheet_groups_separates_billable_and_dnb() {
     // (bill:n tag is stripped from body).
     assert_eq!(billable_group.narratives, vec!["Billable work"]);
     assert_eq!(dnb_group.narratives, vec!["DNB work"]);
-    let billable_str = crate::app::format_billable(billable_group.total_secs);
-    let dnb_str = crate::app::format_billable(dnb_group.total_secs);
+    let billable_str = crate::app::format_billable(billable_group.total_secs, 0.1);
+    let dnb_str = crate::app::format_billable(dnb_group.total_secs, 0.1);
     assert_eq!(billable_str, "0.1h");
     assert_eq!(dnb_str, "0.1h");
-    // The sum of per-group tenths (from format_billable_tenths) should be 0.2h.
-    let billable_tenths = billable_group.total_secs.div_ceil(360);
-    let dnb_tenths = dnb_group.total_secs.div_ceil(360);
-    assert_eq!(billable_tenths, 1);
-    assert_eq!(dnb_tenths, 1);
-    let total_tenths_str = crate::app::format_billable_tenths(billable_tenths + dnb_tenths);
-    assert_eq!(total_tenths_str, "0.2h");
+    // The sum of per-group units (from format_billable_units) should be 0.2h.
+    let billable_units = crate::app::billable_units(billable_group.total_secs, 0.1);
+    let dnb_units = crate::app::billable_units(dnb_group.total_secs, 0.1);
+    assert_eq!(billable_units, 1);
+    assert_eq!(dnb_units, 1);
+    let total_units_str = crate::app::format_billable_units(billable_units + dnb_units, 0.1);
+    assert_eq!(total_units_str, "0.2h");
 }
 
 // ── timesheet log-date attribution ────────────────────────────────
@@ -1204,6 +1204,51 @@ fn long_timer_nudge_enter_sets_new_threshold() {
     handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert_eq!(app.nav.mode, Mode::Settings);
     assert_eq!(app.long_timer_nudge_seconds(), 3600); // 60 min
+}
+
+// ---- rounding increment config ----
+
+/// Settings 'r' cycles the billable rounding increment and persists it:
+/// 0.1h (default) → 0.25h → exact → back to 0.1h.
+#[test]
+fn rounding_increment_r_cycles_and_persists() {
+    let mut app = build_app();
+    app.nav.mode = Mode::Settings;
+    assert_eq!(
+        crate::app::rounding_increment_label(app.prefs.rounding_increment),
+        "0.1h"
+    );
+
+    handle_settings(
+        &mut app,
+        KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE),
+    );
+    assert_eq!(
+        crate::app::rounding_increment_label(app.prefs.rounding_increment),
+        "0.25h",
+        "first cycle → quarters"
+    );
+    assert_eq!(app.nav.mode, Mode::Settings, "stays in settings");
+
+    handle_settings(
+        &mut app,
+        KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE),
+    );
+    assert_eq!(
+        crate::app::rounding_increment_label(app.prefs.rounding_increment),
+        "exact",
+        "second cycle → no rounding"
+    );
+
+    handle_settings(
+        &mut app,
+        KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE),
+    );
+    assert_eq!(
+        crate::app::rounding_increment_label(app.prefs.rounding_increment),
+        "0.1h",
+        "third cycle → back to tenths"
+    );
 }
 
 // ---- idle nudge safety ----

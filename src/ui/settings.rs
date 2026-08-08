@@ -95,6 +95,13 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 app.long_timer_nudge_seconds() / 60
             )),
         ),
+        (
+            "  rounding increment",
+            Some(format!(
+                "{}  (r to cycle)",
+                crate::app::rounding_increment_label(app.prefs.rounding_increment)
+            )),
+        ),
         ("", Some(String::new())),
         ("KEYBINDINGS", None),
         ("  ", Some("press ? for the full list".into())),

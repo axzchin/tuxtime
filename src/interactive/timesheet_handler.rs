@@ -147,7 +147,7 @@ pub(crate) fn handle_timesheet_keys(app: &mut App, key: KeyEvent) {
                 return;
             };
             let entry = &groups[gi];
-            let billable = format_billable(entry.total_secs);
+            let billable = format_billable(entry.total_secs, app.prefs.rounding_increment);
             let key_label = if entry.billable {
                 entry.key.clone()
             } else {
@@ -177,7 +177,7 @@ pub(crate) fn handle_timesheet_keys(app: &mut App, key: KeyEvent) {
             } else {
                 let prefix = if entry.billable { "" } else { "DNB - " };
                 let joined = entry.narratives.join("; ");
-                let billable = format_billable(entry.total_secs);
+                let billable = format_billable(entry.total_secs, app.prefs.rounding_increment);
                 let payload = format!("{prefix}{joined} ({billable})");
                 let key_label = if entry.billable {
                     entry.key.clone()

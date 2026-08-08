@@ -256,7 +256,7 @@ impl App {
                     EditOutcome::Saved { .. } => {
                         self.flash(format!(
                             "added {} — new entry for today",
-                            format_duration(secs)
+                            format_duration(secs, self.prefs.rounding_increment)
                         ));
                         Some(new)
                     }
@@ -319,8 +319,9 @@ impl App {
                 body,
                 ..
             } => {
-                let elapsed = format_duration(elapsed_secs);
-                let total = format_duration(total_secs);
+                let inc = self.prefs.rounding_increment;
+                let elapsed = format_duration(elapsed_secs, inc);
+                let total = format_duration(total_secs, inc);
                 let proj = project.map(|p| format!("+{p} ")).unwrap_or_default();
                 let act = activity.map(|a| format!("@{a} ")).unwrap_or_default();
                 self.flash(format!("■ {proj}{act}{body} — {elapsed} (total {total})"));
@@ -338,13 +339,14 @@ impl App {
                 body,
                 ..
             } => {
-                let elapsed = format_duration(elapsed_secs);
-                let total = format_duration(total_secs);
+                let inc = self.prefs.rounding_increment;
+                let elapsed = format_duration(elapsed_secs, inc);
+                let total = format_duration(total_secs, inc);
                 let proj = project.map(|p| format!("+{p} ")).unwrap_or_default();
                 let act = activity.map(|a| format!("@{a} ")).unwrap_or_default();
                 let days = chunks
                     .iter()
-                    .map(|(d, s)| format!("{d} {}", format_duration(*s)))
+                    .map(|(d, s)| format!("{d} {}", format_duration(*s, inc)))
                     .collect::<Vec<_>>()
                     .join(" · ");
                 self.flash(format!(
@@ -362,8 +364,9 @@ impl App {
                 to_body,
                 ..
             } => {
-                let from_elapsed = format_duration(from_elapsed_secs);
-                let from_total = format_duration(from_total_secs);
+                let from_elapsed =
+                    format_duration(from_elapsed_secs, self.prefs.rounding_increment);
+                let from_total = format_duration(from_total_secs, self.prefs.rounding_increment);
                 let to_proj = to_project.map(|p| format!("+{p} ")).unwrap_or_default();
                 let to_act = to_activity.map(|a| format!("@{a} ")).unwrap_or_default();
                 let from_proj = from_project.map(|p| format!("+{p}")).unwrap_or_default();
@@ -397,7 +400,7 @@ impl App {
                 body,
                 ..
             } => {
-                let elapsed = format_duration(elapsed_secs);
+                let elapsed = format_duration(elapsed_secs, self.prefs.rounding_increment);
                 let proj = project.map(|p| format!("+{p} ")).unwrap_or_default();
                 let act = activity.map(|a| format!("@{a} ")).unwrap_or_default();
                 self.flash(format!(
@@ -466,8 +469,8 @@ impl App {
         let updated = rebuild_token_line(&updated, "log:", None, &format!("log:{}", self.today()));
         match self.store.edit_line(abs, &updated) {
             EditOutcome::Saved { abs } => {
-                let added = format_duration(secs);
-                let total_str = format_duration(total);
+                let added = format_duration(secs, self.prefs.rounding_increment);
+                let total_str = format_duration(total, self.prefs.rounding_increment);
                 let body = crate::todo::body_only(&updated);
                 self.flash(format!("added {added} — {body} (total {total_str})"));
                 self.after_mutation(abs);
@@ -524,7 +527,7 @@ impl App {
             TimerQuitOutcome::Stopped { total_secs, .. } => {
                 self.flash(format!(
                     "timer stopped ({} total)",
-                    format_duration(total_secs)
+                    format_duration(total_secs, self.prefs.rounding_increment)
                 ));
             }
             TimerQuitOutcome::NoTimer => {}

@@ -22,10 +22,10 @@ expression: buffer_to_text(&buf)
    default sort                priority (s to cycle)                                                
    idle nudge                  15 min  (i to change)                                                
    long timer nudge            120 min  (l to change)                                               
+   rounding increment          0.1h  (r to cycle)                                                   
                                                                                                     
  KEYBINDINGS                                                                                        
                                press ? for the full list                                            
-                                                                                                    
                                                                                                     
                                                                                                     
                                                                                                     
