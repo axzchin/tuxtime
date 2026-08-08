@@ -293,7 +293,9 @@ impl Task {
         if !self.done {
             return Ok(());
         }
-        let after_x = self.raw.strip_prefix("x ").unwrap_or(&self.raw);
+        // `strip_prefix_x` (not a bare `"x "` prefix) so a hand-edited
+        // `x\t...` completion round-trips the same way a `x ...` one does.
+        let after_x = strip_prefix_x(&self.raw).unwrap_or(&self.raw);
         let body = if self.done_date.is_some() {
             // mark_done emits "x DONE_DATE CREATED BODY". Drop the 10-char
             // date plus its trailing space.
@@ -481,6 +483,19 @@ pub fn body_after_quoted_kv(raw: &str) -> String {
     body.trim().to_string()
 }
 
+/// Description text only, given a line whose quoted `note:` tokens are
+/// already stripped (`Task::clean_raw`). Callers that hold a `&Task` use this
+/// directly so the quoted-kv scan runs once at parse time instead of on every
+/// render; `body_only` computes the clean body first and delegates.
+#[must_use]
+pub fn body_only_from_clean(clean: &str) -> String {
+    body_after_priority(clean)
+        .split_whitespace()
+        .filter(|tok| !is_meta_token(tok))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Description text only: strip the leading `x `, done/created dates, and
 /// priority via `body_after_priority`, then drop every `+project`,
 /// `@context`, and `key:value` token from what remains. Whitespace between
@@ -488,12 +503,7 @@ pub fn body_after_quoted_kv(raw: &str) -> String {
 /// because we're filtering tokens, not slicing a prefix.
 #[must_use]
 pub fn body_only(raw: &str) -> String {
-    let new_body = body_after_quoted_kv(raw);
-    body_after_priority(&new_body)
-        .split_whitespace()
-        .filter(|tok| !is_meta_token(tok))
-        .collect::<Vec<_>>()
-        .join(" ")
+    body_only_from_clean(&body_after_quoted_kv(raw))
 }
 
 fn is_meta_token(tok: &str) -> bool {
@@ -709,6 +719,30 @@ mod tests {
     fn invalid_dur_value_returns_none() {
         let t = parse_line("task dur:notanumber").unwrap();
         assert_eq!(t.dur, None);
+    }
+
+    #[test]
+    fn unmark_done_handles_tab_separated_completion() {
+        // A hand-edited `x\tDONE ...` line parses like a `x ` one; unmarking
+        // must not treat the leading `x` as body text.
+        let mut t = parse_line("x\t2026-05-05 2026-05-01 Hello").unwrap();
+        assert!(t.done);
+        t.unmark_done().unwrap();
+        assert!(!t.done);
+        assert!(!t.raw.starts_with('x'), "got: {}", t.raw);
+        assert_eq!(t.raw, "2026-05-01 Hello");
+    }
+
+    #[test]
+    fn body_only_from_clean_matches_body_only() {
+        for raw in [
+            "(A) 2026-04-28 Call dentist @phone +health due:2026-05-08",
+            "x 2026-05-05 2026-05-01 Submit expense report +work @laptop",
+            "Draft motion +Smith @drafting start:2026-07-31T14:30:25 dur:3600 log:2026-08-06",
+        ] {
+            let t = parse_line(raw).unwrap();
+            assert_eq!(body_only_from_clean(&t.clean_raw), body_only(raw));
+        }
     }
 
     // ── bill: tag ──────────────────────────────────────────────────────

@@ -366,13 +366,13 @@ pub(crate) fn handle_normal(app: &mut App, key: KeyEvent, keybinds: &KeyBindings
 // ---------------------------------------------------------------------------
 
 fn copy_current_task(app: &mut App, body_only: bool) {
-    let Some(raw) = app.cur_task().map(|t| t.raw.clone()) else {
+    let Some(task) = app.cur_task() else {
         return;
     };
     let payload = if body_only {
-        todo::body_only(&raw)
+        todo::body_only_from_clean(&task.clean_raw)
     } else {
-        raw
+        task.raw.clone()
     };
     match clipboard::copy(&payload) {
         Ok(()) => app.flash(if body_only { "copied (body)" } else { "copied" }),

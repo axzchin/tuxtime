@@ -559,7 +559,7 @@ impl Store {
                     abs,
                     project: t.projects.first().cloned(),
                     activity: t.contexts.first().cloned(),
-                    body: todo::body_only(&t.raw),
+                    body: todo::body_only_from_clean(&t.clean_raw),
                 }
             }
             Err(e) => TimerOutcome::Error(StoreError::Parse(e)),
@@ -604,7 +604,7 @@ impl Store {
             Ok(parsed) => {
                 let project = parsed.projects.first().cloned();
                 let activity = parsed.contexts.first().cloned();
-                let body = todo::body_only(&parsed.raw);
+                let body = todo::body_only_from_clean(&parsed.clean_raw);
                 self.tasks[abs] = parsed;
                 TimerOutcome::Stopped {
                     abs,
@@ -650,7 +650,7 @@ impl Store {
         };
         let project = parsed.projects.first().cloned();
         let activity = parsed.contexts.first().cloned();
-        let body = todo::body_only(&parsed.raw);
+        let body = todo::body_only_from_clean(&parsed.clean_raw);
         self.tasks[abs] = parsed;
         if let Err(e) = self.complete_consumed_line(abs, start_day) {
             return TimerOutcome::Error(StoreError::Parse(e));

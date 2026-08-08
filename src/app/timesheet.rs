@@ -230,7 +230,7 @@ impl App {
                 if !in_range {
                     continue;
                 }
-                let body = crate::todo::body_only(&t.raw);
+                let body = crate::todo::body_only_from_clean(&t.clean_raw);
                 if !search.is_empty() && !body.to_lowercase().contains(&search) {
                     continue;
                 }

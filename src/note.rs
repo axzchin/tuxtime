@@ -35,7 +35,7 @@ pub fn target_for_task(task: &Task, notes_dir: &Path) -> NoteTarget {
         };
     }
 
-    let title = todo::body_only(&task.raw);
+    let title = todo::body_only_from_clean(&task.clean_raw);
     let slug = slugify(if title.is_empty() { "task" } else { &title });
     let rel = format!("{DEFAULT_NOTES_SUBDIR}/{slug}.md");
     let path = notes_dir.join(&rel);
@@ -56,7 +56,7 @@ pub fn note_rel_from_raw(raw: &str) -> Option<String> {
 
 #[must_use]
 pub fn note_template(task: &Task) -> String {
-    let title = todo::body_only(&task.raw);
+    let title = todo::body_only_from_clean(&task.clean_raw);
     let title = if title.is_empty() { "Task" } else { &title };
     let mut out = String::new();
     out.push_str("# ");

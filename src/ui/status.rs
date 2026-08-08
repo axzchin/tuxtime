@@ -66,7 +66,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 .first()
                 .map(|a| format!("@{a} "))
                 .unwrap_or_default();
-            let body = crate::todo::body_only(&task.raw);
+            let body = crate::todo::body_only_from_clean(&task.clean_raw);
             let mut time_str = format!("▶ {proj}{act} {h:02}:{m:02}:{s:02}  {body}");
             if app.session.long_timer_nudge_active {
                 time_str = format!("⏰ {time_str}  —  timer running long!");

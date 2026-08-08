@@ -378,7 +378,7 @@ pub(crate) fn handle_manual_entry_choice(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Char('a' | 'A') => {
             if let Some(t) = app.cur_task() {
-                let body = todo::body_only(&t.raw);
+                let body = todo::body_only_from_clean(&t.clean_raw);
                 app.nav.set_mode(Mode::PromptAddTime);
                 app.draft_clear();
                 app.flash(format!("add time to: {body}"));

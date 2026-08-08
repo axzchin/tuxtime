@@ -317,7 +317,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
                 .pending_day_boundary
                 .as_ref()
                 .and_then(|(abs, _)| app.store.tasks().get(*abs))
-                .map(|t| crate::todo::body_only(&t.raw))
+                .map(|t| crate::todo::body_only_from_clean(&t.clean_raw))
                 .unwrap_or_default();
             let lines = vec![
                 Line::from(Span::styled(
