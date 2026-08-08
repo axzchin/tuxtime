@@ -13,6 +13,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::action::Action;
 use crate::app::Chord;
+use crate::toml_lite::{parse_value_strings, split_key_value, strip_comment, table_name};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResolvedKey {
@@ -47,10 +48,7 @@ impl KeyBindings {
         let mut bindings = Self::default();
         let mut section: Option<String> = None;
         for raw_line in s.lines() {
-            let line = strip_comment(raw_line).trim();
-            if line.is_empty() {
-                continue;
-            }
+            let line = strip_comment(raw_line);
             if let Some(name) = table_name(line) {
                 section = Some(name.to_ascii_lowercase());
                 continue;
@@ -58,12 +56,15 @@ impl KeyBindings {
             if section.as_deref().is_some_and(|name| name != "normal") {
                 continue;
             }
-            let Some((name, value)) = line.split_once('=') else {
+            let Some((name, value)) = split_key_value(line) else {
                 continue;
             };
             let Some(action) = Action::from_keybind_name(name) else {
                 continue;
             };
+            // split_key_value already unquoted single values, so the second
+            // unquote inside parse_value_strings is a no-op for them (array
+            // values like `["F1", "Ctrl-h"]` pass through both untouched).
             for key_text in parse_value_strings(value) {
                 if let Some(binding) = Binding::parse(action, &key_text) {
                     bindings.push_normal(binding);
@@ -290,93 +291,6 @@ fn normalized_modifiers(code: KeyCode, mut modifiers: KeyModifiers) -> KeyModifi
         modifiers.remove(KeyModifiers::SHIFT);
     }
     modifiers
-}
-
-fn table_name(line: &str) -> Option<String> {
-    line.strip_prefix('[')
-        .and_then(|s| s.strip_suffix(']'))
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-}
-
-fn parse_value_strings(value: &str) -> Vec<String> {
-    let value = value.trim();
-    if let Some(inner) = value.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
-        return parse_array_strings(inner);
-    }
-    unquote(value)
-        .map(|s| vec![s.to_string()])
-        .unwrap_or_default()
-}
-
-fn parse_array_strings(inner: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut chars = inner.char_indices().peekable();
-    while let Some((_, ch)) = chars.peek().copied() {
-        if ch.is_whitespace() || ch == ',' {
-            let _ = chars.next();
-            continue;
-        }
-        if ch != '"' {
-            break;
-        }
-        let start = chars.next().map(|(idx, _)| idx + 1);
-        let Some(start) = start else {
-            break;
-        };
-        let mut escaped = false;
-        let mut end = None;
-        for (idx, c) in chars.by_ref() {
-            if escaped {
-                escaped = false;
-                continue;
-            }
-            if c == '\\' {
-                escaped = true;
-                continue;
-            }
-            if c == '"' {
-                end = Some(idx);
-                break;
-            }
-        }
-        let Some(end) = end else {
-            break;
-        };
-        out.push(inner[start..end].replace("\\\"", "\""));
-    }
-    out
-}
-
-/// Strip surrounding quotes from a binding value. Returns `None` for an
-/// empty value (an empty binding would parse to nothing anyway) and the
-/// quote-stripped text otherwise — the shared [`crate::toml_lite::unquote`]
-/// does the actual stripping.
-fn unquote(value: &str) -> Option<&str> {
-    if value.is_empty() {
-        None
-    } else {
-        Some(crate::toml_lite::unquote(value))
-    }
-}
-
-fn strip_comment(line: &str) -> &str {
-    let mut in_quote = false;
-    let mut escaped = false;
-    for (idx, ch) in line.char_indices() {
-        if escaped {
-            escaped = false;
-            continue;
-        }
-        match ch {
-            '\\' if in_quote => escaped = true,
-            '"' => in_quote = !in_quote,
-            '#' if !in_quote => return &line[..idx],
-            _ => {}
-        }
-    }
-    line
 }
 
 #[cfg(test)]
