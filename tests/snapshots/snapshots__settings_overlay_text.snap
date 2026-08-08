@@ -9,7 +9,7 @@ expression: buffer_to_text(&buf)
    config file                 /tmp/tuxtime-snapshot.toml                                           
                                                                                                     
  DISPLAY                                                                                            
-   theme                       Muted Slate ▾  (T to cycle)                                          
+   theme                       Muted Slate ▾  (Z to pick)                                           
    density                     compact ▾  (D to cycle)                                              
    line numbers                on  (L to toggle)                                                    
    status bar                  on                                                                   
@@ -19,7 +19,7 @@ expression: buffer_to_text(&buf)
    show future in list         off  (F to toggle)                                                   
                                                                                                     
  BEHAVIOR                                                                                           
-   default sort                priority (s to cycle)                                                
+   default sort                priority (S to cycle)                                                
    idle nudge                  15 min  (i to change)                                                
    long timer nudge            120 min  (l to change)                                               
    rounding increment          0.1h  (r to cycle)                                                   

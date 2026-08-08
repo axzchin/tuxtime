@@ -9,7 +9,7 @@ expression: buffer_to_styled(&buf)
 {fg=#c8ccd4 bg=#1a1d23}   config file                 {/}{fg=#6b7280 bg=#1a1d23}/tmp/tuxtime-snapshot.toml{/}{fg=#c8ccd4 bg=#1a1d23}                                           {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}DISPLAY{/}{fg=#c8ccd4 bg=#1a1d23}                                                                                            {/}
-{fg=#c8ccd4 bg=#1a1d23}   theme                       {/}{fg=#6b7280 bg=#1a1d23}Muted Slate ▾  (T to cycle){/}{fg=#c8ccd4 bg=#1a1d23}                                          {/}
+{fg=#c8ccd4 bg=#1a1d23}   theme                       {/}{fg=#6b7280 bg=#1a1d23}Muted Slate ▾  (Z to pick){/}{fg=#c8ccd4 bg=#1a1d23}                                           {/}
 {fg=#c8ccd4 bg=#1a1d23}   density                     {/}{fg=#6b7280 bg=#1a1d23}compact ▾  (D to cycle){/}{fg=#c8ccd4 bg=#1a1d23}                                              {/}
 {fg=#c8ccd4 bg=#1a1d23}   line numbers                {/}{fg=#6b7280 bg=#1a1d23}on  (L to toggle){/}{fg=#c8ccd4 bg=#1a1d23}                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}   status bar                  {/}{fg=#6b7280 bg=#1a1d23}on{/}{fg=#c8ccd4 bg=#1a1d23}                                                                   {/}
@@ -19,7 +19,7 @@ expression: buffer_to_styled(&buf)
 {fg=#c8ccd4 bg=#1a1d23}   show future in list         {/}{fg=#6b7280 bg=#1a1d23}off  (F to toggle){/}{fg=#c8ccd4 bg=#1a1d23}                                                   {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}BEHAVIOR{/}{fg=#c8ccd4 bg=#1a1d23}                                                                                           {/}
-{fg=#c8ccd4 bg=#1a1d23}   default sort                {/}{fg=#6b7280 bg=#1a1d23}priority (s to cycle){/}{fg=#c8ccd4 bg=#1a1d23}                                                {/}
+{fg=#c8ccd4 bg=#1a1d23}   default sort                {/}{fg=#6b7280 bg=#1a1d23}priority (S to cycle){/}{fg=#c8ccd4 bg=#1a1d23}                                                {/}
 {fg=#c8ccd4 bg=#1a1d23}   idle nudge                  {/}{fg=#6b7280 bg=#1a1d23}15 min  (i to change){/}{fg=#c8ccd4 bg=#1a1d23}                                                {/}
 {fg=#c8ccd4 bg=#1a1d23}   long timer nudge            {/}{fg=#6b7280 bg=#1a1d23}120 min  (l to change){/}{fg=#c8ccd4 bg=#1a1d23}                                               {/}
 {fg=#c8ccd4 bg=#1a1d23}   rounding increment          {/}{fg=#6b7280 bg=#1a1d23}0.1h  (r to cycle){/}{fg=#c8ccd4 bg=#1a1d23}                                                   {/}

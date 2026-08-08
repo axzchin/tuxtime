@@ -62,6 +62,10 @@ fn builtin_action(key: KeyEvent, mut chord: Option<&mut Chord>) -> Option<Action
         // First 'g' arms the chord; second 'g' fires CursorTop.
         KeyCode::Char('g') if chord.as_mut().is_some_and(|c| c.toggle('g')) => Action::CursorTop,
         KeyCode::Char('n') => Action::BeginAdd,
+        // 'N' — carry the current task forward to a fresh same-body entry for
+        // today (multi-day tracking), distinct from 't' which toggles the
+        // timer on the line as it is.
+        KeyCode::Char('N') => Action::BeginSessionFromCurrent,
         KeyCode::Char('r') => Action::Reschedule,
         KeyCode::Char('a') => Action::ToggleArchiveView,
         KeyCode::Char('l') => Action::GoList,
@@ -142,6 +146,11 @@ mod tests {
         assert_eq!(
             resolve_builtin_single_key(key('t')),
             Some(Action::TimerStartStop)
+        );
+        assert_eq!(
+            resolve_builtin_single_key(key('N')),
+            Some(Action::BeginSessionFromCurrent),
+            "N must be bound: it's advertised in the help overlay"
         );
         assert_eq!(
             resolve_builtin_single_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL)),

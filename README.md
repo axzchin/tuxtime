@@ -311,11 +311,23 @@ toggle_show_future  = "F"
 # Layout & theme
 toggle_left_pane  = "["
 toggle_right_pane = "]"
-open_theme_picker = "T"
+open_theme_picker = "Z"
 cycle_density     = "D"
 toggle_line_num   = "L"
 # cycle_theme has no default — bind a key to cycle themes without the picker:
 # cycle_theme = "Ctrl-t"
+
+# Timing (tuxtime fork)
+timer_start_stop            = "t"
+manual_time_entry           = "M"
+quick_interrupt             = "T"
+begin_session_from_current  = "N"
+toggle_billable             = "b"
+change_week_start           = "W"
+open_timesheet              = "V"
+open_project_manager        = "P"
+# copy_narratives (timesheet 'C') is a timesheet-mode key, not a normal-mode
+# binding — it is not rebindable here.
 
 # System
 open_command_palette = [":", "Ctrl-P"]

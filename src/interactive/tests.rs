@@ -1251,6 +1251,74 @@ fn rounding_increment_r_cycles_and_persists() {
     );
 }
 
+/// The settings screen advertises its rows' keys as hints; pressing them
+/// *inside* settings must actually apply them (not be dead text).
+#[test]
+fn settings_advertised_keys_apply_in_settings_mode() {
+    let mut app = build_app();
+    app.nav.mode = Mode::Settings;
+
+    // Density cycles: comfortable → cozy.
+    handle_settings(
+        &mut app,
+        KeyEvent::new(KeyCode::Char('D'), KeyModifiers::NONE),
+    );
+    assert_eq!(app.prefs.density, crate::app::Density::Cozy);
+
+    // Sort cycles to a different label.
+    let before = app.sort_label();
+    handle_settings(
+        &mut app,
+        KeyEvent::new(KeyCode::Char('S'), KeyModifiers::NONE),
+    );
+    assert_ne!(app.sort_label(), before);
+
+    // Line numbers toggle.
+    let line_nums = app.prefs.layout.line_num;
+    handle_settings(
+        &mut app,
+        KeyEvent::new(KeyCode::Char('L'), KeyModifiers::NONE),
+    );
+    assert_ne!(app.prefs.layout.line_num, line_nums);
+
+    // Show-done toggles.
+    let show_done = app.prefs.show_done;
+    handle_settings(
+        &mut app,
+        KeyEvent::new(KeyCode::Char('H'), KeyModifiers::NONE),
+    );
+    assert_ne!(app.prefs.show_done, show_done);
+
+    // Show-future toggles.
+    let show_future = app.prefs.show_future;
+    handle_settings(
+        &mut app,
+        KeyEvent::new(KeyCode::Char('F'), KeyModifiers::NONE),
+    );
+    assert_ne!(app.prefs.show_future, show_future);
+
+    // Filter/detail panes toggle.
+    let left = app.prefs.layout.left;
+    let right = app.prefs.layout.right;
+    handle_settings(
+        &mut app,
+        KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE),
+    );
+    handle_settings(
+        &mut app,
+        KeyEvent::new(KeyCode::Char(']'), KeyModifiers::NONE),
+    );
+    assert_ne!(app.prefs.layout.left, left);
+    assert_ne!(app.prefs.layout.right, right);
+
+    // Theme picker opens (and stays previewable).
+    handle_settings(
+        &mut app,
+        KeyEvent::new(KeyCode::Char('Z'), KeyModifiers::NONE),
+    );
+    assert_eq!(app.nav.mode, Mode::PickTheme);
+}
+
 // ---- idle nudge safety ----
 
 /// The idle nudge must not fire while the user is in a mode with transient

@@ -99,6 +99,32 @@ pub(crate) fn handle_settings(app: &mut App, key: KeyEvent) {
             app.nav.push_mode(Mode::PromptLongTimerNudge);
         }
         KeyCode::Char('r') => app.cycle_rounding_increment(),
+        // The settings screen advertises these keys in its rows; route them
+        // to the same handlers as Normal mode so the hints work *inside*
+        // settings instead of being dead text. Each persists via save_prefs.
+        KeyCode::Char('D') => app.cycle_density(),
+        KeyCode::Char('S') => app.cycle_sort(),
+        KeyCode::Char('L') => {
+            app.prefs.toggle_line_num();
+            app.save_prefs();
+        }
+        KeyCode::Char('H') => {
+            app.prefs.toggle_show_done();
+            app.save_prefs();
+        }
+        KeyCode::Char('F') => {
+            app.prefs.toggle_show_future();
+            app.save_prefs();
+        }
+        KeyCode::Char('[') => {
+            app.prefs.toggle_left();
+            app.save_prefs();
+        }
+        KeyCode::Char(']') => {
+            app.prefs.toggle_right();
+            app.save_prefs();
+        }
+        KeyCode::Char('Z') => app.enter_pick_theme(),
         _ => {}
     }
 }

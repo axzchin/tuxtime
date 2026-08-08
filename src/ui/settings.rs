@@ -52,7 +52,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         ("  config file", Some(config_path)),
         ("", Some(String::new())),
         ("DISPLAY", None),
-        ("  theme", Some(format!("{} ▾  (T to cycle)", theme.name))),
+        ("  theme", Some(format!("{} ▾  (Z to pick)", theme.name))),
         ("  density", Some(format!("{density} ▾  (D to cycle)"))),
         (
             "  line numbers",
@@ -79,7 +79,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         ("BEHAVIOR", None),
         (
             "  default sort",
-            Some(format!("{} (s to cycle)", app.sort_label())),
+            Some(format!("{} (S to cycle)", app.sort_label())),
         ),
         (
             "  idle nudge",

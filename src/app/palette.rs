@@ -188,7 +188,7 @@ pub const ENTRIES: &[PaletteEntry] = &[
     },
     PaletteEntry {
         label: "pick theme",
-        keys: "T",
+        keys: "Z",
         action: Action::OpenThemePicker,
     },
     PaletteEntry {
@@ -265,6 +265,26 @@ pub const ENTRIES: &[PaletteEntry] = &[
         label: "open timesheet summary",
         keys: "V",
         action: Action::OpenTimesheet,
+    },
+    PaletteEntry {
+        label: "quick interrupt (stop timer, log it)",
+        keys: "T",
+        action: Action::QuickInterrupt,
+    },
+    PaletteEntry {
+        label: "toggle billable/non-billable",
+        keys: "b",
+        action: Action::ToggleBillable,
+    },
+    PaletteEntry {
+        label: "new session from current task",
+        keys: "N",
+        action: Action::BeginSessionFromCurrent,
+    },
+    PaletteEntry {
+        label: "manage projects",
+        keys: "P",
+        action: Action::OpenProjectManager,
     },
 ];
 
@@ -550,6 +570,16 @@ mod tests {
             Action::OpenShare,
             Action::OpenThemePicker,
             Action::Reschedule,
+            // tuxtime fork additions.
+            Action::TimerStartStop,
+            Action::ManualTimeEntry,
+            Action::QuickInterrupt,
+            Action::BeginSessionFromCurrent,
+            Action::ToggleBillable,
+            Action::CopyNarratives,
+            Action::OpenTimesheet,
+            Action::ChangeWeekStart,
+            Action::OpenProjectManager,
         ];
         for a in required {
             assert!(actions.contains(&a), "missing palette entry for {a:?}");
