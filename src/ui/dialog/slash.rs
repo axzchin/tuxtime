@@ -7,7 +7,7 @@ use ratatui::widgets::{Clear, Paragraph};
 use crate::app::App;
 use crate::theme::Theme;
 use crate::ui::msgbox::{frame_box, pad_right};
-use crate::ui::overlay::{INPUT_PREFIX_OFFSET, anchored_below};
+use crate::ui::overlay;
 
 pub(super) fn render_slash_menu(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
     let theme = app.theme();
@@ -36,11 +36,7 @@ pub(super) fn render_slash_menu(frame: &mut Frame, dlg: Rect, screen: Rect, app:
     let content_w = label_w + 4 + desc_w + 4 + cmd_w + 4; // padding/spacers
     // Wider than the dialog on purpose so the footer hint fits — anchor
     // placement clamps to the screen edge below.
-    let popup_w: u16 = (content_w as u16).max(60).min(screen.width.max(40));
-    // Title row + entries + spacer + footer + 2 borders.
-    let popup_h: u16 = matches.len() as u16 + 5;
-
-    let area = anchored_below(dlg, screen, popup_w, popup_h, INPUT_PREFIX_OFFSET);
+    let area = overlay::slash_popup_rect(dlg, screen, content_w, matches.len());
     frame.render_widget(Clear, area);
     // The slash menu has no title line; pass an empty one so the shared
     // `frame_box` still draws the same bordered panel.

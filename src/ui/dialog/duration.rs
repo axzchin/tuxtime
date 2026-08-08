@@ -5,8 +5,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph};
 
 use crate::app::{App, DURATION_PRESETS};
-use crate::ui::msgbox;
-use crate::ui::overlay::{INPUT_PREFIX_OFFSET, anchored_below};
+use crate::ui::{msgbox, overlay};
 
 pub(super) fn render_duration_picker(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
     let theme = app.theme();
@@ -14,9 +13,7 @@ pub(super) fn render_duration_picker(frame: &mut Frame, dlg: Rect, screen: Rect,
         return;
     };
     let presets = DURATION_PRESETS;
-    let popup_w: u16 = 36;
-    let popup_h: u16 = presets.len() as u16 + 4;
-    let area = anchored_below(dlg, screen, popup_w, popup_h, INPUT_PREFIX_OFFSET);
+    let area = overlay::duration_popup_rect(dlg, screen, presets.len());
     frame.render_widget(Clear, area);
     let inner = msgbox::frame_box(
         frame,

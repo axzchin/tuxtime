@@ -46,6 +46,16 @@ const CALENDAR_H: u16 = 14;
 /// with its input prefix (`"  › "` = 4 cols).
 pub(crate) const INPUT_PREFIX_OFFSET: u16 = 4;
 
+/// Fixed footprints of the anchored metadata pickers.
+const CALENDAR_POPUP_W: u16 = 50;
+const CALENDAR_POPUP_H: u16 = 13;
+const RECURRENCE_POPUP_W: u16 = 60;
+const RECURRENCE_POPUP_H: u16 = 9;
+const PRIORITY_POPUP_W: u16 = 24;
+const PRIORITY_POPUP_H: u16 = 8;
+const DURATION_POPUP_W: u16 = 36;
+const SLASH_MIN_W: u16 = 60;
+
 /// Center `w` × `h` inside `parent`, clamping to the parent's bounds.
 #[must_use]
 pub(crate) fn centered_in(parent: Rect, w: u16, h: u16) -> Rect {
@@ -152,6 +162,87 @@ pub(crate) fn anchored_below(anchor: Rect, screen: Rect, w: u16, h: u16, x_offse
 #[must_use]
 pub(crate) fn timesheet_calendar_rect(parent: Rect) -> Rect {
     centered_in(parent, CALENDAR_W, CALENDAR_H)
+}
+
+/// The due/threshold calendar picker: fixed `CALENDAR_POPUP_W` ×
+/// [`CALENDAR_POPUP_H`], anchored under the dialog.
+#[must_use]
+pub(crate) fn calendar_popup_rect(dlg: Rect, screen: Rect) -> Rect {
+    anchored_below(
+        dlg,
+        screen,
+        CALENDAR_POPUP_W,
+        CALENDAR_POPUP_H,
+        INPUT_PREFIX_OFFSET,
+    )
+}
+
+/// The recurrence builder: fixed `RECURRENCE_POPUP_W` ×
+/// [`RECURRENCE_POPUP_H`], anchored under the dialog.
+#[must_use]
+pub(crate) fn recurrence_popup_rect(dlg: Rect, screen: Rect) -> Rect {
+    anchored_below(
+        dlg,
+        screen,
+        RECURRENCE_POPUP_W,
+        RECURRENCE_POPUP_H,
+        INPUT_PREFIX_OFFSET,
+    )
+}
+
+/// The priority chooser: fixed `PRIORITY_POPUP_W` × [`PRIORITY_POPUP_H`],
+/// anchored under the dialog.
+#[must_use]
+pub(crate) fn priority_popup_rect(dlg: Rect, screen: Rect) -> Rect {
+    anchored_below(
+        dlg,
+        screen,
+        PRIORITY_POPUP_W,
+        PRIORITY_POPUP_H,
+        INPUT_PREFIX_OFFSET,
+    )
+}
+
+/// The duration picker: fixed `DURATION_POPUP_W` wide, one row per preset
+/// plus a spacer and footer (`+ 4` for title, blank, footer, border), anchored
+/// under the dialog.
+#[must_use]
+pub(crate) fn duration_popup_rect(dlg: Rect, screen: Rect, presets: usize) -> Rect {
+    anchored_below(
+        dlg,
+        screen,
+        DURATION_POPUP_W,
+        presets as u16 + 4,
+        INPUT_PREFIX_OFFSET,
+    )
+}
+
+/// The slash menu: content-driven width (longest label/description/cmd line),
+/// never narrower than [`SLASH_MIN_W`], capped to the screen; one row per
+/// entry plus a spacer, footer, and title (`+ 5`), anchored under the dialog.
+#[must_use]
+pub(crate) fn slash_popup_rect(dlg: Rect, screen: Rect, content_w: usize, entries: usize) -> Rect {
+    let w = (content_w as u16)
+        .max(SLASH_MIN_W)
+        .min(screen.width.max(40));
+    anchored_below(dlg, screen, w, entries as u16 + 5, INPUT_PREFIX_OFFSET)
+}
+
+/// The autocomplete suggestions: content-driven width (longest match, `+ 3`
+/// for the leading space, sigil, and trailing space), never narrower than 16,
+/// capped to the dialog's width; one row per match, anchored under the dialog.
+#[must_use]
+pub(crate) fn autocomplete_popup_rect(
+    dlg: Rect,
+    screen: Rect,
+    longest_match: usize,
+    matches: usize,
+) -> Rect {
+    let w = (longest_match as u16)
+        .saturating_add(3)
+        .max(16)
+        .min(dlg.width.max(16));
+    anchored_below(dlg, screen, w, matches as u16, INPUT_PREFIX_OFFSET)
 }
 
 /// The day-boundary prompt: `DAY_BOUNDARY_W` wide, `wrapped_lines` rows of
@@ -279,6 +370,61 @@ mod tests {
         assert_eq!(
             timesheet_calendar_rect(rect(30, 30)),
             Rect::new(0, 8, 30, 14)
+        );
+    }
+    #[test]
+    fn popup_rects_anchor_below_the_dialog() {
+        let dlg = Rect::new(30, 11, 40, 8);
+        let screen = Rect::new(0, 0, 100, 30);
+        // The 13-row calendar would overflow a 30-row screen at y=19, so it
+        // clamps up to keep the whole popup visible; the shorter popups fit.
+        assert_eq!(calendar_popup_rect(dlg, screen), Rect::new(34, 17, 50, 13));
+        assert_eq!(recurrence_popup_rect(dlg, screen), Rect::new(34, 19, 60, 9));
+        assert_eq!(priority_popup_rect(dlg, screen), Rect::new(34, 19, 24, 8));
+        assert_eq!(
+            duration_popup_rect(dlg, screen, 5),
+            Rect::new(34, 19, 36, 9)
+        );
+    }
+
+    #[test]
+    fn slash_popup_rect_grows_to_content_and_clamps_to_screen() {
+        let dlg = Rect::new(30, 11, 40, 8);
+        let screen = Rect::new(0, 0, 100, 30);
+        // Narrow content: kept at the minimum width.
+        assert_eq!(
+            slash_popup_rect(dlg, screen, 10, 4),
+            Rect::new(34, 19, 60, 9)
+        );
+        // Wide content: grows past the minimum, then clamps x so the popup
+        // (90 wide) stays inside the 100-col screen.
+        assert_eq!(
+            slash_popup_rect(dlg, screen, 90, 4),
+            Rect::new(10, 19, 90, 9)
+        );
+        // Narrow screen: width caps to the screen, x clamps to the left edge,
+        // and the 9-row popup clamps up to fit the 20-row screen.
+        let narrow = Rect::new(0, 0, 50, 20);
+        assert_eq!(
+            slash_popup_rect(dlg, narrow, 90, 4),
+            Rect::new(0, 11, 50, 9),
+            "x and y clamp to the screen edges; width caps to the screen"
+        );
+    }
+
+    #[test]
+    fn autocomplete_popup_rect_sizes_and_caps() {
+        let dlg = Rect::new(30, 11, 40, 8);
+        let screen = Rect::new(0, 0, 100, 30);
+        // Longest match 7 chars: 7 + 3 = 10, floored to 16.
+        assert_eq!(
+            autocomplete_popup_rect(dlg, screen, 7, 3),
+            Rect::new(34, 19, 16, 3)
+        );
+        // Longest match 30 chars: grows, but capped to the dialog width.
+        assert_eq!(
+            autocomplete_popup_rect(dlg, screen, 30, 2),
+            Rect::new(34, 19, 33, 2)
         );
     }
 }

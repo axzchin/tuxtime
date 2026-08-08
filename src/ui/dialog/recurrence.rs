@@ -7,17 +7,14 @@ use ratatui::widgets::{Clear, Paragraph};
 use crate::app::{App, BuilderField, REC_UNIT_ORDER};
 use crate::theme::Theme;
 use crate::ui::calendar_utils::format_focused;
-use crate::ui::msgbox;
-use crate::ui::overlay::{INPUT_PREFIX_OFFSET, anchored_below};
+use crate::ui::{msgbox, overlay};
 
 pub(super) fn render_recurrence_builder(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
     let theme = app.theme();
     let Some(state) = app.recurrence_state() else {
         return;
     };
-    let popup_w: u16 = 60;
-    let popup_h: u16 = 9;
-    let area = anchored_below(dlg, screen, popup_w, popup_h, INPUT_PREFIX_OFFSET);
+    let area = overlay::recurrence_popup_rect(dlg, screen);
     frame.render_widget(Clear, area);
     let inner = msgbox::frame_box(
         frame,

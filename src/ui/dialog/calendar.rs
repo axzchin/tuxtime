@@ -6,17 +6,14 @@ use ratatui::widgets::{Clear, Paragraph};
 
 use crate::app::{App, CalendarTarget, WeekStart};
 use crate::ui::calendar_utils::{calendar_cells, calendar_footer, format_focused, month_name};
-use crate::ui::msgbox;
-use crate::ui::overlay::{INPUT_PREFIX_OFFSET, anchored_below};
+use crate::ui::{msgbox, overlay};
 
 pub(super) fn render_calendar(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
     let theme = app.theme();
     let Some(state) = app.calendar_state() else {
         return;
     };
-    let popup_w: u16 = 50u16.min(screen.width.max(40));
-    let popup_h: u16 = 13;
-    let area = anchored_below(dlg, screen, popup_w, popup_h, INPUT_PREFIX_OFFSET);
+    let area = overlay::calendar_popup_rect(dlg, screen);
     frame.render_widget(Clear, area);
     let label = match state.target {
         CalendarTarget::Due => "DUE",

@@ -515,11 +515,7 @@ pub fn render_autocomplete(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App
     };
 
     let longest = matches.iter().map(|s| s.chars().count()).max().unwrap_or(0);
-    // +3 = leading space, sigil, trailing space.
-    let popup_w: u16 = (((longest as u16).saturating_add(3)).max(16)).min(dlg.width.max(16));
-    let popup_h: u16 = matches.len() as u16;
-
-    let area = overlay::anchored_below(dlg, screen, popup_w, popup_h, overlay::INPUT_PREFIX_OFFSET);
+    let area = overlay::autocomplete_popup_rect(dlg, screen, longest, matches.len());
     frame.render_widget(Clear, area);
 
     let selected = app.draft.autocomplete_index().min(matches.len() - 1);
