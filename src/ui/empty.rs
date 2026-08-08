@@ -9,9 +9,7 @@ use crate::ui::msgbox::pad_right;
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
-    let w = 56u16.min(area.width.saturating_sub(4));
-    let h = 16u16.min(area.height.saturating_sub(2));
-    let r = super::centered_in(area, w, h);
+    let r = super::overlay::empty_state_rect(area);
 
     let inner = crate::ui::msgbox::frame_box(
         frame,

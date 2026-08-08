@@ -19,6 +19,7 @@ pub mod hyperlinks;
 pub mod list;
 pub mod logo;
 pub mod msgbox;
+pub(crate) mod overlay;
 pub mod settings;
 pub mod share;
 pub mod status;
@@ -28,30 +29,12 @@ pub(crate) mod timesheet_render;
 pub mod title;
 pub mod welcome;
 
-// Pane and overlay sizing. Promoted out of inline literals so the three
-// `MIN_BODY_W` references below stay in sync, and so tweaking a sidebar
-// width is a one-line change.
+// Pane sizing. Promoted out of inline literals so the three `MIN_BODY_W`
+// references below stay in sync, and so tweaking a sidebar width is a
+// one-line change. (Overlay sizes live in `overlay`.)
 const LEFT_PANE_W: u16 = 26;
 const RIGHT_PANE_W: u16 = 34;
 const MIN_BODY_W: u16 = 40;
-
-const DIALOG_H: u16 = 8;
-const DIALOG_MIN_W: u16 = 40;
-const DIALOG_MAX_W: u16 = 100;
-
-const HELP_MAX_H: u16 = 40;
-const HELP_MIN_W: u16 = 76;
-const HELP_MAX_W: u16 = 120;
-
-const WELCOME_W: u16 = 56;
-const WELCOME_H: u16 = 16;
-
-const PROMPT_H: u16 = 5;
-const PROMPT_MAX_W: u16 = 50;
-
-const PALETTE_MAX_H: u16 = 20;
-const PALETTE_MIN_W: u16 = 50;
-const PALETTE_MAX_W: u16 = 80;
 
 pub fn draw(frame: &mut Frame, app: &App) {
     let theme = app.theme();
@@ -156,10 +139,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
     // Overlays
     match app.nav.mode {
         Mode::Insert => {
-            let dlg_w: u16 = (u32::from(center_area.width) * 4 / 5)
-                .clamp(u32::from(DIALOG_MIN_W), u32::from(DIALOG_MAX_W))
-                as u16;
-            let dlg = centered_in(area, dlg_w, DIALOG_H);
+            let dlg = overlay::insert_dialog_rect(area, center_area.width);
             frame.render_widget(Clear, dlg);
             dialog::render(frame, dlg, app);
             // At most one overlay shows at a time. The autocomplete popup is
@@ -170,11 +150,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
             }
         }
         Mode::Help => {
-            let h: u16 = area.height.saturating_sub(3).min(HELP_MAX_H);
-            let w: u16 = (u32::from(area.width) * 9 / 10)
-                .clamp(u32::from(HELP_MIN_W), u32::from(HELP_MAX_W))
-                as u16;
-            let r = centered_in(area, w, h);
+            let r = overlay::help_rect(area);
             frame.render_widget(Clear, r);
             help::render(frame, r, app);
         }
@@ -188,8 +164,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
         Mode::PromptIdleNudge | Mode::PromptLongTimerNudge => {
             frame.render_widget(Clear, body_area);
             settings::render(frame, body_area, app);
-            let w: u16 = PROMPT_MAX_W.min(area.width.saturating_sub(4));
-            let r = centered_in(area, w, PROMPT_H);
+            let r = overlay::prompt_rect(area);
             frame.render_widget(Clear, r);
             dialog::render_prompt(frame, r, app);
         }
@@ -198,8 +173,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
         Mode::PromptRenameProject => {
             frame.render_widget(Clear, body_area);
             render_manage_projects(frame, body_area, app);
-            let w: u16 = PROMPT_MAX_W.min(area.width.saturating_sub(4));
-            let r = centered_in(area, w, PROMPT_H);
+            let r = overlay::prompt_rect(area);
             frame.render_widget(Clear, r);
             dialog::render_prompt(frame, r, app);
         }
@@ -207,8 +181,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
         | Mode::PromptContext
         | Mode::PromptSaveFilter
         | Mode::PromptAddTime => {
-            let w: u16 = PROMPT_MAX_W.min(area.width.saturating_sub(4));
-            let r = centered_in(area, w, PROMPT_H);
+            let r = overlay::prompt_rect(area);
             frame.render_widget(Clear, r);
             dialog::render_prompt(frame, r, app);
             if matches!(app.nav.mode, Mode::PromptProject | Mode::PromptContext) {
@@ -216,31 +189,23 @@ pub fn draw(frame: &mut Frame, app: &App) {
             }
         }
         Mode::CommandPalette => {
-            let h: u16 = area.height.saturating_sub(4).min(PALETTE_MAX_H);
-            let w: u16 = (u32::from(area.width) * 3 / 5)
-                .clamp(u32::from(PALETTE_MIN_W), u32::from(PALETTE_MAX_W))
-                as u16;
-            let r = centered_in(area, w, h);
+            let r = overlay::palette_rect(area);
             frame.render_widget(Clear, r);
             command_palette::render(frame, r, app);
         }
         Mode::Share => {
             let (w, h) = share::size_for(app);
-            let r = centered_in(area, w, h);
+            let r = overlay::centered_in(area, w, h);
             frame.render_widget(Clear, r);
             share::render(frame, r, app);
         }
         Mode::PickTheme => {
-            let h: u16 = area.height.saturating_sub(4).min(PALETTE_MAX_H);
-            let w: u16 = (u32::from(area.width) * 3 / 5)
-                .clamp(u32::from(PALETTE_MIN_W), u32::from(PALETTE_MAX_W))
-                as u16;
-            let r = centered_in(area, w, h);
+            let r = overlay::palette_rect(area);
             frame.render_widget(Clear, r);
             theme_picker::render(frame, r, app);
         }
         Mode::Welcome => {
-            let r = centered_in(area, WELCOME_W, WELCOME_H);
+            let r = overlay::welcome_rect(area);
             frame.render_widget(Clear, r);
             welcome::render(frame, r, app);
         }
@@ -248,7 +213,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
             render_timesheet_calendar(frame, area, app);
         }
         Mode::IdleNudge => {
-            let r = centered_in(area, 60, 6);
+            let r = overlay::message_rect(area);
             frame.render_widget(Clear, r);
             let theme = app.theme();
             msgbox::render_message_box(
@@ -261,7 +226,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
             );
         }
         Mode::ManualEntryChoice => {
-            let r = centered_in(area, 60, 6);
+            let r = overlay::message_rect(area);
             frame.render_widget(Clear, r);
             let theme = app.theme();
             msgbox::render_message_box(
@@ -289,15 +254,11 @@ pub fn draw(frame: &mut Frame, app: &App) {
                 .map(|t| crate::todo::body_only_from_clean(&t.clean_raw))
                 .unwrap_or_default();
             let message = format!("\"{narrative}\" has time from a previous day.");
-            let box_w = 68u16.min(area.width);
-            let wrap_w = usize::from(box_w).saturating_sub(2).max(16);
+            // Wrap to the box width and grow the box to fit; short messages
+            // keep the original 7-row box so the layout doesn't jump around.
+            let wrap_w = overlay::day_boundary_wrap_w(area);
             let wrapped = msgbox::wrapped_line_count(&message, wrap_w) as u16;
-            // Borders + blank row + footer; a short message keeps the original
-            // 7-row box so the layout doesn't jump around.
-            let box_h = (wrapped + 4)
-                .max(7)
-                .min(area.height.saturating_sub(2).max(5));
-            let r = centered_in(area, box_w, box_h);
+            let r = overlay::day_boundary_rect(area, wrapped);
             frame.render_widget(Clear, r);
             msgbox::render_message_box(
                 frame,
@@ -381,19 +342,6 @@ fn render_manage_projects(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     frame.render_widget(Paragraph::new(lines), inner);
-}
-
-pub(crate) fn centered_in(parent: Rect, w: u16, h: u16) -> Rect {
-    let w = w.min(parent.width);
-    let h = h.min(parent.height);
-    let x = parent.x + (parent.width - w) / 2;
-    let y = parent.y + (parent.height - h) / 2;
-    Rect {
-        x,
-        y,
-        width: w,
-        height: h,
-    }
 }
 
 pub(crate) fn fill_bg(frame: &mut Frame, area: Rect, style: Style) {

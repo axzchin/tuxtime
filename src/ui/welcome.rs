@@ -1,9 +1,8 @@
 //! First-run welcome overlay: shown when `tuxtime` is launched with no target
 //! and no `./todo.txt` exists. Offers to create a `./todo.txt` here or open
 //! the bundled sample. Key handling lives in `handle_welcome` (main.rs);
-//! `q`/`Esc` quits without creating anything. Sizing lives in the overlay
-//! constants at the top of `ui::mod.rs`; `render` fills whatever rect it is
-//! given.
+//! `q`/`Esc` quits without creating anything. Sizing lives in `overlay`;
+//! `render` fills whatever rect it is given.
 
 use ratatui::Frame;
 use ratatui::layout::Rect;
