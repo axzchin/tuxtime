@@ -60,6 +60,10 @@ pub enum Mode {
     Welcome,
     /// Idle nudge popup — shown when no timer has been running for the configured duration.
     IdleNudge,
+    /// Long-timer nudge popup — shown when a timer has been running past the
+    /// configured threshold (from Normal mode only, so it never destroys
+    /// in-progress composition). `[S]top timer / [D]ismiss`.
+    LongTimerNudge,
     /// Manual entry choice popup — [C]urrent task description or [N]ew blank entry.
     ManualEntryChoice,
     /// Project management view (`<P>`) — archive/unarchive/rename projects.

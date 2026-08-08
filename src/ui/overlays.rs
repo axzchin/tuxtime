@@ -132,6 +132,19 @@ pub(crate) fn draw_overlays(
                 "[N]ew entry  [D]ismiss",
             );
         }
+        Mode::LongTimerNudge => {
+            let r = overlay::message_rect(area);
+            frame.render_widget(Clear, r);
+            let theme = app.theme();
+            msgbox::render_message_box(
+                frame,
+                r,
+                theme,
+                " ⏰ Long Timer Nudge ",
+                "Timer has been running for a while — still tracking?",
+                "[S]top timer  [D]ismiss",
+            );
+        }
         Mode::ManualEntryChoice => {
             let r = overlay::message_rect(area);
             frame.render_widget(Clear, r);

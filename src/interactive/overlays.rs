@@ -377,6 +377,30 @@ pub(crate) fn handle_idle_nudge(app: &mut App, key: KeyEvent) {
     }
 }
 
+/// Long-timer nudge popup: the running timer has exceeded the configured
+/// threshold. `S` stops it (capturing the elapsed time), `D`/`Esc` dismisses
+/// and keeps the timer running. Both return to the pre-nudge view.
+pub(crate) fn handle_long_timer_nudge(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Char('S' | 's') => {
+            app.stop_running_timer();
+            app.nav.enter_normal();
+            if let Some(v) = app.session.pre_nudge_view.take() {
+                app.set_view(v);
+            }
+            app.session.last_timer_activity = std::time::Instant::now();
+        }
+        KeyCode::Char('D') | KeyCode::Esc => {
+            app.nav.enter_normal();
+            if let Some(v) = app.session.pre_nudge_view.take() {
+                app.set_view(v);
+            }
+            app.session.last_timer_activity = std::time::Instant::now();
+        }
+        _ => {}
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Manual time entry choice (M) — new entry or add to existing
 // ---------------------------------------------------------------------------

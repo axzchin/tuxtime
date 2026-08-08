@@ -64,11 +64,13 @@ impl App {
 
     /// Check nudge conditions on each tick. Call from the event loop.
     /// - If no timer running and idle > threshold → enter `IdleNudge` mode.
-    /// - If timer running and elapsed > threshold → set `long_timer_nudge_active`.
+    /// - If timer running and elapsed > threshold → enter `LongTimerNudge`
+    ///   mode (popup) from Normal, and always keep the status-bar `⏰`
+    ///   indicator (`long_timer_nudge_active`) so it's visible in every mode.
     ///   Returns true when the UI should redraw.
     pub fn check_nudges(&mut self) -> bool {
-        // If the nudge is already showing, don't re-trigger.
-        if matches!(self.nav.mode, Mode::IdleNudge) {
+        // If a nudge popup is already showing, don't re-trigger.
+        if matches!(self.nav.mode, Mode::IdleNudge | Mode::LongTimerNudge) {
             return false;
         }
         let idle_secs = self.session.last_timer_activity.elapsed().as_secs();
@@ -87,12 +89,20 @@ impl App {
             self.nav.mode = Mode::IdleNudge;
             fired = true;
         }
-        // Long-timer nudge only toggles a status-bar flag — safe in any mode.
+        // Long-timer nudge: popup from Normal mode (same state-safety rule as
+        // the idle nudge — it must not destroy in-progress composition), plus
+        // the status-bar ⏰ flag everywhere so a timer that runs long is
+        // visible even mid-Insert or over the palette.
         let was_active = self.session.long_timer_nudge_active;
         if self.timer_running() {
             let elapsed = self.timer_elapsed_secs().unwrap_or(0);
             let now_active = elapsed >= self.prefs.long_timer_nudge_seconds;
             self.session.long_timer_nudge_active = now_active;
+            if now_active && !was_active && self.nav.mode == Mode::Normal {
+                self.session.pre_nudge_view = Some(self.nav.view);
+                self.nav.mode = Mode::LongTimerNudge;
+                fired = true;
+            }
         } else {
             self.session.long_timer_nudge_active = false;
         }
@@ -100,15 +110,24 @@ impl App {
     }
 
     /// Dismiss any overlay/dialog mode back to Normal, discarding transient
-    /// state (draft, selection). Only used for the idle nudge, which needs a
-    /// clean slate for the popup. The long-timer nudge just sets a flag and
-    /// lets the status bar show the indicator without destroying user work.
+    /// state (draft, selection). Only used for the nudges, which need a
+    /// clean slate for their popup.
     fn exit_overlay_to_normal(&mut self) {
         self.draft_clear();
         self.selection.exit_edit();
         self.selection.clear();
         self.session.manual_time_entry = false;
         self.nav.mode = Mode::Normal;
+    }
+
+    /// Stop the running timer — used by the long-timer nudge's `S` key, so
+    /// the popup can capture the elapsed time without the cursor context the
+    /// list-view toggle needs.
+    pub(crate) fn stop_running_timer(&mut self) {
+        let Some(abs) = self.store.active_timer_abs() else {
+            return;
+        };
+        self.toggle_timer_at(abs);
     }
 
     /// True when the active timer is running on the task at `abs`.
@@ -519,6 +538,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::View;
     use crate::app::test_support::build_app;
     use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -701,5 +721,91 @@ mod tests {
             "(A) 2026-05-06 Draft motion revised +Smith @drafting"
         );
         assert_eq!(app.session.carry_forward_from, None, "cleared on save");
+    }
+
+    // ---- long-timer nudge popup ----
+
+    /// A timer that has run past the long-timer threshold fires the popup
+    /// from Normal mode, remembering the pre-nudge view for later restore.
+    #[test]
+    fn long_timer_nudge_fires_from_normal_mode() {
+        // Backdate the start tag so elapsed exceeds the 2h default threshold.
+        let start = (chrono::Local::now() - chrono::Duration::seconds(7300))
+            .format("%Y-%m-%dT%H:%M:%S")
+            .to_string();
+        let mut app = build_app(&format!("Draft +Smith start:{start}\n"));
+        assert!(app.timer_running());
+        assert!(app.timer_elapsed_secs().unwrap_or(0) > app.long_timer_nudge_seconds());
+        app.nav.view = View::Timesheet;
+
+        assert!(app.check_nudges());
+
+        assert_eq!(app.nav.mode, Mode::LongTimerNudge);
+        assert!(app.session.long_timer_nudge_active);
+        assert_eq!(
+            app.session.pre_nudge_view,
+            Some(View::Timesheet),
+            "view before the nudge is remembered"
+        );
+    }
+
+    /// `S` on the long-timer nudge stops the timer (capturing the elapsed
+    /// time) and restores the pre-nudge view.
+    #[test]
+    fn long_timer_nudge_stop_restores_view_and_stops_timer() {
+        let start = (chrono::Local::now() - chrono::Duration::seconds(7300))
+            .format("%Y-%m-%dT%H:%M:%S")
+            .to_string();
+        let mut app = build_app(&format!("Draft +Smith start:{start}\n"));
+        app.nav.view = View::Archive;
+        app.check_nudges();
+        assert_eq!(app.nav.mode, Mode::LongTimerNudge);
+
+        crate::interactive::handle_long_timer_nudge(&mut app, key('S'));
+
+        assert!(!app.timer_running(), "S stops the timer");
+        assert_eq!(app.nav.mode, Mode::Normal);
+        assert_eq!(app.nav.view, View::Archive, "pre-nudge view restored");
+        assert!(app.session.pre_nudge_view.is_none(), "consumed on stop");
+        assert!(app.tasks()[0].dur.unwrap_or(0) > 7200, "elapsed captured");
+    }
+
+    /// `D` dismisses the popup but leaves the timer running; the nudge flag
+    /// stays set so the status bar keeps signalling.
+    #[test]
+    fn long_timer_nudge_dismiss_keeps_timer_running() {
+        let start = (chrono::Local::now() - chrono::Duration::seconds(7300))
+            .format("%Y-%m-%dT%H:%M:%S")
+            .to_string();
+        let mut app = build_app(&format!("Draft +Smith start:{start}\n"));
+        app.check_nudges();
+        assert_eq!(app.nav.mode, Mode::LongTimerNudge);
+
+        crate::interactive::handle_long_timer_nudge(&mut app, key('D'));
+
+        assert!(app.timer_running(), "D dismisses without stopping");
+        assert_eq!(app.nav.mode, Mode::Normal);
+        assert!(
+            app.session.long_timer_nudge_active,
+            "flag stays for status bar"
+        );
+    }
+
+    /// A timer still under the threshold must not fire the nudge or touch
+    /// the view.
+    #[test]
+    fn long_timer_nudge_does_not_fire_under_threshold() {
+        let start = (chrono::Local::now() - chrono::Duration::seconds(60))
+            .format("%Y-%m-%dT%H:%M:%S")
+            .to_string();
+        let mut app = build_app(&format!("Draft +Smith start:{start}\n"));
+        app.nav.view = View::Timesheet;
+
+        assert!(!app.check_nudges());
+
+        assert_eq!(app.nav.mode, Mode::Normal);
+        assert!(!app.session.long_timer_nudge_active);
+        assert!(app.session.pre_nudge_view.is_none());
+        assert!(app.timer_running());
     }
 }
