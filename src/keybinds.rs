@@ -349,13 +349,15 @@ fn parse_array_strings(inner: &str) -> Vec<String> {
     out
 }
 
+/// Strip surrounding quotes from a binding value. Returns `None` for an
+/// empty value (an empty binding would parse to nothing anyway) and the
+/// quote-stripped text otherwise — the shared [`crate::toml_lite::unquote`]
+/// does the actual stripping.
 fn unquote(value: &str) -> Option<&str> {
     if value.is_empty() {
         None
-    } else if let Some(inner) = value.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
-        Some(inner)
     } else {
-        Some(value)
+        Some(crate::toml_lite::unquote(value))
     }
 }
 

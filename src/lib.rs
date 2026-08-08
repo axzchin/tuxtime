@@ -21,6 +21,7 @@ pub(crate) mod serve;
 pub mod theme;
 pub(crate) mod threshold;
 pub mod todo;
+pub(crate) mod toml_lite;
 pub mod ui;
 pub mod update;
 pub(crate) mod xdg;

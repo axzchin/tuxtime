@@ -4,6 +4,8 @@ use std::sync::OnceLock;
 
 use ratatui::style::Color;
 
+use crate::toml_lite::unquote;
+
 #[derive(Debug, Clone, Copy)]
 pub struct Theme {
     pub name: &'static str,
@@ -421,15 +423,6 @@ fn parse_color(s: &str) -> Option<Color> {
     let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
     let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
     Some(Color::Rgb(r, g, b))
-}
-
-fn unquote(s: &str) -> &str {
-    let b = s.as_bytes();
-    if b.len() >= 2 && b[0] == b'"' && b[b.len() - 1] == b'"' {
-        &s[1..s.len() - 1]
-    } else {
-        s
-    }
 }
 
 #[cfg(test)]

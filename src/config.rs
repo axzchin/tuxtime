@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 
 use crate::app::WeekStart;
 use crate::app::{Density, Sort};
+use crate::toml_lite::unquote;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Config {
@@ -328,15 +329,6 @@ fn serialize(c: &Config) -> String {
         let _ = writeln!(out, "prompt_on_day_boundary = {v}");
     }
     out
-}
-
-fn unquote(s: &str) -> &str {
-    let b = s.as_bytes();
-    if b.len() >= 2 && b[0] == b'"' && b[b.len() - 1] == b'"' {
-        &s[1..s.len() - 1]
-    } else {
-        s
-    }
 }
 
 fn parse_bool(s: &str) -> Option<bool> {
