@@ -366,8 +366,7 @@ impl App {
         if changed {
             self.archive_cache.rebuild(self.store.archive());
             if matches!(self.nav.view, View::Archive) {
-                self.recompute_visible();
-                self.clamp_cursor();
+                self.refresh_view();
             }
         }
         changed
@@ -401,8 +400,7 @@ impl App {
             return;
         }
         self.nav.switch_view(self.nav.view, view);
-        self.recompute_visible();
-        self.clamp_cursor();
+        self.refresh_view();
     }
 
     /// Set the search-filter text. Cursor resets and the cache is recomputed.
@@ -470,6 +468,22 @@ impl App {
         self.follow_cursor(follow_abs);
     }
 
+    /// Recompute the visible cache and re-clamp the cursor, without following
+    /// a task. Used by mutations whose result has no natural owner index
+    /// (delete, archive, undo) and by transitions that rederive the cursor.
+    pub(crate) fn refresh_view(&mut self) {
+        self.recompute_visible();
+        self.clamp_cursor();
+    }
+
+    /// Flash a success message and refresh the view with the cursor following
+    /// `abs`. Collapses the flash + `after_mutation` tail that nearly every
+    /// mutation wrapper repeats.
+    pub(crate) fn commit(&mut self, msg: impl Into<String>, abs: usize) {
+        self.flash(msg);
+        self.after_mutation(abs);
+    }
+
     /// Handle a store reconcile that reloaded the file from disk: reset
     /// transient input state and refresh the view, matching the old
     /// `apply_external_state` behavior.
@@ -496,8 +510,7 @@ impl App {
     /// tasks were merged.
     pub(crate) fn apply_drain(&mut self, report: DrainReport) {
         if report.merged > 0 {
-            self.recompute_visible();
-            self.clamp_cursor();
+            self.refresh_view();
         }
         if let Some(err) = report.error {
             self.flash(err);

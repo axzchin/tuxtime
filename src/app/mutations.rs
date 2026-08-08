@@ -17,18 +17,9 @@ use crate::note;
 impl App {
     pub fn toggle_complete(&mut self, abs: usize) {
         match self.store.toggle_complete(abs) {
-            CompleteOutcome::Completed { abs } => {
-                self.flash("completed");
-                self.after_mutation(abs);
-            }
-            CompleteOutcome::CompletedSpawned { next, .. } => {
-                self.flash("completed +next");
-                self.after_mutation(next);
-            }
-            CompleteOutcome::Uncompleted { abs } => {
-                self.flash("uncompleted");
-                self.after_mutation(abs);
-            }
+            CompleteOutcome::Completed { abs } => self.commit("completed", abs),
+            CompleteOutcome::CompletedSpawned { next, .. } => self.commit("completed +next", next),
+            CompleteOutcome::Uncompleted { abs } => self.commit("uncompleted", abs),
             CompleteOutcome::Aborted(r) => self.handle_reconcile_abort(r),
             CompleteOutcome::OutOfRange => {}
             CompleteOutcome::Error(e) => self.flash(format!("complete failed: {e}")),
@@ -48,8 +39,7 @@ impl App {
         match self.store.delete(abs) {
             DeleteOutcome::Deleted { .. } => {
                 self.flash("deleted");
-                self.recompute_visible();
-                self.clamp_cursor();
+                self.refresh_view();
             }
             DeleteOutcome::Aborted(r) => self.handle_reconcile_abort(r),
             DeleteOutcome::OutOfRange => {}
@@ -104,16 +94,13 @@ impl App {
             CoreAdd::Added { abs } => {
                 if self.session.auto_start_on_save {
                     self.session.auto_start_on_save = false;
-                    self.flash("added");
-                    self.after_mutation(abs);
+                    self.commit("added", abs);
                     // Start the timer on the newly-created interruption entry.
                     self.toggle_timer_at(abs);
-                    AddOutcome::Saved
                 } else {
-                    self.flash("added");
-                    self.after_mutation(abs);
-                    AddOutcome::Saved
+                    self.commit("added", abs);
                 }
+                AddOutcome::Saved
             }
             CoreAdd::Empty => AddOutcome::Empty,
             CoreAdd::Aborted(r) => {
@@ -133,8 +120,7 @@ impl App {
     fn save_carry_forward(&mut self, from: usize, text: &str) -> AddOutcome {
         match self.store.carry_forward_to(from, text) {
             CarryForwardOutcome::Carried { new, .. } => {
-                self.flash("new entry — previous day completed");
-                self.after_mutation(new);
+                self.commit("new entry — previous day completed", new);
                 AddOutcome::Saved
             }
             CarryForwardOutcome::Aborted(r) => {
@@ -165,10 +151,7 @@ impl App {
         };
         let text = self.draft.text().to_string();
         match self.store.edit_line(idx, &text) {
-            EditOutcome::Saved { abs } => {
-                self.flash("saved");
-                self.after_mutation(abs);
-            }
+            EditOutcome::Saved { abs } => self.commit("saved", abs),
             // Empty draft / vanished index: quiet no-op, as before.
             EditOutcome::Empty | EditOutcome::OutOfRange | EditOutcome::TermNotFound => {}
             EditOutcome::Aborted(r) => self.handle_reconcile_abort(r),
@@ -181,10 +164,7 @@ impl App {
             return;
         };
         match self.store.add_project(abs, name) {
-            TagOutcome::Added { abs, name } => {
-                self.flash(format!("+{name}"));
-                self.after_mutation(abs);
-            }
+            TagOutcome::Added { abs, name } => self.commit(format!("+{name}"), abs),
             TagOutcome::Removed { .. } | TagOutcome::Unchanged | TagOutcome::OutOfRange => {}
             TagOutcome::InvalidName => self.flash("invalid project name"),
             TagOutcome::Aborted(r) => self.handle_reconcile_abort(r),
@@ -197,14 +177,8 @@ impl App {
             return;
         };
         match self.store.toggle_context(abs, name) {
-            TagOutcome::Added { abs, name } => {
-                self.flash(format!("@{name}"));
-                self.after_mutation(abs);
-            }
-            TagOutcome::Removed { abs, name } => {
-                self.flash(format!("removed @{name}"));
-                self.after_mutation(abs);
-            }
+            TagOutcome::Added { abs, name } => self.commit(format!("@{name}"), abs),
+            TagOutcome::Removed { abs, name } => self.commit(format!("removed @{name}"), abs),
             TagOutcome::Unchanged | TagOutcome::OutOfRange => {}
             TagOutcome::InvalidName => self.flash("invalid context name"),
             TagOutcome::Aborted(r) => self.handle_reconcile_abort(r),
@@ -277,8 +251,7 @@ impl App {
         match self.store.undo() {
             UndoOutcome::Undone => {
                 self.flash("undo");
-                self.recompute_visible();
-                self.clamp_cursor();
+                self.refresh_view();
             }
             UndoOutcome::Nothing => {}
             UndoOutcome::Aborted(r) => self.handle_reconcile_abort(r),
@@ -290,8 +263,7 @@ impl App {
         match self.store.archive_completed() {
             ArchiveOutcome::Archived { count } => {
                 self.flash(format!("archived {count}"));
-                self.recompute_visible();
-                self.clamp_cursor();
+                self.refresh_view();
                 self.archive_cache.rebuild(self.store.archive());
             }
             ArchiveOutcome::Nothing => self.flash("nothing to archive"),
@@ -305,8 +277,7 @@ impl App {
         match self.store.archive_one(abs) {
             ArchiveOneOutcome::Archived => {
                 self.flash("archived");
-                self.recompute_visible();
-                self.clamp_cursor();
+                self.refresh_view();
                 self.archive_cache.rebuild(self.store.archive());
             }
             ArchiveOneOutcome::NotCompleted => {
@@ -324,16 +295,14 @@ impl App {
         match self.store.unarchive(archive_idx) {
             UnarchiveOutcome::Unarchived => {
                 self.flash("unarchived");
-                self.recompute_visible();
-                self.clamp_cursor();
+                self.refresh_view();
                 self.archive_cache.rebuild(self.store.archive());
             }
             UnarchiveOutcome::OutOfRange => {}
             UnarchiveOutcome::Aborted(r) => self.handle_reconcile_abort(r),
             UnarchiveOutcome::DoneReloaded => {
                 self.flash("done.txt changed on disk — reloaded");
-                self.recompute_visible();
-                self.clamp_cursor();
+                self.refresh_view();
                 self.archive_cache.rebuild(self.store.archive());
             }
             UnarchiveOutcome::Error(e) => self.flash(format!("unarchive failed: {e}")),
@@ -345,15 +314,13 @@ impl App {
         match self.store.archive_delete(archive_idx) {
             ArchiveDeleteOutcome::Deleted => {
                 self.flash("deleted from archive");
-                self.recompute_visible();
-                self.clamp_cursor();
+                self.refresh_view();
                 self.archive_cache.rebuild(self.store.archive());
             }
             ArchiveDeleteOutcome::OutOfRange => {}
             ArchiveDeleteOutcome::DoneReloaded => {
                 self.flash("done.txt changed on disk — reloaded");
-                self.recompute_visible();
-                self.clamp_cursor();
+                self.refresh_view();
                 self.archive_cache.rebuild(self.store.archive());
             }
             ArchiveDeleteOutcome::Error(e) => self.flash(format!("delete failed: {e}")),
@@ -363,10 +330,7 @@ impl App {
     /// Add a finalized (already canonical todo.txt) task line directly.
     pub fn add_finalized(&mut self, text: &str) {
         match self.store.add_finalized(text) {
-            CoreAdd::Added { abs } => {
-                self.flash("added");
-                self.after_mutation(abs);
-            }
+            CoreAdd::Added { abs } => self.commit("added", abs),
             CoreAdd::Empty => {}
             CoreAdd::Aborted(r) => self.handle_reconcile_abort(r),
             CoreAdd::Error(e) => self.flash(format!("invalid: {e}")),
