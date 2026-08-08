@@ -179,8 +179,12 @@ fn handle_add(mut req: Request, todo_path: &Path) -> Result<()> {
 }
 
 /// Read `todo.txt` and the sibling `inbox.txt` and emit a single text
-/// response. The PWA splits on the separator to render the two
-/// sections; keeping it plain-text avoids pulling in serde.
+/// response. The PWA decodes the two sections by *byte length*, not a
+/// separator string: the response is `<len>\n` followed by the raw todo
+/// body, then the raw inbox body, where `len` is the byte length of the
+/// todo body. A length prefix is unambiguous even when a task line contains
+/// any literal separator text — a string marker could always collide.
+/// Keeping it plain text avoids pulling in serde.
 fn build_tasks_view(todo_path: &Path) -> Result<String> {
     let todo_body = match std::fs::read_to_string(todo_path) {
         Ok(s) => s,
@@ -193,12 +197,10 @@ fn build_tasks_view(todo_path: &Path) -> Result<String> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(e) => return Err(e.into()),
     };
-    let mut out = String::with_capacity(todo_body.len() + inbox_body.len() + 32);
+    let mut out = String::with_capacity(20 + todo_body.len() + inbox_body.len());
+    out.push_str(&todo_body.len().to_string());
+    out.push('\n');
     out.push_str(&todo_body);
-    if !out.ends_with('\n') && !out.is_empty() {
-        out.push('\n');
-    }
-    out.push_str("--- inbox (pending) ---\n");
     out.push_str(&inbox_body);
     Ok(out)
 }
@@ -245,6 +247,15 @@ mod tests {
         assert_eq!(strip_token_prefix("/tasks", &token), None);
     }
 
+    /// Mirror the PWA's decode: the first line is the todo-body byte length,
+    /// the next `len` bytes are the todo body, the rest is the inbox body.
+    fn decode_view(body: &str) -> (String, String) {
+        let (len_s, rest) = body.split_once('\n').expect("length line");
+        let len: usize = len_s.parse().expect("length parses");
+        let (open, inbox) = rest.split_at(len);
+        (open.to_string(), inbox.to_string())
+    }
+
     #[test]
     fn tasks_view_separates_open_and_inbox() {
         let dir =
@@ -255,9 +266,7 @@ mod tests {
         std::fs::write(&todo_path, "(A) 2026-05-01 a\n").unwrap();
         std::fs::write(dir.join("inbox.txt"), "buy milk\n").unwrap();
         let view = build_tasks_view(&todo_path).unwrap();
-        let (open, inbox) = view
-            .split_once("\n--- inbox (pending) ---\n")
-            .expect("separator present");
+        let (open, inbox) = decode_view(&view);
         assert!(open.contains("(A) 2026-05-01 a"));
         assert!(inbox.contains("buy milk"));
     }
@@ -273,8 +282,48 @@ mod tests {
         let todo_path = dir.join("todo.txt");
         std::fs::write(&todo_path, "a\n").unwrap();
         let view = build_tasks_view(&todo_path).unwrap();
-        assert!(view.starts_with("a\n"));
-        assert!(view.contains("--- inbox (pending) ---"));
+        let (open, inbox) = decode_view(&view);
+        assert!(open.starts_with("a\n"));
+        assert!(inbox.is_empty());
+    }
+
+    #[test]
+    fn tasks_view_survives_marker_like_task_text() {
+        // Regression: the old format split on a literal separator line; a
+        // task containing that text would mis-render. A byte-length prefix
+        // is unambiguous.
+        let dir =
+            std::env::temp_dir().join(format!("tuxtime-serve-tasks-marker-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let todo_path = dir.join("todo.txt");
+        std::fs::write(&todo_path, "--- inbox (pending) ---\nreal task\n").unwrap();
+        std::fs::write(dir.join("inbox.txt"), "").expect("inbox empty");
+        let view = build_tasks_view(&todo_path).unwrap();
+        let (open, inbox) = decode_view(&view);
+        assert!(
+            open.contains("--- inbox (pending) ---"),
+            "marker text is task data"
+        );
+        assert!(open.contains("real task"));
+        assert!(inbox.is_empty());
+    }
+
+    #[test]
+    fn tasks_view_len_is_byte_len_for_utf8() {
+        // Non-ASCII task text must not shift the length prefix (byte, not
+        // char, count).
+        let dir =
+            std::env::temp_dir().join(format!("tuxtime-serve-tasks-utf8-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let todo_path = dir.join("todo.txt");
+        let raw = "café \u{1F600}\n";
+        std::fs::write(&todo_path, raw).unwrap();
+        let view = build_tasks_view(&todo_path).unwrap();
+        let (open, inbox) = decode_view(&view);
+        assert_eq!(open, raw);
+        assert!(inbox.is_empty());
     }
 
     #[test]

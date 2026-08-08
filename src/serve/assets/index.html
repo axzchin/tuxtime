@@ -207,8 +207,16 @@
     try {
       const r = await fetch(base + "/tasks", { cache: "no-store" });
       if (!r.ok) throw new Error("status " + r.status);
-      const body = await r.text();
-      const [openBlock, inboxBlock] = body.split("\n--- inbox (pending) ---\n", 2);
+      // The response is `<len>\n` + raw todo body + raw inbox body, where
+      // len is the todo body's byte length. Decoding the raw bytes lets us
+      // split by exact byte offsets — a task line can never be mistaken for
+      // a separator, and non-ASCII text can't shift the split point.
+      const buf = new Uint8Array(await r.arrayBuffer());
+      let nl = 0;
+      while (nl < buf.length && buf[nl] !== 10) nl++;
+      const openLen = parseInt(new TextDecoder().decode(buf.slice(0, nl)), 10) || 0;
+      const openBlock = new TextDecoder().decode(buf.slice(nl + 1, nl + 1 + openLen));
+      const inboxBlock = new TextDecoder().decode(buf.slice(nl + 1 + openLen));
       const openLines = openBlock.split("\n").filter(l => l.length > 0 && !l.startsWith("x "));
       const inboxLines = (inboxBlock || "").split("\n").filter(l => l.trim().length > 0);
       $("count-open").textContent = openLines.length;
