@@ -29,7 +29,7 @@ use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+use ratatui::widgets::{Clear, Paragraph};
 
 use crate::app::{App, Mode};
 use crate::ui::timesheet_render::render_timesheet_calendar;
@@ -191,13 +191,7 @@ fn render_manage_projects(frame: &mut Frame, area: Rect, app: &App) {
         Style::default().fg(theme.dim).bg(theme.panel),
     );
     let title = Line::from(vec![Span::raw(" Project Management "), sort_label]);
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.border).bg(theme.panel))
-        .title(title)
-        .style(Style::default().bg(theme.panel));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+    let inner = msgbox::frame_box(frame, area, theme.border, theme.panel, title);
 
     let projects = app.filtered_projects();
     // Clamp cursor to filtered list bounds.

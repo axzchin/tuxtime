@@ -6,9 +6,10 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::Paragraph;
 
 use crate::app::App;
+use crate::ui::msgbox;
 
 /// Width of the inner content padding, on each side of the QR.
 const INNER_PAD: u16 = 2;
@@ -21,10 +22,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         return;
     };
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.border).bg(theme.panel))
-        .title(Line::from(vec![
+    let inner = msgbox::frame_box(
+        frame,
+        area,
+        theme.border,
+        theme.panel,
+        Line::from(vec![
             Span::raw(" "),
             Span::styled(
                 "tuxtime",
@@ -33,10 +36,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(" · capture ", Style::default().fg(theme.dim)),
-        ]))
-        .style(Style::default().bg(theme.panel));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+        ]),
+    );
 
     let qr_lines: Vec<Line> = share
         .qr

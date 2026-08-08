@@ -4,10 +4,11 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+use ratatui::widgets::{Clear, Paragraph};
 
 use crate::app::App;
 use crate::ui::calendar_utils::{calendar_cells, calendar_footer, format_focused, month_name};
+use crate::ui::msgbox;
 use crate::ui::overlay::timesheet_calendar_rect;
 
 pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
@@ -36,13 +37,7 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
         Style::default().fg(theme.dim).bg(theme.panel),
     );
     let title = Line::from(vec![Span::raw(" Timesheet "), view_label, sort_label]);
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.border).bg(theme.panel))
-        .title(title)
-        .style(Style::default().bg(theme.panel));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+    let inner = msgbox::frame_box(frame, area, theme.border, theme.panel, title);
 
     let groups = app.build_timesheet_groups();
 
@@ -275,18 +270,18 @@ pub(crate) fn render_timesheet_calendar(frame: &mut Frame, area: Rect, app: &App
     let r = timesheet_calendar_rect(area);
     frame.render_widget(Clear, r);
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.border).bg(theme.panel))
-        .title(Line::from(Span::styled(
+    let inner = msgbox::frame_box(
+        frame,
+        r,
+        theme.border,
+        theme.panel,
+        Line::from(Span::styled(
             " JUMP TO DATE ",
             Style::default()
                 .fg(theme.accent)
                 .add_modifier(Modifier::BOLD),
-        )))
-        .style(Style::default().bg(theme.panel));
-    let inner = block.inner(r);
-    frame.render_widget(block, r);
+        )),
+    );
 
     let mut lines: Vec<Line> = Vec::new();
     // Input line: show typed date (or placeholder when empty).

@@ -2,11 +2,11 @@ use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+use ratatui::widgets::{Clear, Paragraph};
 
 use crate::app::App;
 use crate::theme::Theme;
-use crate::ui::msgbox::pad_right;
+use crate::ui::msgbox::{frame_box, pad_right};
 use crate::ui::overlay::{INPUT_PREFIX_OFFSET, anchored_below};
 
 pub(super) fn render_slash_menu(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
@@ -42,12 +42,9 @@ pub(super) fn render_slash_menu(frame: &mut Frame, dlg: Rect, screen: Rect, app:
 
     let area = anchored_below(dlg, screen, popup_w, popup_h, INPUT_PREFIX_OFFSET);
     frame.render_widget(Clear, area);
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.border).bg(theme.panel))
-        .style(Style::default().bg(theme.panel));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+    // The slash menu has no title line; pass an empty one so the shared
+    // `frame_box` still draws the same bordered panel.
+    let inner = frame_box(frame, area, theme.border, theme.panel, Line::raw(""));
 
     let mut lines: Vec<Line> = Vec::new();
     lines.push(

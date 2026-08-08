@@ -2,10 +2,11 @@ use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+use ratatui::widgets::{Clear, Paragraph};
 
 use crate::app::{App, CalendarTarget, WeekStart};
 use crate::ui::calendar_utils::{calendar_cells, calendar_footer, format_focused, month_name};
+use crate::ui::msgbox;
 use crate::ui::overlay::{INPUT_PREFIX_OFFSET, anchored_below};
 
 pub(super) fn render_calendar(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
@@ -21,18 +22,18 @@ pub(super) fn render_calendar(frame: &mut Frame, dlg: Rect, screen: Rect, app: &
         CalendarTarget::Due => "DUE",
         CalendarTarget::Threshold => "THRESHOLD",
     };
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.border).bg(theme.panel))
-        .title(Line::from(Span::styled(
+    let inner = msgbox::frame_box(
+        frame,
+        area,
+        theme.border,
+        theme.panel,
+        Line::from(Span::styled(
             format!(" {label} "),
             Style::default()
                 .fg(theme.accent)
                 .add_modifier(Modifier::BOLD),
-        )))
-        .style(Style::default().bg(theme.panel));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+        )),
+    );
 
     use chrono::{Datelike, NaiveDate};
     let focused = state.focused;

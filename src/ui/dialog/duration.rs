@@ -2,9 +2,10 @@ use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+use ratatui::widgets::{Clear, Paragraph};
 
 use crate::app::{App, DURATION_PRESETS};
+use crate::ui::msgbox;
 use crate::ui::overlay::{INPUT_PREFIX_OFFSET, anchored_below};
 
 pub(super) fn render_duration_picker(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
@@ -17,18 +18,18 @@ pub(super) fn render_duration_picker(frame: &mut Frame, dlg: Rect, screen: Rect,
     let popup_h: u16 = presets.len() as u16 + 4;
     let area = anchored_below(dlg, screen, popup_w, popup_h, INPUT_PREFIX_OFFSET);
     frame.render_widget(Clear, area);
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.border).bg(theme.panel))
-        .title(Line::from(Span::styled(
+    let inner = msgbox::frame_box(
+        frame,
+        area,
+        theme.border,
+        theme.panel,
+        Line::from(Span::styled(
             " DURATION ",
             Style::default()
                 .fg(theme.accent)
                 .add_modifier(Modifier::BOLD),
-        )))
-        .style(Style::default().bg(theme.panel));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+        )),
+    );
 
     let mut lines: Vec<Line> = Vec::new();
     for (i, &(label, desc, _secs)) in presets.iter().enumerate() {

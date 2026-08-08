@@ -2,11 +2,11 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+use ratatui::widgets::{Clear, Paragraph};
 
 use crate::app::{App, DraftOverlay, Mode, TokenKind};
 use crate::theme::Theme;
-use crate::ui::overlay;
+use crate::ui::{msgbox, overlay};
 
 mod calendar;
 mod duration;
@@ -270,18 +270,18 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     } else {
         " ADD TASK "
     };
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.border).bg(theme.panel))
-        .title(Line::from(vec![Span::styled(
+    let inner = msgbox::frame_box(
+        frame,
+        area,
+        theme.border,
+        theme.panel,
+        Line::from(vec![Span::styled(
             title,
             Style::default()
                 .fg(theme.accent)
                 .add_modifier(Modifier::BOLD),
-        )]))
-        .style(Style::default().bg(theme.panel));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+        )]),
+    );
 
     let [_p1, input_area, preview_area, _p2, hint_area, _p3] = Layout::vertical([
         Constraint::Length(1),
@@ -427,18 +427,18 @@ pub fn render_prompt(frame: &mut Frame, area: Rect, app: &App) {
         Mode::PromptSaveFilter => ("✦", " SAVE FILTER AS "),
         _ => return,
     };
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.border).bg(theme.panel))
-        .title(Line::from(Span::styled(
+    let inner = msgbox::frame_box(
+        frame,
+        area,
+        theme.border,
+        theme.panel,
+        Line::from(Span::styled(
             label,
             Style::default()
                 .fg(theme.accent)
                 .add_modifier(Modifier::BOLD),
-        )))
-        .style(Style::default().bg(theme.panel));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+        )),
+    );
 
     let [_p, input_area, _p2] = Layout::vertical([
         Constraint::Length(0),
