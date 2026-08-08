@@ -6,6 +6,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
 use crate::app::{App, DraftOverlay, Mode, TokenKind};
 use crate::theme::Theme;
+use crate::ui::overlay;
 
 mod calendar;
 mod duration;
@@ -518,25 +519,7 @@ pub fn render_autocomplete(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App
     let popup_w: u16 = (((longest as u16).saturating_add(3)).max(16)).min(dlg.width.max(16));
     let popup_h: u16 = matches.len() as u16;
 
-    // Anchor below the dialog, aligned to the input prefix ("  › " = 4 cols).
-    let mut popup_x = dlg.x + 4;
-    let mut popup_y = dlg.y + dlg.height;
-    // Keep on-screen when the dialog hugs the bottom/right edge.
-    let max_x = screen.x + screen.width.saturating_sub(popup_w);
-    let max_y = screen.y + screen.height.saturating_sub(popup_h);
-    if popup_x > max_x {
-        popup_x = max_x;
-    }
-    if popup_y > max_y {
-        popup_y = max_y;
-    }
-
-    let area = Rect {
-        x: popup_x,
-        y: popup_y,
-        width: popup_w,
-        height: popup_h,
-    };
+    let area = overlay::anchored_below(dlg, screen, popup_w, popup_h, overlay::INPUT_PREFIX_OFFSET);
     frame.render_widget(Clear, area);
 
     let selected = app.draft.autocomplete_index().min(matches.len() - 1);
@@ -565,29 +548,6 @@ pub fn render_autocomplete(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App
         Paragraph::new(lines).style(Style::default().bg(theme.panel)),
         area,
     );
-}
-
-/// Anchor a popup `popup_w` × `popup_h` cells just below `dlg`, clamping into
-/// `screen` so it stays visible at the bottom/right edges. Mirrors the
-/// `render_autocomplete` placement code so every overlay floats in the same
-/// place.
-fn anchor_below_dialog(dlg: Rect, screen: Rect, popup_w: u16, popup_h: u16) -> Rect {
-    let mut popup_x = dlg.x + 4;
-    let mut popup_y = dlg.y + dlg.height;
-    let max_x = screen.x + screen.width.saturating_sub(popup_w);
-    let max_y = screen.y + screen.height.saturating_sub(popup_h);
-    if popup_x > max_x {
-        popup_x = max_x;
-    }
-    if popup_y > max_y {
-        popup_y = max_y;
-    }
-    Rect {
-        x: popup_x,
-        y: popup_y,
-        width: popup_w,
-        height: popup_h,
-    }
 }
 
 /// Dispatch to the right per-overlay render function. Returns true when an

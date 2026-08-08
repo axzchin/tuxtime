@@ -8,7 +8,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
 use crate::app::App;
 use crate::ui::calendar_utils::{calendar_cells, calendar_footer, format_focused, month_name};
-use crate::ui::overlay::centered_in;
+use crate::ui::overlay::timesheet_calendar_rect;
 
 pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
@@ -272,9 +272,7 @@ pub(crate) fn render_timesheet_calendar(frame: &mut Frame, area: Rect, app: &App
     let first_of_month =
         NaiveDate::from_ymd_opt(focused.year(), focused.month(), 1).unwrap_or(focused);
 
-    let popup_w: u16 = 50u16.min(area.width.max(40));
-    let popup_h: u16 = 14;
-    let r = centered_in(area, popup_w, popup_h);
+    let r = timesheet_calendar_rect(area);
     frame.render_widget(Clear, r);
 
     let block = Block::default()

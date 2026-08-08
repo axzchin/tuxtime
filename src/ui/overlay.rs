@@ -1,8 +1,11 @@
 //! Overlay sizing: the constants and rect math for every floating overlay
 //! (add/edit dialog, help, welcome, text prompts, command palette, theme
-//! picker, prompt message boxes, day-boundary prompt). `draw` in `ui::mod`
-//! renders each overlay into the rect computed here, so every overlay's
-//! footprint — width, height, and clamping rules — lives in one place.
+//! picker, prompt message boxes, day-boundary prompt, timesheet calendar) and
+//! for the anchored popups that float below the add/edit dialog (slash menu,
+//! calendar, recurrence builder, priority chooser, duration picker,
+//! autocomplete). `draw` in `ui::mod` renders each overlay into the rect
+//! computed here, so every overlay's footprint — width, height, and clamping
+//! rules — lives in one place.
 
 use ratatui::layout::Rect;
 
@@ -34,6 +37,14 @@ const MESSAGE_H: u16 = 6;
 /// Day-boundary prompt: fixed width, height grows with the wrapped narrative.
 const DAY_BOUNDARY_W: u16 = 68;
 const DAY_BOUNDARY_MIN_H: u16 = 7;
+
+/// Timesheet date-picker calendar popup.
+const CALENDAR_W: u16 = 50;
+const CALENDAR_H: u16 = 14;
+
+/// Columns the anchored popups shift right of the add/edit dialog to line up
+/// with its input prefix (`"  › "` = 4 cols).
+pub(crate) const INPUT_PREFIX_OFFSET: u16 = 4;
 
 /// Center `w` × `h` inside `parent`, clamping to the parent's bounds.
 #[must_use]
@@ -109,6 +120,38 @@ pub(crate) fn day_boundary_wrap_w(parent: Rect) -> usize {
     usize::from(DAY_BOUNDARY_W.min(parent.width))
         .saturating_sub(2)
         .max(16)
+}
+
+/// The anchored popup family: dialog overlays (slash menu, calendar,
+/// recurrence builder, priority chooser, duration picker) and the autocomplete
+/// suggestions all float just below the add/edit dialog, shifted `x_offset`
+/// columns right to line up with the input prefix, clamped into `screen` so
+/// they stay visible at the bottom/right edges.
+#[must_use]
+pub(crate) fn anchored_below(anchor: Rect, screen: Rect, w: u16, h: u16, x_offset: u16) -> Rect {
+    let mut x = anchor.x + x_offset;
+    let mut y = anchor.y + anchor.height;
+    let max_x = screen.x + screen.width.saturating_sub(w);
+    let max_y = screen.y + screen.height.saturating_sub(h);
+    if x > max_x {
+        x = max_x;
+    }
+    if y > max_y {
+        y = max_y;
+    }
+    Rect {
+        x,
+        y,
+        width: w,
+        height: h,
+    }
+}
+
+/// The timesheet date-picker calendar: `CALENDAR_W` × [`CALENDAR_H`], centered
+/// like the other overlays.
+#[must_use]
+pub(crate) fn timesheet_calendar_rect(parent: Rect) -> Rect {
+    centered_in(parent, CALENDAR_W, CALENDAR_H)
 }
 
 /// The day-boundary prompt: `DAY_BOUNDARY_W` wide, `wrapped_lines` rows of
@@ -200,5 +243,42 @@ mod tests {
         // Narrow terminal shrinks the width and the wrap width with it.
         assert_eq!(day_boundary_rect(rect(50, 30), 1), Rect::new(0, 11, 50, 7));
         assert_eq!(day_boundary_wrap_w(rect(50, 30)), 48);
+    }
+
+    #[test]
+    fn anchored_below_floats_just_under_the_anchor() {
+        let screen = Rect::new(0, 0, 100, 30);
+        let dlg = Rect::new(30, 11, 40, 8);
+        // Aligned to the 4-col input prefix, directly below the dialog.
+        assert_eq!(
+            anchored_below(dlg, screen, 24, 6, 4),
+            Rect::new(34, 19, 24, 6)
+        );
+    }
+
+    #[test]
+    fn anchored_below_clamps_at_bottom_and_right_edges() {
+        let screen = Rect::new(0, 0, 50, 20);
+        // A dialog hugging the bottom-right corner: the popup must shift
+        // up/left so it stays fully on-screen.
+        let dlg = Rect::new(40, 16, 10, 4);
+        assert_eq!(
+            anchored_below(dlg, screen, 16, 4, 4),
+            Rect::new(34, 16, 16, 4),
+            "x = 40+4 = 44, max_x = 50-16 = 34 → clamp to 34; y = 20, max_y = 20-4 = 16 → clamp to 16"
+        );
+    }
+
+    #[test]
+    fn timesheet_calendar_rect_centers_and_clamps() {
+        assert_eq!(
+            timesheet_calendar_rect(rect(100, 30)),
+            Rect::new(25, 8, 50, 14)
+        );
+        // Narrow terminal: shrinks to the parent width, still centered.
+        assert_eq!(
+            timesheet_calendar_rect(rect(30, 30)),
+            Rect::new(0, 8, 30, 14)
+        );
     }
 }

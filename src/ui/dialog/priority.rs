@@ -4,8 +4,8 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
-use super::anchor_below_dialog;
 use crate::app::App;
+use crate::ui::overlay::{INPUT_PREFIX_OFFSET, anchored_below};
 
 pub(super) fn render_priority_chooser(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
     let theme = app.theme();
@@ -14,7 +14,7 @@ pub(super) fn render_priority_chooser(frame: &mut Frame, dlg: Rect, screen: Rect
     };
     let popup_w: u16 = 24;
     let popup_h: u16 = 8;
-    let area = anchor_below_dialog(dlg, screen, popup_w, popup_h);
+    let area = anchored_below(dlg, screen, popup_w, popup_h, INPUT_PREFIX_OFFSET);
     frame.render_widget(Clear, area);
     let block = Block::default()
         .borders(Borders::ALL)

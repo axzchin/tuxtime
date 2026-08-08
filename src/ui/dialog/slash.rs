@@ -4,10 +4,10 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
-use super::anchor_below_dialog;
 use crate::app::App;
 use crate::theme::Theme;
 use crate::ui::msgbox::pad_right;
+use crate::ui::overlay::{INPUT_PREFIX_OFFSET, anchored_below};
 
 pub(super) fn render_slash_menu(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
     let theme = app.theme();
@@ -40,7 +40,7 @@ pub(super) fn render_slash_menu(frame: &mut Frame, dlg: Rect, screen: Rect, app:
     // Title row + entries + spacer + footer + 2 borders.
     let popup_h: u16 = matches.len() as u16 + 5;
 
-    let area = anchor_below_dialog(dlg, screen, popup_w, popup_h);
+    let area = anchored_below(dlg, screen, popup_w, popup_h, INPUT_PREFIX_OFFSET);
     frame.render_widget(Clear, area);
     let block = Block::default()
         .borders(Borders::ALL)
