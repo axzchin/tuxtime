@@ -141,6 +141,21 @@ fn parse_index(s: &str, len: usize) -> Result<usize, String> {
     Ok(n - 1)
 }
 
+/// Parse 1-based task numbers against the live list and return 0-based
+/// indices ordered highest-first with duplicates removed — the order mutating
+/// commands need so inserting or removing a row can never shift the indices
+/// of rows still to process.
+fn parse_indices_desc(pos: &[String], len: usize) -> Result<Vec<usize>, String> {
+    let mut indices = Vec::with_capacity(pos.len());
+    for s in pos {
+        indices.push(parse_index(s, len)?);
+    }
+    indices.sort_unstable();
+    indices.dedup();
+    indices.reverse();
+    Ok(indices)
+}
+
 /// The message prefix todo.sh derives from the file name: the basename up to
 /// the first `.`, uppercased (e.g. `todo.txt` → `TODO`).
 fn file_prefix(store: &Store) -> String {
@@ -190,7 +205,7 @@ fn cmd_add(store: &mut Store, pos: &[String], json: bool) -> i32 {
             if json {
                 json_task("add", n, &store.tasks()[abs]);
             } else {
-                println!("{n} {}", store.tasks()[abs].raw);
+                print_row(n, &store.tasks()[abs].raw);
                 println!("{}: {n} added.", file_prefix(store));
             }
             0
@@ -237,12 +252,12 @@ fn cmd_text_op(store: &mut Store, pos: &[String], json: bool, op: TextOp) -> i32
                 json_task(name, n, t);
             } else if matches!(op, TextOp::Replace) {
                 // todo.sh: old line, "Replaced task with:", new line.
-                println!("{n} {old_raw}");
+                print_row(n, &old_raw);
                 println!("TODO: Replaced task with:");
-                println!("{n} {}", t.raw);
+                print_row(n, &t.raw);
             } else {
                 // append/prepend: just the updated, renumbered line.
-                println!("{n} {}", t.raw);
+                print_row(n, &t.raw);
             }
             0
         }
@@ -280,7 +295,7 @@ fn cmd_pri(store: &mut Store, pos: &[String], json: bool) -> i32 {
             if json {
                 json_task("pri", n, t);
             } else {
-                println!("{n} {}", t.raw);
+                print_row(n, &t.raw);
                 let new = priority.unwrap_or(c);
                 match old {
                     Some(o) if o != new => {
@@ -319,7 +334,7 @@ fn cmd_depri(store: &mut Store, pos: &[String], json: bool) -> i32 {
                 if json {
                     json_task("depri", n, t);
                 } else {
-                    println!("{n} {}", t.raw);
+                    print_row(n, &t.raw);
                     println!("{prefix}: {n} deprioritized.");
                 }
             }
@@ -336,18 +351,10 @@ fn cmd_done(store: &mut Store, pos: &[String], json: bool) -> i32 {
         return usage("done N...");
     }
     let len = store.tasks().len();
-    let mut indices = Vec::new();
-    for s in pos {
-        match parse_index(s, len) {
-            Ok(i) => indices.push(i),
-            Err(e) => return err(e),
-        }
-    }
-    // Process highest-first so a recurrence successor inserted after a row
-    // doesn't shift the indices of rows we haven't completed yet.
-    indices.sort_unstable();
-    indices.dedup();
-    indices.reverse();
+    let indices = match parse_indices_desc(pos, len) {
+        Ok(v) => v,
+        Err(e) => return err(e),
+    };
 
     let prefix = file_prefix(store);
     // (number, completed task, optional (next number, spawned task))
@@ -385,12 +392,12 @@ fn cmd_done(store: &mut Store, pos: &[String], json: bool) -> i32 {
     } else {
         for (n, t, next) in &completed {
             // todo.sh format for the completion itself.
-            println!("{n} {}", t.raw);
+            print_row(*n, &t.raw);
             println!("{prefix}: {n} marked as done.");
             // Recurrence is a tuxtime feature todo.sh lacks; surface the spawned
             // next instance as a freshly-added task in the same idiom.
             if let Some((nn, nt)) = next {
-                println!("{nn} {}", nt.raw);
+                print_row(*nn, &nt.raw);
                 println!("{prefix}: {nn} added.");
             }
         }
@@ -435,9 +442,9 @@ fn cmd_del(store: &mut Store, pos: &[String], json: bool, force: bool) -> i32 {
                     json_task("del", n, &store.tasks()[abs]);
                 } else {
                     // todo.sh: old line, "Removed '..' from task.", new line.
-                    println!("{n} {old_raw}");
+                    print_row(n, &old_raw);
                     println!("{prefix}: Removed '{term}' from task.");
-                    println!("{n} {}", store.tasks()[abs].raw);
+                    print_row(n, &store.tasks()[abs].raw);
                 }
                 0
             }
@@ -452,16 +459,10 @@ fn cmd_del(store: &mut Store, pos: &[String], json: bool, force: bool) -> i32 {
     }
 
     // `del N...` — delete whole tasks. Highest-first so removals don't shift.
-    let mut indices = Vec::new();
-    for s in pos {
-        match parse_index(s, len) {
-            Ok(i) => indices.push(i),
-            Err(e) => return err(e),
-        }
-    }
-    indices.sort_unstable();
-    indices.dedup();
-    indices.reverse();
+    let indices = match parse_indices_desc(pos, len) {
+        Ok(v) => v,
+        Err(e) => return err(e),
+    };
     let mut removed: Vec<(usize, Task)> = Vec::new();
     let mut code = 0;
     for abs in indices {
@@ -487,7 +488,7 @@ fn cmd_del(store: &mut Store, pos: &[String], json: bool, force: bool) -> i32 {
         );
     } else {
         for (n, t) in &removed {
-            println!("{n} {}", t.raw);
+            print_row(*n, &t.raw);
             println!("{prefix}: {n} deleted.");
         }
     }
@@ -583,6 +584,11 @@ fn print_rows(tasks: &[Task], idxs: &[usize], width: usize) {
     for &i in idxs {
         println!("{:>width$} {}", i + 1, tasks[i].raw);
     }
+}
+
+/// Echo a single task row (todo.sh's `N raw` format) after a mutation.
+fn print_row(n: usize, raw: &str) {
+    println!("{n} {raw}");
 }
 
 fn cmd_list(store: &Store, pos: &[String], json: bool) -> i32 {
@@ -769,5 +775,17 @@ mod tests {
         assert_eq!(f.project.as_deref(), Some("work"));
         assert_eq!(f.context.as_deref(), Some("home"));
         assert_eq!(f.search, "pay rent");
+    }
+
+    #[test]
+    fn parse_indices_desc_orders_highest_first_and_dedups() {
+        // 1-based in, 0-based out, descending, deduplicated.
+        assert_eq!(
+            parse_indices_desc(&argv(&["3", "1", "3", "5"]), 6).unwrap(),
+            vec![4, 2, 0]
+        );
+        assert!(parse_indices_desc(&argv(&["0"]), 3).is_err());
+        assert!(parse_indices_desc(&argv(&["9"]), 3).is_err());
+        assert!(parse_indices_desc(&argv(&["x"]), 3).is_err());
     }
 }
