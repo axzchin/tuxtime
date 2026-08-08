@@ -1,5 +1,5 @@
 use super::App;
-use super::types::Mode;
+use super::types::{Mode, TimesheetTaskRef, View};
 use crate::core::filter::unique_values;
 
 impl App {
@@ -16,8 +16,8 @@ impl App {
             return;
         }
         let seed = self
-            .cur_abs()
-            .and_then(|i| self.store.tasks()[i].projects.first().cloned())
+            .picker_seed_task()
+            .and_then(|t| t.projects.first().cloned())
             .filter(|p| all.contains(p) && !self.is_project_archived(p))
             .or_else(|| self.filter.project.clone())
             .filter(|p| all.contains(p))
@@ -36,8 +36,8 @@ impl App {
             return;
         }
         let seed = self
-            .cur_abs()
-            .and_then(|i| self.store.tasks()[i].contexts.first().cloned())
+            .picker_seed_task()
+            .and_then(|t| t.contexts.first().cloned())
             .filter(|c| all.contains(c))
             .or_else(|| self.filter.context.clone())
             .filter(|c| all.contains(c))
@@ -47,6 +47,20 @@ impl App {
         self.nav.mode = Mode::PickContext;
         self.recompute_visible();
         self.flash_pick_context();
+    }
+
+    /// The task whose tags seed the filter pickers. In timesheet view this
+    /// is the entry under the *timesheet* cursor (so `f`/`F` filter the
+    /// matter you're actually looking at), not the stale list cursor; in
+    /// every other view it's the list cursor's task.
+    fn picker_seed_task(&self) -> Option<&crate::todo::Task> {
+        if matches!(self.nav.view, View::Timesheet) {
+            return match self.timesheet_narrative_at(self.timesheet.cursor) {
+                Some((_, _, TimesheetTaskRef::Active(abs))) => self.store.tasks().get(abs),
+                _ => None,
+            };
+        }
+        self.cur_abs().and_then(|i| self.store.tasks().get(i))
     }
 
     /// Enter saved-filter picker mode. Seeds to the saved filter whose query

@@ -50,6 +50,10 @@ pub(crate) fn handle_timesheet_keys(app: &mut App, key: KeyEvent) {
             app.timesheet_goto_today();
             app.flash(format!("today ({})", app.timesheet_date_display()));
         }
+        // Filter the timesheet by project (f) or context (F), reusing the
+        // list-view pickers so the filter previews live on the timesheet.
+        KeyCode::Char('f') => app.enter_pick_project(),
+        KeyCode::Char('F') => app.enter_pick_context(),
         // g — open calendar to jump to a specific date.
         KeyCode::Char('g') => {
             if let Ok(d) = chrono::NaiveDate::parse_from_str(&app.timesheet.date, "%Y-%m-%d") {

@@ -203,6 +203,11 @@ impl App {
         };
         type TimesheetGroup = (u64, Vec<String>, Vec<TimesheetTaskRef>);
         let search = self.filter.search.to_lowercase();
+        // Hoisted filter values: the closure below borrows `self` at call
+        // sites (via `self.tasks()`), so capture the filter components as
+        // owned locals to keep the closure borrowing `self` immutably.
+        let project_filter = self.filter.project.clone();
+        let context_filter = self.filter.context.clone();
         // Key by (date, project+activity, billable) so weekly view keeps
         // each day's entries in separate groups.
         let mut groups: BTreeMap<(String, String, bool), TimesheetGroup> = BTreeMap::new();
@@ -228,6 +233,19 @@ impl App {
                 };
                 let in_range = work_date >= range_start.as_str() && work_date <= range_end.as_str();
                 if !in_range {
+                    continue;
+                }
+                // Honor the active project/context filters, matching the
+                // list view's exact-match semantics (`passes_user_filter`)
+                // so filtering the timesheet feels like filtering the list.
+                if let Some(p) = &project_filter
+                    && !t.projects.iter().any(|x| x == p)
+                {
+                    continue;
+                }
+                if let Some(c) = &context_filter
+                    && !t.contexts.iter().any(|x| x == c)
+                {
                     continue;
                 }
                 let body = crate::todo::body_only_from_clean(&t.clean_raw);
@@ -288,6 +306,61 @@ impl App {
         }
         *self.timesheet.groups_cache.borrow_mut() = Some(entries.clone());
         entries
+    }
+}
+
+impl App {
+    /// Per-project time totals for the timesheet's current period, as
+    /// `(project, billable_secs, non_billable_secs)`, sorted by billable
+    /// hours descending then name. Drives the left sidebar in timesheet
+    /// view: a lawyer's billing snapshot per matter. Respects the active
+    /// filters, so narrowing the timesheet also narrows the sidebar.
+    #[must_use]
+    pub fn timesheet_project_totals(&self) -> Vec<(String, u64, u64)> {
+        let groups = self.build_timesheet_groups();
+        let mut map: BTreeMap<String, (u64, u64)> = BTreeMap::new();
+        for g in &groups {
+            // Group key is "+Smith @drafting" or "(no project/activity)";
+            // the project is the first whitespace token starting with '+'
+            // (a context-only group has no project to attribute time to).
+            let proj = g
+                .key
+                .split_whitespace()
+                .find(|t| t.starts_with('+'))
+                .map_or_else(
+                    || "(no project)".to_string(),
+                    |t| t.trim_start_matches('+').to_string(),
+                );
+            let entry = map.entry(proj).or_insert((0, 0));
+            if g.billable {
+                entry.0 += g.total_secs;
+            } else {
+                entry.1 += g.total_secs;
+            }
+        }
+        let mut totals: Vec<(String, u64, u64)> = map
+            .into_iter()
+            .map(|(name, (billable, non_billable))| (name, billable, non_billable))
+            .collect();
+        totals.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        totals
+    }
+
+    /// Totals for the timesheet's current period: `(total_secs,
+    /// billable_secs, non_billable_secs)`. Pinned at the top of the detail
+    /// sidebar so the numbers stay visible while the center scrolls.
+    #[must_use]
+    pub fn timesheet_period_totals(&self) -> (u64, u64, u64) {
+        let groups = self.build_timesheet_groups();
+        let mut total = 0u64;
+        let mut billable = 0u64;
+        for g in &groups {
+            total += g.total_secs;
+            if g.billable {
+                billable += g.total_secs;
+            }
+        }
+        (total, billable, total - billable)
     }
 }
 

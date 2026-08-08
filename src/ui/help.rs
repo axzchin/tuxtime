@@ -84,6 +84,7 @@ const TIMESHEET: Section = (
         ("b", "toggle billable"),
         ("a", "unarchive entry (from done.txt)"),
         ("c / y / C", "copy text / time / both"),
+        ("f / F", "filter by project / context"),
         ("/", "search narratives"),
     ],
 );

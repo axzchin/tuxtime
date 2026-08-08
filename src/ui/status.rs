@@ -153,7 +153,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             Mode::PromptRenameProject => "type new name · Enter rename · Esc cancel".to_string(),
             _ => {
                 if matches!(app.nav.view, View::Timesheet) {
-                    "j/k navigate  ·  Enter edit  ·  b billable  ·  a archive toggle  ·  c copy text  ·  y copy time  ·  C copy both  ·  h/l ±day  ·  H/L ±week  ·  w/d view  ·  s sort  ·  / search  ·  g date  ·  t today  ·  Esc/V/q back".to_string()
+                    "j/k navigate  ·  Enter edit  ·  b billable  ·  a archive toggle  ·  c copy text  ·  y copy time  ·  C copy both  ·  h/l ±day  ·  H/L ±week  ·  w/d view  ·  s sort  ·  f/F filter project/context  ·  / search  ·  g date  ·  t today  ·  Esc/V/q back".to_string()
                 } else {
                     "j/k · n new · t timer · T interrupt · x done · / search · ? help · u undo · q quit".to_string()
                 }

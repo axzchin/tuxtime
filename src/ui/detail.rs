@@ -4,7 +4,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-use crate::app::App;
+use crate::app::{App, View, format_billable};
 use crate::theme::Theme;
 use crate::todo::Task;
 use crate::ui::msgbox::wrap_words;
@@ -14,13 +14,137 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
     super::fill_bg(frame, area, Style::default().bg(theme.panel));
 
-    let task = app.cur_task();
     // Wrap to the actual pane width minus 1-char left padding and 1-char
     // safety margin on the right. Floor at 16 so a tiny pane still wraps.
     let wrap_w = (area.width as usize).saturating_sub(2).max(16);
-    let lines = build_lines(theme, task, app.today(), wrap_w);
+    let lines = if matches!(app.view(), View::Timesheet) {
+        build_timesheet_lines(theme, app, wrap_w)
+    } else {
+        build_lines(theme, app.cur_task(), app.today(), wrap_w)
+    };
     let para = Paragraph::new(lines).style(Style::default().bg(theme.panel).fg(theme.fg));
     frame.render_widget(para, area);
+}
+
+/// Detail sidebar content for the timesheet view: the period's totals are
+/// pinned at the top (total / billable / non-billable), then the entry under
+/// the timesheet cursor — its date, project+activity key, duration and
+/// billable status — followed by the wrapped narrative text.
+fn build_timesheet_lines<'a>(theme: &Theme, app: &'a App, wrap_w: usize) -> Vec<Line<'a>> {
+    let increment = app.prefs.rounding_increment;
+    let (total, billable, non_billable) = app.timesheet_period_totals();
+    let mut rows: Vec<Line> = vec![
+        line_panel(
+            theme,
+            vec![Span::styled(
+                " DETAIL · TIMESHEET",
+                Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
+            )],
+        ),
+        line_panel(theme, vec![Span::raw(" ")]),
+        line_panel(
+            theme,
+            vec![Span::styled(" PERIOD", Style::default().fg(theme.accent))],
+        ),
+    ];
+    rows.push(label_value_row(
+        theme,
+        "billable",
+        format_billable(billable, increment),
+    ));
+    rows.push(label_value_row(
+        theme,
+        "non-bill",
+        format_billable(non_billable, increment),
+    ));
+    rows.push(label_value_row(
+        theme,
+        "total",
+        format_billable(total, increment),
+    ));
+    rows.push(line_panel(theme, vec![Span::raw(" ")]));
+
+    // The entry under the timesheet cursor. All rendered strings are owned
+    // so `rows` (borrowed from `app`) never references the local `groups`.
+    let Some((gi, ni, _)) = app.timesheet_narrative_at(app.timesheet.cursor) else {
+        rows.push(line_panel(
+            theme,
+            vec![Span::styled(
+                " (no entries)",
+                Style::default().fg(theme.dim),
+            )],
+        ));
+        return rows;
+    };
+    let groups = app.build_timesheet_groups();
+    let Some(entry) = groups.get(gi) else {
+        return rows;
+    };
+    let (date, key, total_secs, billable, narrative, entry_narrative_count) = (
+        entry.date.clone(),
+        entry.key.clone(),
+        entry.total_secs,
+        entry.billable,
+        entry.narratives.get(ni).cloned(),
+        entry.narratives.len(),
+    );
+    rows.push(line_panel(
+        theme,
+        vec![Span::styled(" ENTRY", Style::default().fg(theme.accent))],
+    ));
+    rows.push(line_panel(
+        theme,
+        vec![Span::styled(date, Style::default().fg(theme.fg))],
+    ));
+    rows.push(line_panel(
+        theme,
+        vec![Span::styled(key, Style::default().fg(theme.project))],
+    ));
+    let dur = format_billable(total_secs, increment);
+    let status = if billable { "billable" } else { "non-billable" };
+    // The duration is the *group* total (all narratives sharing this
+    // project+activity+day), so label it as such rather than implying it
+    // belongs to the single narrative under the cursor.
+    rows.push(label_value_row(
+        theme,
+        "group dur",
+        format!("{dur} · {status}"),
+    ));
+    if let Some(narrative) = narrative {
+        rows.push(line_panel(theme, vec![Span::raw(" ")]));
+        let total_in_group = entry_narrative_count;
+        rows.push(line_panel(
+            theme,
+            vec![Span::styled(
+                format!(" NARRATIVE {}/{} ", ni + 1, total_in_group),
+                Style::default().fg(theme.accent),
+            )],
+        ));
+        for chunk in wrap_words(&narrative, wrap_w.saturating_sub(2)) {
+            rows.push(line_panel(
+                theme,
+                vec![Span::styled(
+                    format!("  {}", chunk.join(" ")),
+                    Style::default().fg(theme.fg),
+                )],
+            ));
+        }
+    }
+    rows
+}
+
+fn label_value_row<'a>(theme: &Theme, label: &'a str, value: String) -> Line<'a> {
+    let mut padded = format!(" {label}");
+    if padded.chars().count() < 11 {
+        padded.push_str(&" ".repeat(11 - padded.chars().count()));
+    }
+    line_panel(
+        theme,
+        vec![
+            Span::styled(padded, Style::default().fg(theme.dim)),
+            Span::styled(value, Style::default().fg(theme.fg)),
+        ],
+    )
 }
 
 fn build_lines<'a>(

@@ -333,6 +333,143 @@ fn build_timesheet_groups_filters_by_search() {
 }
 
 #[test]
+fn build_timesheet_groups_filters_by_project() {
+    let mut app = build_timesheet_app();
+    app.set_view(View::Timesheet);
+    let all = app.build_timesheet_groups();
+    // Daily view anchored 2026-05-07: the 05-06 task is out of range, so
+    // only the two 05-07 project+activity groups are present.
+    assert_eq!(all.len(), 2, "fixture has 2 groups in today's daily view");
+
+    app.set_project_filter(Some("work".into()));
+    let filtered = app.build_timesheet_groups();
+    assert!(!filtered.is_empty(), "+work tasks must appear");
+    assert!(
+        filtered.iter().all(|g| g.key.starts_with("+work")),
+        "all groups must belong to +work: {:?}",
+        filtered.iter().map(|g| &g.key).collect::<Vec<_>>()
+    );
+
+    // A filter matching nothing yields an empty timesheet.
+    app.set_project_filter(Some("zzz_nonexistent".into()));
+    assert!(app.build_timesheet_groups().is_empty());
+}
+
+#[test]
+fn build_timesheet_groups_filters_by_context() {
+    let mut app = build_timesheet_app();
+    app.set_view(View::Timesheet);
+
+    app.set_context_filter(Some("research".into()));
+    let filtered = app.build_timesheet_groups();
+    assert!(!filtered.is_empty(), "@research tasks must appear");
+    assert!(
+        filtered.iter().all(|g| g.key.contains("@research")),
+        "all groups must belong to @research: {:?}",
+        filtered.iter().map(|g| &g.key).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn timesheet_project_totals_splits_billable_and_dnb() {
+    // Two projects; +work has billable and non-billable time, +legal only
+    // billable. The sidebar must report each project's billable secs and
+    // its non-billable secs separately.
+    let raw = "2026-05-07 Billable work +work @dev dur:1800\n\
+               2026-05-07 DNB work +work @dev dur:600 bill:n\n\
+               2026-05-07 Legal work +legal @research dur:900\n";
+    let app = timesheet_app_with_tasks(raw);
+    let totals = app.timesheet_project_totals();
+    let work = totals.iter().find(|(n, _, _)| n == "work").unwrap();
+    let legal = totals.iter().find(|(n, _, _)| n == "legal").unwrap();
+    assert_eq!(work.1, 1800, "+work billable secs");
+    assert_eq!(work.2, 600, "+work non-billable secs");
+    assert_eq!(legal.1, 900, "+legal billable secs");
+    assert_eq!(legal.2, 0, "+legal has no non-billable time");
+    // Sorted by billable descending.
+    assert_eq!(totals[0].0, "work");
+    assert_eq!(totals[1].0, "legal");
+}
+
+#[test]
+fn timesheet_period_totals_sum_billable_and_non_billable() {
+    let raw = "2026-05-07 Billable work +work @dev dur:1800\n\
+               2026-05-07 DNB work +work @dev dur:600 bill:n\n\
+               2026-05-07 Legal work +legal @research dur:900\n";
+    let app = timesheet_app_with_tasks(raw);
+    let (total, billable, non_billable) = app.timesheet_period_totals();
+    assert_eq!(total, 3300);
+    assert_eq!(billable, 2700);
+    assert_eq!(non_billable, 600);
+}
+
+/// Timesheet `f` / `F` must open the same project/context pickers used by
+/// the list view, so the timesheet can be filtered by matter without
+/// leaving the view. The picker previews live on the timesheet.
+#[test]
+fn timesheet_f_and_shift_f_open_pickers() {
+    let mut app = build_timesheet_app();
+    app.set_view(View::Timesheet);
+    assert_eq!(app.nav.mode, Mode::Normal);
+
+    handle_timesheet_keys(&mut app, key('f'));
+    assert_eq!(app.nav.mode, Mode::PickProject);
+    assert!(
+        app.filter.project.is_some(),
+        "picker must seed a project filter"
+    );
+
+    // Accept the picker: back to Normal, filter kept.
+    app.pick_accept();
+    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.view(), View::Timesheet, "must stay in timesheet view");
+
+    handle_timesheet_keys(&mut app, key('F'));
+    assert_eq!(app.nav.mode, Mode::PickContext);
+    assert!(
+        app.filter.context.is_some(),
+        "picker must seed a context filter"
+    );
+    app.pick_accept();
+    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.view(), View::Timesheet);
+}
+
+/// `f` in timesheet view must seed the picker from the entry under the
+/// *timesheet* cursor, not the stale list cursor. The fixture's daily view
+/// sorts by project+activity, so the +work @dev group ("Write code",
+/// "Meeting notes") is at narrative cursor 1 — the project filter must seed
+/// to "work" from there even though the list cursor points elsewhere.
+#[test]
+fn timesheet_f_seeds_picker_from_timesheet_cursor_entry() {
+    let mut app = build_timesheet_app();
+    app.set_view(View::Timesheet);
+    // Move the list cursor somewhere unrelated to prove seeding ignores it.
+    app.nav.cursor = 3;
+    app.timesheet.cursor = 1; // "Write code +work @dev" (group 2 of 2)
+
+    handle_timesheet_keys(&mut app, key('f'));
+    assert_eq!(app.nav.mode, Mode::PickProject);
+    assert_eq!(
+        app.filter.project.as_deref(),
+        Some("work"),
+        "picker must seed from the timesheet entry's project"
+    );
+    app.pick_accept();
+
+    // Same for context via F: the entry is @dev.
+    app.timesheet.cursor = 1;
+    handle_timesheet_keys(&mut app, key('F'));
+    assert_eq!(app.nav.mode, Mode::PickContext);
+    assert_eq!(
+        app.filter.context.as_deref(),
+        Some("dev"),
+        "picker must seed from the timesheet entry's context"
+    );
+    app.pick_accept();
+}
+
+#[test]
 fn build_timesheet_groups_separates_billable_and_dnb() {
     // Same project+activity on the same day, one billable, one DNB.
     // They must form separate groups and round independently.
