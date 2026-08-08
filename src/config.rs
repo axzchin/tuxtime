@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 
 use crate::app::WeekStart;
 use crate::app::{Density, Sort};
-use crate::toml_lite::unquote;
+use crate::toml_lite::split_key_value;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Config {
@@ -208,15 +208,9 @@ fn acquire_lock(path: &Path) -> io::Result<std::fs::File> {
 fn parse(s: &str) -> Config {
     let mut c = Config::default();
     for line in s.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        let Some((k, v)) = line.split_once('=') else {
+        let Some((k, v)) = split_key_value(line) else {
             continue;
         };
-        let k = k.trim();
-        let v = unquote(v.trim());
         match k {
             "theme" => c.theme = Some(v.to_string()),
             "density" => c.density = v.parse().ok(),

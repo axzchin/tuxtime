@@ -4,7 +4,7 @@ use std::sync::OnceLock;
 
 use ratatui::style::Color;
 
-use crate::toml_lite::unquote;
+use crate::toml_lite::split_key_value;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Theme {
@@ -308,15 +308,9 @@ fn parse_theme(s: &str) -> Result<Theme, String> {
         std::collections::BTreeMap::new();
 
     for (lineno, raw) in s.lines().enumerate() {
-        let line = raw.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        let Some((k, v)) = line.split_once('=') else {
+        let Some((k, v)) = split_key_value(raw) else {
             continue;
         };
-        let k = k.trim();
-        let v = unquote(v.trim());
         if k == "name" {
             if v.is_empty() {
                 return Err(format!("line {}: empty name", lineno + 1));
