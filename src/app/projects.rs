@@ -86,7 +86,7 @@ impl App {
                     self.save_archived_projects();
                 }
                 // Also rebuild autocomplete cache since project names changed.
-                self.rebuild_archive_autocomplete_cache();
+                self.archive_cache.rebuild(self.store.archive());
                 let total = active_count + archived_count;
                 self.flash(format!("+{old} → +{new} ({total} tasks)"));
                 self.recompute_visible();

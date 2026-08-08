@@ -8,7 +8,7 @@ use crate::core::Store;
 use crate::core::outcome::{DrainReport, Reconcile};
 use crate::note;
 use crate::serve::ShareInfo;
-use crate::theme::{self, Theme};
+use crate::theme::Theme;
 use crate::todo::Task;
 
 mod archive_cache;
@@ -176,7 +176,7 @@ impl App {
             timesheet: TimesheetState::new(&today),
             session: Session::new(),
         };
-        app.rebuild_archive_autocomplete_cache();
+        app.archive_cache.rebuild(app.store.archive());
         app.recompute_visible();
         app
     }
@@ -272,51 +272,6 @@ impl App {
         self.save_prefs();
     }
 
-    /// Enter theme picker mode. Snapshot the current theme index so
-    /// cancel can restore it. j/k live-previews; Enter accepts; Esc
-    /// reverts. Uses `theme_pick_cursor` (on App) so that config reload
-    /// cannot reset the picker position.
-    pub fn enter_pick_theme(&mut self) {
-        self.theme_picker.orig = self.prefs.theme_idx();
-        self.theme_picker.cursor = self.theme_picker.orig;
-        self.nav.set_mode(Mode::PickTheme);
-    }
-
-    /// Step through themes in `forward` (true = next) direction with
-    /// wrap-around. Uses `theme_pick_cursor` so config reload cannot
-    /// strand the picker. The preview is applied to `prefs` for live
-    /// theme switching; if config reload resets prefs the cursor survives.
-    pub fn pick_theme_step(&mut self, forward: bool) {
-        let all = theme::all();
-        let len = all.len();
-        if len <= 1 {
-            return;
-        }
-        let cur = self.theme_picker.cursor;
-        let next = if forward {
-            (cur + 1) % len
-        } else {
-            (cur + len - 1) % len
-        };
-        self.theme_picker.cursor = next;
-        self.prefs.set_theme_idx(next); // live preview
-    }
-
-    /// Accept the previewed theme and persist to config.
-    pub fn pick_theme_accept(&mut self) {
-        self.prefs.set_theme_idx(self.theme_picker.cursor);
-        self.nav.enter_normal();
-        self.save_prefs();
-        self.flash(format!("theme: {}", self.theme().name));
-    }
-
-    /// Cancel the picker and restore the theme that was active when
-    /// the picker opened.
-    pub fn pick_theme_cancel(&mut self) {
-        self.prefs.set_theme_idx(self.theme_picker.orig);
-        self.nav.enter_normal();
-    }
-
     pub fn cycle_density(&mut self) {
         let msg = self.prefs.cycle_density();
         self.flash(msg);
@@ -409,30 +364,13 @@ impl App {
     pub fn poll_archive(&mut self) -> bool {
         let changed = self.store.poll_archive();
         if changed {
-            self.rebuild_archive_autocomplete_cache();
+            self.archive_cache.rebuild(self.store.archive());
             if matches!(self.nav.view, View::Archive) {
                 self.recompute_visible();
                 self.clamp_cursor();
             }
         }
         changed
-    }
-
-    /// Scan the archive for unique project and context names so autocomplete
-    /// can offer them without re-scanning done.txt on every keystroke.
-    fn rebuild_archive_autocomplete_cache(&mut self) {
-        let mut projs: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-        let mut ctxs: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-        for t in self.store.archive().tasks() {
-            for p in &t.projects {
-                projs.insert(p.clone());
-            }
-            for c in &t.contexts {
-                ctxs.insert(c.clone());
-            }
-        }
-        self.archive_cache.projects = projs.into_iter().collect();
-        self.archive_cache.contexts = ctxs.into_iter().collect();
     }
 
     /// Index of the task under the cursor *into `self.tasks`*. Returns `None`

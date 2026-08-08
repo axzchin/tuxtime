@@ -292,7 +292,7 @@ impl App {
                 self.flash(format!("archived {count}"));
                 self.recompute_visible();
                 self.clamp_cursor();
-                self.rebuild_archive_autocomplete_cache();
+                self.archive_cache.rebuild(self.store.archive());
             }
             ArchiveOutcome::Nothing => self.flash("nothing to archive"),
             ArchiveOutcome::Aborted(r) => self.handle_reconcile_abort(r),
@@ -307,7 +307,7 @@ impl App {
                 self.flash("archived");
                 self.recompute_visible();
                 self.clamp_cursor();
-                self.rebuild_archive_autocomplete_cache();
+                self.archive_cache.rebuild(self.store.archive());
             }
             ArchiveOneOutcome::NotCompleted => {
                 self.flash("complete task first (x)");
@@ -326,7 +326,7 @@ impl App {
                 self.flash("unarchived");
                 self.recompute_visible();
                 self.clamp_cursor();
-                self.rebuild_archive_autocomplete_cache();
+                self.archive_cache.rebuild(self.store.archive());
             }
             UnarchiveOutcome::OutOfRange => {}
             UnarchiveOutcome::Aborted(r) => self.handle_reconcile_abort(r),
@@ -334,7 +334,7 @@ impl App {
                 self.flash("done.txt changed on disk — reloaded");
                 self.recompute_visible();
                 self.clamp_cursor();
-                self.rebuild_archive_autocomplete_cache();
+                self.archive_cache.rebuild(self.store.archive());
             }
             UnarchiveOutcome::Error(e) => self.flash(format!("unarchive failed: {e}")),
         }
@@ -347,14 +347,14 @@ impl App {
                 self.flash("deleted from archive");
                 self.recompute_visible();
                 self.clamp_cursor();
-                self.rebuild_archive_autocomplete_cache();
+                self.archive_cache.rebuild(self.store.archive());
             }
             ArchiveDeleteOutcome::OutOfRange => {}
             ArchiveDeleteOutcome::DoneReloaded => {
                 self.flash("done.txt changed on disk — reloaded");
                 self.recompute_visible();
                 self.clamp_cursor();
-                self.rebuild_archive_autocomplete_cache();
+                self.archive_cache.rebuild(self.store.archive());
             }
             ArchiveDeleteOutcome::Error(e) => self.flash(format!("delete failed: {e}")),
         }
