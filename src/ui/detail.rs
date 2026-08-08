@@ -7,6 +7,7 @@ use ratatui::widgets::Paragraph;
 use crate::app::App;
 use crate::theme::Theme;
 use crate::todo::Task;
+use crate::ui::msgbox::wrap_words;
 use crate::ui::task_row::{due_label, due_token_style, is_url_token, url_token_style};
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
@@ -221,30 +222,4 @@ fn style_raw_token<'a>(
 
 fn line_panel<'a>(theme: &Theme, spans: Vec<Span<'a>>) -> Line<'a> {
     Line::from(spans).style(Style::default().bg(theme.panel))
-}
-
-/// Wrap `s` to roughly `width` graphemes, returning each output line as a
-/// vector of borrowed words. Borrowing avoids the per-frame `String` alloc
-/// that the previous `Vec<String>` form forced on every render.
-fn wrap_words(s: &str, width: usize) -> Vec<Vec<&str>> {
-    let mut out: Vec<Vec<&str>> = Vec::new();
-    let mut acc: Vec<&str> = Vec::new();
-    let mut acc_len = 0;
-    for word in s.split_whitespace() {
-        let wlen = word.chars().count();
-        let extra = usize::from(!acc.is_empty());
-        if acc_len + wlen + extra > width && !acc.is_empty() {
-            out.push(std::mem::take(&mut acc));
-            acc_len = 0;
-        }
-        if !acc.is_empty() {
-            acc_len += 1;
-        }
-        acc.push(word);
-        acc_len += wlen;
-    }
-    if !acc.is_empty() {
-        out.push(acc);
-    }
-    out
 }

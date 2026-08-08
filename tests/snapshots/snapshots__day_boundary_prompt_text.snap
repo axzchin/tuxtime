@@ -1,6 +1,5 @@
 ---
 source: tests/snapshots.rs
-assertion_line: 226
 expression: buffer_to_text(&buf)
 ---
  FILTERS                   ▶▮◀ /tmp/tuxtime-snapshot.txt  •  15 ta DETAIL                           
@@ -16,10 +15,10 @@ expression: buffer_to_text(&buf)
                             6   (C) Pay quarterly estimated taxes  (A) 2026-05-01 Finish Q2 board   
  CONTEXTS                   7   (C) Order new running shoes +healt deck +work @laptop               
    @errands     ┌ 📅  Day Boundary ─────────────────────────────────────────────────┐                
-   @home        │"Call dentist to reschedule cleaning" has time from a previous day│                
-   @laptop      │                                                                  │                
-   @phone       │    [C]ontinue same entry  [N]ew entry for today  [Esc] cancel    │                
-                │                                                                  │                
+   @home        │  "Call dentist to reschedule cleaning" has time from a previous  │                
+   @laptop      │                               day.                               │                
+   @phone       │                                                                  │                
+                │    [C]ontinue same entry  [N]ew entry for today  [Esc] cancel    │                
                 │                                                                  │                
                 └──────────────────────────────────────────────────────────────────┘                
                            14       Plan Saturday hike with K. @ph                                  

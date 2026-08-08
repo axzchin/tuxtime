@@ -569,6 +569,38 @@ fn day_boundary_prompt() {
 }
 
 #[test]
+fn day_boundary_prompt_wraps_long_narrative() {
+    // A task name wider than the day-boundary box must word-wrap instead of
+    // being clipped at the dialog edge — the tail of the message has to stay
+    // readable so the user knows which task they're carrying forward.
+    let narrative =
+        "draft the opposition brief for the Smith versus Jones summary judgment hearing";
+    let body = format!("2026-05-01 {narrative}\n");
+    std::fs::write(FIXTURE_PATH, &body).expect("seed fixture file");
+    let mut app = App::new(
+        PathBuf::from(FIXTURE_PATH),
+        body.clone(),
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.prefs.density = Density::Compact;
+    app.nav.mode = Mode::PromptDayBoundary;
+    app.session.pending_day_boundary = Some((0, tuxtime::app::DayBoundaryAction::StartTimer));
+
+    let text = render_text(&app, 100, 32);
+    // The message tail that used to be cut off must now appear in the buffer
+    // (words stay intact when wrapping, so individual words survive a split).
+    assert!(
+        text.contains("has time from a previous day."),
+        "message must be fully visible (wrapped, not clipped):\n{text}"
+    );
+    assert!(
+        text.contains("hearing"),
+        "the narrative tail must wrap into view:\n{text}"
+    );
+}
+
+#[test]
 fn list_scrolls_to_keep_cursor_visible_when_below_fold() {
     // 50 rows of tasks rendered into a viewport that only fits a handful.
     // Without scrolling, advancing the cursor past the fold would leave the

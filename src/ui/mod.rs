@@ -18,6 +18,7 @@ pub mod help;
 pub mod hyperlinks;
 pub mod list;
 pub mod logo;
+pub mod msgbox;
 pub mod settings;
 pub mod share;
 pub mod status;
@@ -247,71 +248,36 @@ pub fn draw(frame: &mut Frame, app: &App) {
             let r = centered_in(area, 60, 6);
             frame.render_widget(Clear, r);
             let theme = app.theme();
-            let block = Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.accent).bg(theme.panel))
-                .title(" ⏰ Idle Nudge ")
-                .style(Style::default().bg(theme.panel));
-            let inner = block.inner(r);
-            frame.render_widget(block, r);
-            let lines = vec![
-                Line::from(Span::styled(
-                    "No timer running!",
-                    Style::default()
-                        .fg(theme.fg)
-                        .bg(theme.panel)
-                        .add_modifier(Modifier::BOLD),
-                )),
-                Line::raw(""),
-                Line::from(Span::styled(
-                    "[N]ew entry  [D]ismiss",
-                    Style::default().fg(theme.dim).bg(theme.panel),
-                )),
-            ];
-            frame.render_widget(Paragraph::new(lines).centered(), inner);
+            msgbox::render_message_box(
+                frame,
+                r,
+                theme,
+                " ⏰ Idle Nudge ",
+                "No timer running!",
+                "[N]ew entry  [D]ismiss",
+            );
         }
         Mode::ManualEntryChoice => {
             let r = centered_in(area, 60, 6);
             frame.render_widget(Clear, r);
             let theme = app.theme();
-            let block = Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.accent).bg(theme.panel))
-                .title(" ✏ Manual Time Entry ")
-                .style(Style::default().bg(theme.panel));
-            let inner = block.inner(r);
-            frame.render_widget(block, r);
-            let lines = vec![
-                Line::from(Span::styled(
-                    "How would you like to describe this entry?",
-                    Style::default()
-                        .fg(theme.fg)
-                        .bg(theme.panel)
-                        .add_modifier(Modifier::BOLD),
-                )),
-                Line::raw(""),
-                Line::from(Span::styled(
-                    "[N]ew blank entry  [A]dd to current task  [Esc] cancel",
-                    Style::default().fg(theme.dim).bg(theme.panel),
-                )),
-            ];
-            frame.render_widget(Paragraph::new(lines).centered(), inner);
+            msgbox::render_message_box(
+                frame,
+                r,
+                theme,
+                " ✏ Manual Time Entry ",
+                "How would you like to describe this entry?",
+                "[N]ew blank entry  [A]dd to current task  [Esc] cancel",
+            );
         }
         // Day-boundary prompt — starting a timer (or adding time) on a task
         // whose accumulated time belongs to a previous day (one line per
         // task-day). The task's narrative is shown so the user knows what
-        // they're carrying forward.
+        // they're carrying forward. The narrative is word-wrapped to the box
+        // width and the box grows to fit, so a long task name is never
+        // clipped at the dialog edge.
         Mode::PromptDayBoundary => {
-            let r = centered_in(area, 68, 7);
-            frame.render_widget(Clear, r);
             let theme = app.theme();
-            let block = Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.accent).bg(theme.panel))
-                .title(" 📅 Day Boundary ")
-                .style(Style::default().bg(theme.panel));
-            let inner = block.inner(r);
-            frame.render_widget(block, r);
             let narrative = app
                 .session
                 .pending_day_boundary
@@ -319,21 +285,25 @@ pub fn draw(frame: &mut Frame, app: &App) {
                 .and_then(|(abs, _)| app.store.tasks().get(*abs))
                 .map(|t| crate::todo::body_only_from_clean(&t.clean_raw))
                 .unwrap_or_default();
-            let lines = vec![
-                Line::from(Span::styled(
-                    format!("\"{narrative}\" has time from a previous day."),
-                    Style::default()
-                        .fg(theme.fg)
-                        .bg(theme.panel)
-                        .add_modifier(Modifier::BOLD),
-                )),
-                Line::raw(""),
-                Line::from(Span::styled(
-                    "[C]ontinue same entry  [N]ew entry for today  [Esc] cancel",
-                    Style::default().fg(theme.dim).bg(theme.panel),
-                )),
-            ];
-            frame.render_widget(Paragraph::new(lines).centered(), inner);
+            let message = format!("\"{narrative}\" has time from a previous day.");
+            let box_w = 68u16.min(area.width);
+            let wrap_w = usize::from(box_w).saturating_sub(2).max(16);
+            let wrapped = msgbox::wrapped_line_count(&message, wrap_w) as u16;
+            // Borders + blank row + footer; a short message keeps the original
+            // 7-row box so the layout doesn't jump around.
+            let box_h = (wrapped + 4)
+                .max(7)
+                .min(area.height.saturating_sub(2).max(5));
+            let r = centered_in(area, box_w, box_h);
+            frame.render_widget(Clear, r);
+            msgbox::render_message_box(
+                frame,
+                r,
+                theme,
+                " 📅 Day Boundary ",
+                &message,
+                "[C]ontinue same entry  [N]ew entry for today  [Esc] cancel",
+            );
         }
         Mode::ManageProjects => {
             frame.render_widget(Clear, body_area);
