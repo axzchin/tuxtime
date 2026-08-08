@@ -248,4 +248,99 @@ mod tests {
             Some(Action::CreateOrOpenNote)
         );
     }
+
+    /// Convert a CamelCase variant name to its canonical snake_case keybind
+    /// name (e.g. `BeginEditInsert` → `begin_edit_insert`). The canonical
+    /// (first) entry of every `NAMES` row is exactly this spelling.
+    fn snake_case(variant: &str) -> String {
+        let mut out = String::with_capacity(variant.len() + 4);
+        for (i, c) in variant.chars().enumerate() {
+            if c.is_ascii_uppercase() {
+                if i > 0 {
+                    out.push('_');
+                }
+                out.push(c.to_ascii_lowercase());
+            } else {
+                out.push(c);
+            }
+        }
+        out
+    }
+
+    /// Every `Action` variant must have a canonical keybind name in `NAMES`,
+    /// so no action is silently non-rebindable. The exhaustive match below
+    /// is compiler-enforced: adding a variant fails to compile until it is
+    /// listed here, then fails this assertion until a `NAMES` row exists —
+    /// the same enforce-total-coverage pattern `apply_action` uses.
+    #[test]
+    fn every_action_variant_has_a_keybind_name() {
+        let mut all: Vec<Action> = Vec::new();
+        match Action::Quit {
+            Action::Quit => all.push(Action::Quit),
+            Action::CursorDown => all.push(Action::CursorDown),
+            Action::CursorUp => all.push(Action::CursorUp),
+            Action::CursorTop => all.push(Action::CursorTop),
+            Action::CursorBottom => all.push(Action::CursorBottom),
+            Action::HalfPageDown => all.push(Action::HalfPageDown),
+            Action::HalfPageUp => all.push(Action::HalfPageUp),
+            Action::BeginAdd => all.push(Action::BeginAdd),
+            Action::BeginEdit => all.push(Action::BeginEdit),
+            Action::BeginEditInsert => all.push(Action::BeginEditInsert),
+            Action::ToggleComplete => all.push(Action::ToggleComplete),
+            Action::Delete => all.push(Action::Delete),
+            Action::Reschedule => all.push(Action::Reschedule),
+            Action::CyclePriority => all.push(Action::CyclePriority),
+            Action::BeginSearch => all.push(Action::BeginSearch),
+            Action::OpenHelp => all.push(Action::OpenHelp),
+            Action::OpenSettings => all.push(Action::OpenSettings),
+            Action::OpenCommandPalette => all.push(Action::OpenCommandPalette),
+            Action::Undo => all.push(Action::Undo),
+            Action::ToggleVisual => all.push(Action::ToggleVisual),
+            Action::ToggleSelected => all.push(Action::ToggleSelected),
+            Action::GoList => all.push(Action::GoList),
+            Action::ToggleArchiveView => all.push(Action::ToggleArchiveView),
+            Action::ArchiveCompleted => all.push(Action::ArchiveCompleted),
+            Action::ArmF => all.push(Action::ArmF),
+            Action::PickProject => all.push(Action::PickProject),
+            Action::PickContext => all.push(Action::PickContext),
+            Action::PickSavedFilter => all.push(Action::PickSavedFilter),
+            Action::SaveCurrentFilter => all.push(Action::SaveCurrentFilter),
+            Action::CycleSort => all.push(Action::CycleSort),
+            Action::BeginPromptProject => all.push(Action::BeginPromptProject),
+            Action::BeginPromptContext => all.push(Action::BeginPromptContext),
+            Action::ToggleLeftPane => all.push(Action::ToggleLeftPane),
+            Action::ToggleRightPane => all.push(Action::ToggleRightPane),
+            Action::CycleTheme => all.push(Action::CycleTheme),
+            Action::CycleDensity => all.push(Action::CycleDensity),
+            Action::ToggleLineNum => all.push(Action::ToggleLineNum),
+            Action::ToggleShowDone => all.push(Action::ToggleShowDone),
+            Action::ToggleShowFuture => all.push(Action::ToggleShowFuture),
+            Action::CopyLine => all.push(Action::CopyLine),
+            Action::CopyBody => all.push(Action::CopyBody),
+            Action::OpenNote => all.push(Action::OpenNote),
+            Action::CreateOrOpenNote => all.push(Action::CreateOrOpenNote),
+            Action::EscapeStack => all.push(Action::EscapeStack),
+            Action::OpenShare => all.push(Action::OpenShare),
+            Action::OpenThemePicker => all.push(Action::OpenThemePicker),
+            Action::ChangeWeekStart => all.push(Action::ChangeWeekStart),
+            Action::TimerStartStop => all.push(Action::TimerStartStop),
+            Action::ManualTimeEntry => all.push(Action::ManualTimeEntry),
+            Action::CopyNarratives => all.push(Action::CopyNarratives),
+            Action::OpenTimesheet => all.push(Action::OpenTimesheet),
+            Action::DismissNudge => all.push(Action::DismissNudge),
+            Action::BeginSessionFromCurrent => all.push(Action::BeginSessionFromCurrent),
+            Action::ConfigureIdleNudge => all.push(Action::ConfigureIdleNudge),
+            Action::ConfigureLongTimerNudge => all.push(Action::ConfigureLongTimerNudge),
+            Action::ToggleBillable => all.push(Action::ToggleBillable),
+            Action::QuickInterrupt => all.push(Action::QuickInterrupt),
+            Action::OpenProjectManager => all.push(Action::OpenProjectManager),
+        }
+        for action in all {
+            let canonical = snake_case(&format!("{action:?}"));
+            assert!(
+                Action::from_keybind_name(&canonical).is_some(),
+                "Action {action:?} has no canonical keybind name `{canonical}` in NAMES"
+            );
+        }
+    }
 }
