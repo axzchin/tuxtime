@@ -5,7 +5,7 @@
 //! private module tree. The binary is just the terminal front-end — event
 //! loop, startup, and subcommand dispatch — on top of this module.
 //!
-//! [`ModeDispatcher`] routes each keypress to the handler for the active
+//! [`dispatch`] routes each keypress to the handler for the active
 //! [`Mode`](crate::app::Mode); the handlers translate key events into
 //! [`Action`](crate::action::Action)s and `App` mutations.
 
@@ -18,7 +18,7 @@ mod timesheet_handler;
 
 /// The binary's event loop uses these three entry points directly.
 pub use action_dispatch::apply_action;
-pub use dispatch::ModeDispatcher;
+pub use dispatch::dispatch;
 pub use key_resolve::resolve_builtin_single_key;
 
 // Test-facing re-exports: the interactive test suite (`tests.rs`) drives the

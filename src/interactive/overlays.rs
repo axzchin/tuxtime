@@ -106,24 +106,37 @@ pub(crate) fn handle_settings(app: &mut App, key: KeyEvent) {
 // Pickers — project, context, saved-filter, theme
 // ---------------------------------------------------------------------------
 
-pub(crate) fn handle_pick(app: &mut App, key: KeyEvent) {
+/// Shared `j`/`k`/`Enter`/`Esc` handling for the list-style pickers (project,
+/// context, saved-filter, theme). `step(forward)` moves the highlight,
+/// `accept` commits, `cancel` reverts.
+fn handle_list_picker(
+    app: &mut App,
+    key: KeyEvent,
+    step: impl Fn(&mut App, bool),
+    accept: impl Fn(&mut App),
+    cancel: impl Fn(&mut App),
+) {
     match key.code {
-        KeyCode::Char('j') | KeyCode::Down => app.pick_step(true),
-        KeyCode::Char('k') | KeyCode::Up => app.pick_step(false),
-        KeyCode::Enter => app.pick_accept(),
-        KeyCode::Esc => app.pick_cancel(),
+        KeyCode::Char('j') | KeyCode::Down => step(app, true),
+        KeyCode::Char('k') | KeyCode::Up => step(app, false),
+        KeyCode::Enter => accept(app),
+        KeyCode::Esc => cancel(app),
         _ => {}
     }
 }
 
+pub(crate) fn handle_pick(app: &mut App, key: KeyEvent) {
+    handle_list_picker(app, key, App::pick_step, App::pick_accept, App::pick_cancel);
+}
+
 pub(crate) fn handle_pick_theme(app: &mut App, key: KeyEvent) {
-    match key.code {
-        KeyCode::Char('j') | KeyCode::Down => app.pick_theme_step(true),
-        KeyCode::Char('k') | KeyCode::Up => app.pick_theme_step(false),
-        KeyCode::Enter => app.pick_theme_accept(),
-        KeyCode::Esc => app.pick_theme_cancel(),
-        _ => {}
-    }
+    handle_list_picker(
+        app,
+        key,
+        App::pick_theme_step,
+        App::pick_theme_accept,
+        App::pick_theme_cancel,
+    );
 }
 
 // ---------------------------------------------------------------------------

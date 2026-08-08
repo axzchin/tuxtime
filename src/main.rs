@@ -14,7 +14,7 @@ use tuxtime::app::{App, Mode};
 use tuxtime::cli;
 use tuxtime::config::Config;
 use tuxtime::config_watcher;
-use tuxtime::interactive::{ModeDispatcher, apply_action, resolve_builtin_single_key};
+use tuxtime::interactive::{apply_action, dispatch, resolve_builtin_single_key};
 use tuxtime::keybinds::KeyBindings;
 use tuxtime::theme;
 use tuxtime::ui::hyperlinks;
@@ -344,5 +344,5 @@ fn next_timeout(app: &App) -> Duration {
 }
 
 fn handle_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
-    ModeDispatcher::new(keybinds).dispatch(app, key);
+    dispatch(app, key, keybinds);
 }
