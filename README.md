@@ -1,31 +1,31 @@
-# tuxedo
+# tuxtime
 
 A fast, keyboard-driven terminal UI for [todo.txt](http://todotxt.org/).
 Vim-style bindings, atomic writes, instant external-edit detection, and five
 hand-tuned themes — all in a single static binary.
 
 ```sh
-brew install tuxedo
+brew install tuxtime
 ```
 
-[![CI](https://github.com/webstonehq/tuxedo/actions/workflows/ci.yml/badge.svg)](https://github.com/webstonehq/tuxedo/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/webstonehq/tuxedo?logo=github)](https://github.com/webstonehq/tuxedo/releases/latest)
+[![CI](https://github.com/axzchin/tuxtime/actions/workflows/ci.yml/badge.svg)](https://github.com/axzchin/tuxtime/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/axzchin/tuxtime?logo=github)](https://github.com/axzchin/tuxtime/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](#license)
 [![Rust](https://img.shields.io/badge/rust-2024-orange.svg?logo=rust)](https://www.rust-lang.org)
 
-![tuxedo demo](docs/demo.gif)
+![tuxtime demo](docs/demo.gif)
 
 For a more in-depth walkthrough, please watch [this video](https://www.youtube.com/watch?v=mT1tg6SQ_Ag) by [@IogaMaster](https://github.com/IogaMaster).
 
 ## Highlights
 
 - **Pure todo.txt.** Reads and writes the [standard format](https://github.com/todotxt/todo.txt) — every line is plain text you can edit with anything else.
-- **TUI and CLI in one binary.** Run `tuxedo` for the interactive UI, or `tuxedo <command>` for a [todo.txt-cli](https://github.com/todotxt/todo.txt-cli)-compatible command line (`add`, `ls`, `do`, `pri`, `archive`, …) — scriptable, with `--json` output and `$TODO_DIR` / `$TODO_FILE` / `$DONE_FILE` support.
-- **Natural-language add.** Type prose into the add prompt — `Pay rent monthly on the first, show 3 days before due, project home` — and tuxedo rewrites it to canonical todo.txt for you to review and save. Local, offline, no AI service.
+- **TUI and CLI in one binary.** Run `tuxtime` for the interactive UI, or `tuxtime <command>` for a [todo.txt-cli](https://github.com/todotxt/todo.txt-cli)-compatible command line (`add`, `ls`, `do`, `pri`, `archive`, …) — scriptable, with `--json` output and `$TODO_DIR` / `$TODO_FILE` / `$DONE_FILE` support.
+- **Natural-language add.** Type prose into the add prompt — `Pay rent monthly on the first, show 3 days before due, project home` — and tuxtime rewrites it to canonical todo.txt for you to review and save. Local, offline, no AI service.
 - **Phone capture.** Press `s` for a QR pointing at a tiny PWA on your machine's LAN — type tasks from your phone and they appear in the list. Captures land in a sibling `inbox.txt` first, so any tool that can append a line (shell, iOS Shortcuts, cron) is also a capture source.
 - **Vim keys, no surprises.** `j` / `k` to move, `dd` to delete, `gg` / `G` to jump, `u` to undo (50 levels), chord prompts (`gg`, `dd`, `fp`, `fc`) with a 600 ms window.
 - **Command palette.** `:` or `Ctrl-P` opens a fuzzy palette over every action — type a few letters, hit Enter. Same matcher as `/` search, ranked so start-of-label hits beat word-boundary hits beat mid-word hits.
-- **Atomic, sync-friendly writes.** Every change goes through write-temp-then-rename. If another process — Dropbox, an editor, a script — modifies the file, tuxedo reloads on the next keypress (or within ~250 ms while idle) and flashes a notice.
+- **Atomic, sync-friendly writes.** Every change goes through write-temp-then-rename. If another process — Dropbox, an editor, a script — modifies the file, tuxtime reloads on the next keypress (or within ~250 ms while idle) and flashes a notice.
 - **Sibling-file archive.** `A` moves completed tasks to `done.txt` next to your file, atomically.
 - **Filter, sort, multi-select.** Cycle by `+project` or `@context`, sort by priority / due / file order, and bulk-complete or bulk-delete in visual mode.
 - **Saved searches.** Name the active `/`-search with `fs`, then recall it any time by cycling saved filters with `ff`. Stored as plain `filter.<name>` lines in the config — hand-editable like everything else.
@@ -63,15 +63,15 @@ For a more in-depth walkthrough, please watch [this video](https://www.youtube.c
 
 ### Custom themes
 
-Beyond the built-ins, tuxedo loads any `*.toml` file you drop in
-`${XDG_CONFIG_HOME:-$HOME/.config}/tuxedo/themes/`. Each one joins the `T`
+Beyond the built-ins, tuxtime loads any `*.toml` file you drop in
+`${XDG_CONFIG_HOME:-$HOME/.config}/tuxtime/themes/`. Each one joins the `T`
 picker in sorted filename order. Ready-made themes live in
 [`docs/themes/`](docs/themes) — copy one in and press `T`:
 
 ```sh
-mkdir -p ~/.config/tuxedo/themes
-curl -o ~/.config/tuxedo/themes/gruvbox-dark-soft.toml \
-  https://raw.githubusercontent.com/webstonehq/tuxedo/main/docs/themes/gruvbox-dark-soft.toml
+mkdir -p ~/.config/tuxtime/themes
+curl -o ~/.config/tuxtime/themes/gruvbox-dark-soft.toml \
+  https://raw.githubusercontent.com/axzchin/tuxtime/main/docs/themes/gruvbox-dark-soft.toml
 ```
 
 <details>
@@ -120,57 +120,53 @@ another theme is skipped with a warning at startup.
 
 ## Install
 
-### Homebrew (macOS, Linux)
+### From source (recommended)
 
 ```sh
-brew install tuxedo
+cargo install --git https://github.com/axzchin/tuxtime
 ```
 
 ### Prebuilt binaries
 
-Download the archive for your platform from the [latest release](https://github.com/webstonehq/tuxedo/releases/latest) and put `tuxedo` on your `PATH`.
+Download the archive for your platform from the [latest release](https://github.com/axzchin/tuxtime/releases/latest) and put `tuxtime` on your `PATH`.
 
 Targets: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin`, `aarch64-apple-darwin`, `x86_64-pc-windows-msvc`. Each archive ships with a `.sha256` checksum.
 
-### From source
+### Clone and build
+
+Or, clone and build:
 
 ```sh
-cargo install --git https://github.com/webstonehq/tuxedo
-```
-
-Or clone and build:
-
-```sh
-git clone https://github.com/webstonehq/tuxedo
-cd tuxedo
+git clone https://github.com/axzchin/tuxtime
+cd tuxtime
 cargo build --release
-./target/release/tuxedo [FILE]
+./target/release/tuxtime [FILE]
 ```
 
 Requires the Rust 2024 edition (recent stable toolchain).
 
 ## Usage
 
-`tuxedo` is two things in one binary: an interactive TUI, and a one-shot
+`tuxtime` is two things in one binary: an interactive TUI, and a one-shot
 command line. With no subcommand it launches the TUI; with a recognized
 subcommand it runs the [command line](#command-line-interface) and exits.
 
 ```sh
-tuxedo [FILE]      # launch the TUI on FILE (created if missing)
-tuxedo             # TUI on the default file (see resolution below)
-tuxedo --sample    # open the bundled sample file in the temp dir
-tuxedo <command>   # run a one-shot CLI command — see "Command-line interface"
-tuxedo update      # print upgrade instructions for your install
-tuxedo --help
-tuxedo --version
+tuxtime [FILE]      # launch the TUI on FILE (created if missing)
+tuxtime             # TUI on the default file (see resolution below)
+tuxtime --sample    # open the bundled sample file in the temp dir
+tuxtime <command>   # run a one-shot CLI command — see "Command-line interface"
+tuxtime update      # print upgrade instructions for your install
+tuxtime --help
+tuxtime --version
 ```
 
-When a newer release is available, the status bar shows `↑ <version> (tuxedo
+When a newer release is available, the status bar shows `↑ <version> (tuxtime
 update)` next to the version. The check runs in the background, is cached at
-`$XDG_CACHE_HOME/tuxedo/latest_version.json` for 24 h, and fails silently
+`$XDG_CACHE_HOME/tuxtime/latest_version.json` for 24 h, and fails silently
 when offline. Set `TUXEDO_NO_UPDATE_CHECK=1` to disable.
 
-### Which file tuxedo opens
+### Which file tuxtime opens
 
 Both the TUI and the CLI resolve the todo file the same way, in order:
 
@@ -197,7 +193,7 @@ export DONE_FILE="$TODO_DIR/done.txt"
 Edits are persisted on every change via atomic write (write `.tmp`, rename).
 
 If the file changes on disk (another editor, a sync client, a script),
-tuxedo notices on the next keypress, or within ~250 ms while idle, and
+tuxtime notices on the next keypress, or within ~250 ms while idle, and
 reloads. The keystroke that triggered the reload is consumed — press it
 again to act on the fresh state — and the status bar flashes a notice.
 
@@ -208,19 +204,19 @@ can browse, un-archive, or permanently delete past tasks.
 
 ## Command-line interface
 
-When the first argument is a recognized subcommand, tuxedo runs a one-shot
+When the first argument is a recognized subcommand, tuxtime runs a one-shot
 command instead of launching the TUI. The surface mirrors
 [todo.txt-cli](https://github.com/todotxt/todo.txt-cli/wiki/Usage) — same
 commands, aliases, task numbering, and output — so it's a drop-in for scripts
 and aliases.
 
 ```sh
-tuxedo add "Pay rent +home @bank due:2026-07-01"   # or: tuxedo a "..."
-tuxedo ls @bank                                     # filter by context
-tuxedo do 3                                          # mark task 3 complete
-tuxedo pri 3 A                                        # set priority
-tuxedo archive                                        # move done tasks to done.txt
-tuxedo ls --json | jq .                              # machine-readable output
+tuxtime add "Pay rent +home @bank due:2026-07-01"   # or: tuxtime a "..."
+tuxtime ls @bank                                     # filter by context
+tuxtime do 3                                          # mark task 3 complete
+tuxtime pri 3 A                                        # set priority
+tuxtime archive                                        # move done tasks to done.txt
+tuxtime ls --json | jq .                              # machine-readable output
 ```
 
 | Command | Aliases | Arguments | Description |
@@ -252,17 +248,17 @@ shown` footer, matching todo.txt-cli.
   print an array of task objects; mutating commands print a result object.
   No prompts or footers are written in this mode.
 
-Global flags may appear before the subcommand (`tuxedo -f del 3`).
+Global flags may appear before the subcommand (`tuxtime -f del 3`).
 
 **Differences from todo.txt-cli:** `do` marks a task complete but does **not**
 auto-archive it — completed tasks stay in the file until you run `archive` (or
-press `A` in the TUI), matching tuxedo's interactive model. There is no `-d`
+press `A` in the TUI), matching tuxtime's interactive model. There is no `-d`
 config-file flag; configure paths with the environment variables above.
 
 ## Keybindings
 
 Custom normal-mode keybindings can be added in
-`${XDG_CONFIG_HOME:-$HOME/.config}/tuxedo/keybinds.toml`:
+`${XDG_CONFIG_HOME:-$HOME/.config}/tuxtime/keybinds.toml`:
 
 The block below lists every rebindable action with the key it ships with —
 copy it, then change the keys you care about and delete the rest (anything you
@@ -455,7 +451,7 @@ Standard [todo.txt](https://github.com/todotxt/todo.txt) lines:
   note actions (`o` / `O`): relative paths resolve under `notes_dir`, then
   `$NOTES_DIR`, then `~/notes`. Keys you'd rather not see can be hidden from
   the rows via [`hide_keys`](#hiding-keyvalue-tags)
-- `rec:[+]N{d,b,w,m,y}` — recurrence; on completion (`x`), tuxedo inserts
+- `rec:[+]N{d,b,w,m,y}` — recurrence; on completion (`x`), tuxtime inserts
   a fresh copy of the task with `due:` advanced by `N` days, business
   days (Mon–Fri), weeks, months, or years. The `+` prefix means
   *strict* recurrence anchored to the previous due date (e.g.
@@ -503,7 +499,7 @@ Recognized vocabulary:
 - **Priority** — `high priority` → A, `medium priority` → B, `low priority` → C, or `priority A`.
 
 Parsing is rule-based and runs locally — no network calls, no API key. If
-the buffer already contains a `due:`, `rec:`, or `t:` token, tuxedo assumes
+the buffer already contains a `due:`, `rec:`, or `t:` token, tuxtime assumes
 you've typed canonical form and saves it directly on the first Enter.
 
 ## Phone capture
@@ -514,7 +510,7 @@ get a minimal PWA you can install to your home screen. Type a task, tap
 Add, and within a tick it shows up in your task list.
 
 Captures never touch `todo.txt` directly. They land in a sibling
-`inbox.txt`, which tuxedo drains on every external-change poll: each line
+`inbox.txt`, which tuxtime drains on every external-change poll: each line
 is run through the same natural-language pipeline as the `n` add prompt,
 given a creation date if missing, and merged into `todo.txt` as a single
 undoable batch (`u` rolls back the whole drain at once).
@@ -529,7 +525,7 @@ echo "Call dentist due:2026-06-01" >> ~/notes/inbox.txt
 
 Shell aliases, iOS Shortcuts writing to a synced folder, cron jobs,
 email-to-file gateways — pick your producer. As long as it appends a line
-to the sibling `inbox.txt`, tuxedo picks it up.
+to the sibling `inbox.txt`, tuxtime picks it up.
 
 The server:
 
@@ -546,7 +542,7 @@ The server:
   WiFi anyone passive-sniffing can recover the token. To rotate, delete
   `share_token` from `config.toml` and press `s` again.
 
-Drains from tuxedo-managed producers are crash-safe: the capture server
+Drains from tuxtime-managed producers are crash-safe: the capture server
 holds the same advisory lock as the TUI's rename-and-merge, and any
 staging file left over from an interrupted drain is replayed on the
 next session. Plain shell appends are useful for lightweight capture,
@@ -555,7 +551,7 @@ if a producer must be serialized with the TUI drain.
 
 ## Configuration
 
-Persisted to `${XDG_CONFIG_HOME:-$HOME/.config}/tuxedo/config.toml`. Cycling
+Persisted to `${XDG_CONFIG_HOME:-$HOME/.config}/tuxtime/config.toml`. Cycling
 theme, density, or sort, and toggling sidebars / line-numbers / done-visibility
 all update the file. Unknown keys are ignored, so older binaries don't break
 on newer files.
@@ -578,8 +574,8 @@ round-trip as plain text, so you can add, rename, or delete them by editing
 `<name>` may not contain `=`.
 
 Task-note actions resolve relative `note:<path>` tokens under `notes_dir`.
-If `notes_dir` is not set, tuxedo falls back to `$NOTES_DIR` and then
-`~/notes`. `O` creates missing notes under `projects/tuxedo-tasks/` using a
+If `notes_dir` is not set, tuxtime falls back to `$NOTES_DIR` and then
+`~/notes`. `O` creates missing notes under `projects/tuxtime-tasks/` using a
 small Markdown template and appends the generated `note:<path>` token to the
 task; `o` only opens an existing linked note.
 
@@ -616,7 +612,7 @@ plain `cargo` commands if you don't use [mise](https://mise.jdx.dev/).
 ## Acknowledgments
 
 - [todo.txt](http://todotxt.org/) by Gina Trapani — the format that makes a tool like this possible.
-- [ratatui](https://ratatui.rs/) and [crossterm](https://github.com/crossterm-rs/crossterm) — the rendering and terminal-input crates tuxedo is built on.
+- [ratatui](https://ratatui.rs/) and [crossterm](https://github.com/crossterm-rs/crossterm) — the rendering and terminal-input crates tuxtime is built on.
 
 ## Roadmap
 
