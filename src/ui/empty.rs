@@ -2,9 +2,10 @@ use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::Paragraph;
 
 use crate::app::App;
+use crate::ui::msgbox::pad_right;
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
@@ -12,10 +13,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let h = 16u16.min(area.height.saturating_sub(2));
     let r = super::centered_in(area, w, h);
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.border).bg(theme.bg))
-        .title(Line::from(vec![
+    let inner = crate::ui::msgbox::frame_box(
+        frame,
+        r,
+        theme.border,
+        theme.bg,
+        Line::from(vec![
             Span::raw(" "),
             Span::styled(
                 "tuxtime",
@@ -24,10 +27,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                     .add_modifier(Modifier::BOLD),
             ),
             Span::raw(" "),
-        ]))
-        .style(Style::default().bg(theme.bg));
-    let inner = block.inner(r);
-    frame.render_widget(block, r);
+        ]),
+    );
 
     let shortcuts: &[(&str, &str)] = &[
         ("n", "add a task"),
@@ -50,7 +51,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         lines.push(Line::from(vec![
             Span::raw("   "),
             Span::styled(
-                pad_key(key, 4),
+                pad_right(key, 4),
                 Style::default()
                     .fg(theme.context)
                     .add_modifier(Modifier::BOLD),
@@ -68,15 +69,4 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 
     let para = Paragraph::new(lines).style(Style::default().bg(theme.bg).fg(theme.fg));
     frame.render_widget(para, inner);
-}
-
-fn pad_key(s: &str, w: usize) -> String {
-    let len = s.chars().count();
-    if len >= w {
-        s.to_string()
-    } else {
-        let mut o = s.to_string();
-        o.push_str(&" ".repeat(w - len));
-        o
-    }
 }

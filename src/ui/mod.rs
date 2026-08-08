@@ -43,6 +43,9 @@ const HELP_MAX_H: u16 = 40;
 const HELP_MIN_W: u16 = 76;
 const HELP_MAX_W: u16 = 120;
 
+const WELCOME_W: u16 = 56;
+const WELCOME_H: u16 = 16;
+
 const PROMPT_H: u16 = 5;
 const PROMPT_MAX_W: u16 = 50;
 
@@ -237,7 +240,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
             theme_picker::render(frame, r, app);
         }
         Mode::Welcome => {
-            let r = centered_in(area, welcome::WIDTH, welcome::HEIGHT);
+            let r = centered_in(area, WELCOME_W, WELCOME_H);
             frame.render_widget(Clear, r);
             welcome::render(frame, r, app);
         }

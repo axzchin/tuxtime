@@ -2,10 +2,11 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::Paragraph;
 
 use crate::app::App;
 use crate::theme::Theme;
+use crate::ui::msgbox::{frame_box, pad_right};
 
 type Section = (&'static str, &'static [(&'static str, &'static str)]);
 
@@ -118,10 +119,12 @@ const FORMAT: Section = (
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.border).bg(theme.panel))
-        .title(Line::from(vec![
+    let inner = frame_box(
+        frame,
+        area,
+        theme.border,
+        theme.panel,
+        Line::from(vec![
             Span::raw(" "),
             Span::styled(
                 "tuxtime",
@@ -130,10 +133,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(" · help ".to_string(), Style::default().fg(theme.dim)),
-        ]))
-        .style(Style::default().bg(theme.panel));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+        ]),
+    );
 
     let bg = Style::default().bg(theme.panel).fg(theme.fg);
 
@@ -248,7 +249,7 @@ fn render_sections<'a>(theme: &Theme, sections: &[Section]) -> Vec<Line<'a>> {
             lines.push(Line::from(vec![
                 Span::raw("    "),
                 Span::styled(
-                    pad_str(k, 18),
+                    pad_right(k, 18),
                     Style::default()
                         .fg(theme.context)
                         .add_modifier(Modifier::BOLD),
@@ -259,15 +260,4 @@ fn render_sections<'a>(theme: &Theme, sections: &[Section]) -> Vec<Line<'a>> {
         lines.push(Line::raw(" "));
     }
     lines
-}
-
-fn pad_str(s: &str, w: usize) -> String {
-    let len = s.chars().count();
-    if len >= w {
-        s.to_string()
-    } else {
-        let mut o = s.to_string();
-        o.push_str(&" ".repeat(w - len));
-        o
-    }
 }

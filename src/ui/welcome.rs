@@ -1,20 +1,18 @@
 //! First-run welcome overlay: shown when `tuxtime` is launched with no target
 //! and no `./todo.txt` exists. Offers to create a `./todo.txt` here or open
 //! the bundled sample. Key handling lives in `handle_welcome` (main.rs);
-//! `q`/`Esc` quits without creating anything.
+//! `q`/`Esc` quits without creating anything. Sizing lives in the overlay
+//! constants at the top of `ui::mod.rs`; `render` fills whatever rect it is
+//! given.
 
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::Paragraph;
 
 use crate::app::App;
-
-/// Natural (width, height) for the overlay. The caller centers and `Clear`s
-/// a rect of this size; `render` fills it.
-pub const WIDTH: u16 = 56;
-pub const HEIGHT: u16 = 16;
+use crate::ui::msgbox::{frame_box, pad_right};
 
 const CHOICES: &[(&str, &str)] = &[
     ("c", "create ./todo.txt here"),
@@ -23,14 +21,16 @@ const CHOICES: &[(&str, &str)] = &[
 ];
 
 /// Render the welcome box, filling `area`. The caller is responsible for
-/// centering and clearing — see [`WIDTH`]/[`HEIGHT`].
+/// centering and clearing.
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.border).bg(theme.panel))
-        .title(Line::from(vec![
+    let inner = frame_box(
+        frame,
+        area,
+        theme.border,
+        theme.panel,
+        Line::from(vec![
             Span::raw(" "),
             Span::styled(
                 "tuxtime",
@@ -39,10 +39,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(" · welcome ", Style::default().fg(theme.dim)),
-        ]))
-        .style(Style::default().bg(theme.panel));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+        ]),
+    );
 
     let mut lines: Vec<Line> = Vec::new();
     if inner.width >= super::logo::WIDTH {
@@ -58,7 +56,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         lines.push(Line::from(vec![
             Span::raw("   "),
             Span::styled(
-                pad_key(k, 4),
+                pad_right(k, 4),
                 Style::default()
                     .fg(theme.context)
                     .add_modifier(Modifier::BOLD),
@@ -69,15 +67,4 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 
     let para = Paragraph::new(lines).style(Style::default().bg(theme.panel).fg(theme.fg));
     frame.render_widget(para, inner);
-}
-
-fn pad_key(s: &str, w: usize) -> String {
-    let len = s.chars().count();
-    if len >= w {
-        s.to_string()
-    } else {
-        let mut o = s.to_string();
-        o.push_str(&" ".repeat(w - len));
-        o
-    }
 }

@@ -2,7 +2,7 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::Paragraph;
 
 use crate::app::App;
 use crate::theme;
@@ -13,10 +13,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     // Use the previewed theme for live color feedback.
     let theme = &all[cur % all.len()];
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.border).bg(theme.panel))
-        .title(Line::from(vec![
+    let inner = crate::ui::msgbox::frame_box(
+        frame,
+        area,
+        theme.border,
+        theme.panel,
+        Line::from(vec![
             Span::raw(" "),
             Span::styled(
                 "tuxtime",
@@ -25,10 +27,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(" · themes ", Style::default().fg(theme.dim)),
-        ]))
-        .style(Style::default().bg(theme.panel));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+        ]),
+    );
 
     let bg = Style::default().bg(theme.panel).fg(theme.fg);
 

@@ -1,15 +1,56 @@
-//! Presentation helpers for the small floating message boxes used by the
-//! inline prompt dialogs (idle nudge, manual-entry choice, day boundary).
-//! Word-wrapping and the framed box are shared so a long message wraps to the
-//! box width instead of being clipped at the edge.
+//! Presentation helpers shared by every floating box: the framed panel
+//! (`frame_box`), the small prompt message boxes built on it
+//! (`render_message_box`), plus the word-wrapping and padding primitives they
+//! all use. One frame implementation keeps every overlay — prompt messages,
+//! help, welcome — visually consistent.
 
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 
 use crate::theme::Theme;
+
+/// Render the shared framed panel used by every floating overlay: `ALL`
+/// borders in `border_color` over `background`, with `title`. Returns the
+/// inner content rect. Message-box prompts pass `theme.accent` borders so they
+/// draw the eye; informational overlays (help, welcome, palette, theme
+/// picker, empty state) pass `theme.border` (and `theme.bg` for the body-level
+/// empty state, `theme.panel` for true floating panels).
+pub(crate) fn frame_box(
+    frame: &mut Frame,
+    area: Rect,
+    border_color: Color,
+    background: Color,
+    title: Line<'_>,
+) -> Rect {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(border_color).bg(background))
+        .title(title)
+        .style(Style::default().bg(background));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    inner
+}
+
+/// Right-pad `s` to `width` graphemes with spaces (no-op when already at or
+/// over the width).
+#[must_use]
+pub(crate) fn pad_right(s: &str, width: usize) -> String {
+    let len = s.chars().count();
+    if len >= width {
+        s.to_string()
+    } else {
+        let mut out = String::with_capacity(s.len() + (width - len));
+        out.push_str(s);
+        for _ in len..width {
+            out.push(' ');
+        }
+        out
+    }
+}
 
 /// Wrap `s` to roughly `width` graphemes, returning each output line as a
 /// vector of borrowed words. Borrowing avoids the per-frame `String` alloc
@@ -57,13 +98,7 @@ pub(crate) fn render_message_box(
     message: &str,
     footer: &str,
 ) {
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.accent).bg(theme.panel))
-        .title(title)
-        .style(Style::default().bg(theme.panel));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+    let inner = frame_box(frame, area, theme.accent, theme.panel, Line::from(title));
 
     // Wrap to the inner width: callers size the box from the same width
     // (`box_w - 2` borders), so the line count they computed matches what
@@ -121,5 +156,14 @@ mod tests {
     fn wrap_words_empty_input_yields_no_lines() {
         assert!(wrap_words("", 20).is_empty());
         assert_eq!(wrapped_line_count("", 20), 1);
+    }
+
+    #[test]
+    fn pad_right_pads_short_and_passes_long() {
+        assert_eq!(pad_right("x", 4), "x   ");
+        assert_eq!(pad_right("long", 4), "long");
+        assert_eq!(pad_right("", 2), "  ");
+        // Grapheme-aware: multibyte characters count once.
+        assert_eq!(pad_right("→", 3), "→  ");
     }
 }

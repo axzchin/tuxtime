@@ -7,6 +7,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 use super::anchor_below_dialog;
 use crate::app::App;
 use crate::theme::Theme;
+use crate::ui::msgbox::pad_right;
 
 pub(super) fn render_slash_menu(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
     let theme = app.theme();
@@ -80,8 +81,8 @@ pub(super) fn render_slash_menu(frame: &mut Frame, dlg: Rect, screen: Rect, app:
         let used = 2 + label_w_pad + desc_w_pad + entry.cmd.chars().count() + 1;
         let pad = total.saturating_sub(used);
 
-        let label_padded = pad_to(entry.label, label_w_pad);
-        let desc_padded = pad_to(entry.description, desc_w_pad);
+        let label_padded = pad_right(entry.label, label_w_pad);
+        let desc_padded = pad_right(entry.description, desc_w_pad);
         lines.push(
             Line::from(vec![
                 Span::styled("  ", Style::default().bg(bg)),
@@ -101,20 +102,6 @@ pub(super) fn render_slash_menu(frame: &mut Frame, dlg: Rect, screen: Rect, app:
         Paragraph::new(lines).style(Style::default().bg(theme.panel)),
         inner,
     );
-}
-
-fn pad_to(s: &str, width: usize) -> String {
-    let n = s.chars().count();
-    if n >= width {
-        s.to_string()
-    } else {
-        let mut out = String::with_capacity(s.len() + (width - n));
-        out.push_str(s);
-        for _ in n..width {
-            out.push(' ');
-        }
-        out
-    }
 }
 
 fn slash_footer<'a>(theme: &Theme) -> Line<'a> {
