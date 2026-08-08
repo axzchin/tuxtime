@@ -205,38 +205,45 @@ impl Store {
         true
     }
 
-    pub fn archive_completed(&mut self) -> ArchiveOutcome {
-        match self.reconcile() {
-            Reconcile::Unchanged => {}
-            other => return ArchiveOutcome::Aborted(other),
-        }
-        let to_move: Vec<Task> = self.tasks.iter().filter(|t| t.done).cloned().collect();
-        if to_move.is_empty() {
-            return ArchiveOutcome::Nothing;
-        }
-        // Read fresh so an external edit to done.txt since startup isn't lost.
+    /// Read the on-disk `done.txt` fresh (so an external edit since startup
+    /// isn't lost), append `to_move`, and write it back atomically. Returns
+    /// `(previous_body, combined_body)`: the caller needs the previous body to
+    /// roll `done.txt` back if its subsequent `todo.txt` write fails.
+    fn archive_append(&mut self, to_move: &[Task]) -> Result<(String, String), StoreError> {
         let previous_archive_body = match self.read_archive_body() {
             Ok(b) => b,
-            Err(e) => return ArchiveOutcome::Error(StoreError::ArchiveIo(e)),
+            Err(e) => return Err(StoreError::ArchiveIo(e)),
         };
         let mut combined = previous_archive_body.clone();
         if !combined.is_empty() && !combined.ends_with('\n') {
             combined.push('\n');
         }
-        combined.push_str(&todo::serialize(&to_move));
-        // Write done.txt before truncating todo.txt so a failed archive can't
-        // lose data; if the todo write fails, roll done.txt back.
+        combined.push_str(&todo::serialize(to_move));
+        // Write done.txt before mutating todo.txt so a failure can't lose data.
         if let Err(e) = todo::write_atomic(&self.archive.path, &combined) {
-            return ArchiveOutcome::Error(StoreError::ArchiveIo(e));
+            return Err(StoreError::ArchiveIo(e));
         }
-        let remaining: Vec<Task> = self.tasks.iter().filter(|t| !t.done).cloned().collect();
+        Ok((previous_archive_body, combined))
+    }
+
+    /// The archive-then-truncate dance shared by [`Store::archive_completed`]
+    /// and [`Store::archive_one`]: append `to_move` to `done.txt`, rewrite
+    /// `todo.txt` with `remaining` (rolling `done.txt` back if that write
+    /// fails), then refresh history, the timer, and both files' signatures.
+    /// Returns the number of tasks moved.
+    fn move_tasks_to_archive(
+        &mut self,
+        to_move: Vec<Task>,
+        remaining: Vec<Task>,
+    ) -> Result<usize, StoreError> {
+        let (previous_archive_body, combined) = self.archive_append(&to_move)?;
         let remaining_body = todo::serialize(&remaining);
         if let Err(e) = todo::write_atomic(&self.file_path, &remaining_body) {
             let _ = todo::write_atomic(&self.archive.path, &previous_archive_body);
-            return ArchiveOutcome::Error(StoreError::Write(e));
+            return Err(StoreError::Write(e));
         }
-        self.push_history();
         let count = to_move.len();
+        self.push_history();
         self.tasks = remaining;
         // Archived tasks leave the live list — a timer on one of them can't
         // keep running, and the remaining indices have shifted.
@@ -246,7 +253,23 @@ impl Store {
         self.archive.last_disk = combined;
         self.archive.last_meta = super::file_sig(&self.archive.path);
         self.archive.loader = None;
-        ArchiveOutcome::Archived { count }
+        Ok(count)
+    }
+
+    pub fn archive_completed(&mut self) -> ArchiveOutcome {
+        match self.reconcile() {
+            Reconcile::Unchanged => {}
+            other => return ArchiveOutcome::Aborted(other),
+        }
+        let to_move: Vec<Task> = self.tasks.iter().filter(|t| t.done).cloned().collect();
+        if to_move.is_empty() {
+            return ArchiveOutcome::Nothing;
+        }
+        let remaining: Vec<Task> = self.tasks.iter().filter(|t| !t.done).cloned().collect();
+        match self.move_tasks_to_archive(to_move, remaining) {
+            Ok(count) => ArchiveOutcome::Archived { count },
+            Err(e) => ArchiveOutcome::Error(e),
+        }
     }
 
     /// Archive a single completed task at `abs` in `self.tasks`. Appends
@@ -263,20 +286,6 @@ impl Store {
         if !task.done {
             return ArchiveOneOutcome::NotCompleted;
         }
-        // Read fresh so an external edit to done.txt since startup isn't lost.
-        let previous_archive_body = match self.read_archive_body() {
-            Ok(b) => b,
-            Err(e) => return ArchiveOneOutcome::Error(StoreError::ArchiveIo(e)),
-        };
-        let mut combined = previous_archive_body.clone();
-        if !combined.is_empty() && !combined.ends_with('\n') {
-            combined.push('\n');
-        }
-        combined.push_str(&todo::serialize(&[task]));
-        // Write done.txt before mutating todo.txt so a failure can't lose data.
-        if let Err(e) = todo::write_atomic(&self.archive.path, &combined) {
-            return ArchiveOneOutcome::Error(StoreError::ArchiveIo(e));
-        }
         let remaining: Vec<Task> = self
             .tasks
             .iter()
@@ -284,22 +293,31 @@ impl Store {
             .filter(|(i, _)| *i != abs)
             .map(|(_, t)| t.clone())
             .collect();
-        let remaining_body = todo::serialize(&remaining);
-        if let Err(e) = todo::write_atomic(&self.file_path, &remaining_body) {
-            let _ = todo::write_atomic(&self.archive.path, &previous_archive_body);
-            return ArchiveOneOutcome::Error(StoreError::Write(e));
+        match self.move_tasks_to_archive(vec![task], remaining) {
+            Ok(_) => ArchiveOneOutcome::Archived,
+            Err(e) => ArchiveOneOutcome::Error(e),
         }
-        self.push_history();
-        self.tasks = remaining;
-        // If the running timer was on the archived task, it's gone from the
-        // live list; otherwise re-attach at its shifted index.
-        self.resync_timer();
-        self.last_disk = remaining_body;
-        self.archive.tasks = todo::parse_file(&combined);
-        self.archive.last_disk = combined;
+    }
+
+    /// Rewrite `done.txt` without the task at `archive_idx` and refresh the
+    /// in-memory archive caches. Returns the new body.
+    fn rewrite_archive_without(&mut self, archive_idx: usize) -> Result<String, StoreError> {
+        let new_archive: Vec<Task> = self
+            .archive
+            .tasks
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != archive_idx)
+            .map(|(_, t)| t.clone())
+            .collect();
+        let archive_body = todo::serialize(&new_archive);
+        if let Err(e) = todo::write_atomic(&self.archive.path, &archive_body) {
+            return Err(StoreError::ArchiveIo(e));
+        }
+        self.archive.tasks = new_archive;
+        self.archive.last_disk = archive_body.clone();
         self.archive.last_meta = super::file_sig(&self.archive.path);
-        self.archive.loader = None;
-        ArchiveOneOutcome::Archived
+        Ok(archive_body)
     }
 
     /// Move an archived task back into the live list. `archive_idx` indexes
@@ -321,21 +339,9 @@ impl Store {
         if let Err(e) = task.unmark_done() {
             return UnarchiveOutcome::Error(StoreError::Parse(e));
         }
-        let new_archive: Vec<Task> = self
-            .archive
-            .tasks
-            .iter()
-            .enumerate()
-            .filter(|(i, _)| *i != archive_idx)
-            .map(|(_, t)| t.clone())
-            .collect();
-        let archive_body = todo::serialize(&new_archive);
-        if let Err(e) = todo::write_atomic(&self.archive.path, &archive_body) {
-            return UnarchiveOutcome::Error(StoreError::ArchiveIo(e));
+        if let Err(e) = self.rewrite_archive_without(archive_idx) {
+            return UnarchiveOutcome::Error(e);
         }
-        self.archive.tasks = new_archive;
-        self.archive.last_disk = archive_body;
-        self.archive.last_meta = super::file_sig(&self.archive.path);
         self.push_history();
         self.tasks.push(task);
         if let Err(e) = self.persist() {
@@ -356,22 +362,10 @@ impl Store {
         if archive_idx >= self.archive.tasks.len() {
             return ArchiveDeleteOutcome::OutOfRange;
         }
-        let new_archive: Vec<Task> = self
-            .archive
-            .tasks
-            .iter()
-            .enumerate()
-            .filter(|(i, _)| *i != archive_idx)
-            .map(|(_, t)| t.clone())
-            .collect();
-        let archive_body = todo::serialize(&new_archive);
-        if let Err(e) = todo::write_atomic(&self.archive.path, &archive_body) {
-            return ArchiveDeleteOutcome::Error(StoreError::ArchiveIo(e));
+        match self.rewrite_archive_without(archive_idx) {
+            Ok(_) => ArchiveDeleteOutcome::Deleted,
+            Err(e) => ArchiveDeleteOutcome::Error(e),
         }
-        self.archive.tasks = new_archive;
-        self.archive.last_disk = archive_body;
-        self.archive.last_meta = super::file_sig(&self.archive.path);
-        ArchiveDeleteOutcome::Deleted
     }
 
     pub(crate) fn persist(&mut self) -> Result<(), StoreError> {
