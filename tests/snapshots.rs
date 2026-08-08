@@ -56,7 +56,7 @@ fn make_app() -> App {
         "2026-05-06".to_string(),
         Config::default(),
     );
-    app.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.env.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
     // Compact density keeps each scene dense and stable: blank-line counts
     // shift with density, which would churn snapshots without adding signal.
     app.prefs.density = Density::Compact;
@@ -280,7 +280,7 @@ fn list_sidebar_empty_hints() {
         "2026-05-06".to_string(),
         Config::default(),
     );
-    app.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.env.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
     app.prefs.density = Density::Compact;
     snapshot_app("list_sidebar_empty_hints", &app);
 }
@@ -515,7 +515,7 @@ fn timesheet_weekly_with_daily_subtotals() {
         "2026-05-06".to_string(),
         Config::default(),
     );
-    app.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.env.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
     app.prefs.density = Density::Compact;
     app.set_view(View::Timesheet);
     app.timesheet.weekly = true;

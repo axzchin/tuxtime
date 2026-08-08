@@ -67,11 +67,11 @@ impl App {
             None => serve::net::generate_token().map_err(|e| format!("token: {e}"))?,
         };
         let requested_port = cfg.share_port.unwrap_or(0);
-        let info = match serve::start(self.file_path.clone(), token.clone(), requested_port) {
+        let info = match serve::start(self.env.file_path.clone(), token.clone(), requested_port) {
             Ok(info) => info,
             Err(_) if requested_port != 0 => {
                 // Configured port is taken — fall back to OS-assigned.
-                serve::start(self.file_path.clone(), token.clone(), 0)
+                serve::start(self.env.file_path.clone(), token.clone(), 0)
                     .map_err(|e| format!("bind: {e}"))?
             }
             Err(e) => return Err(format!("bind: {e}")),

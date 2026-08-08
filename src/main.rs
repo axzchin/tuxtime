@@ -84,10 +84,11 @@ fn main() -> Result<()> {
     };
     let done = cli::done_path(&path);
     let mut app_state = App::new_with_done(path.clone(), done, body, today, cfg);
-    app_state.config_path = Config::path();
+    app_state.env.config_path = Config::path();
     app_state.nav.mode = start_mode;
     // Start the config hot-reload watcher.
     let config_rx = app_state
+        .env
         .config_path
         .as_ref()
         .and_then(|p| config_watcher::spawn(p.clone()));
@@ -126,7 +127,7 @@ fn main() -> Result<()> {
     // rebound to the sample. Skip the line if the user quit the welcome
     // prompt without choosing — no file was opened.
     if app_state.nav.mode != Mode::Welcome {
-        eprintln!("tuxtime: {}", app_state.file_path.display());
+        eprintln!("tuxtime: {}", app_state.env.file_path.display());
     }
     result
 }
@@ -283,7 +284,7 @@ fn poll_config_reload(app: &mut App, rx: &Option<mpsc::Receiver<()>>) -> bool {
         Ok(()) | Err(mpsc::TryRecvError::Disconnected) => {}
         Err(mpsc::TryRecvError::Empty) => return false,
     }
-    let Some(ref path) = app.config_path else {
+    let Some(ref path) = app.env.config_path else {
         return true;
     };
     match Config::load_strict(path) {

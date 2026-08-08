@@ -18,6 +18,7 @@ mod chord;
 mod draft;
 mod draft_overlay;
 mod duration;
+mod env;
 mod flash;
 mod mutations;
 mod navigation;
@@ -57,6 +58,7 @@ pub use draft_overlay::{
 };
 pub use duration::{format_billable, format_billable_tenths};
 pub(crate) use duration::{format_duration, parse_duration_input};
+pub use env::Env;
 pub use flash::Flash;
 pub use navigation::Navigation;
 pub use palette::CommandPaletteState;
@@ -96,12 +98,9 @@ pub struct App {
     pub selection: Selection,
     flash_state: Flash,
     pub chord: Chord,
-    pub file_path: PathBuf,
-    /// Resolved path of the on-disk config file. Set by the binary after
-    /// construction so the settings overlay can render a stable, real path
-    /// without the renderer having to reach into the environment itself.
-    /// `None` in tests/examples that don't care about the value.
-    pub config_path: Option<PathBuf>,
+    /// Filesystem + working-week context: the todo file in use, the resolved
+    /// config path, and the week-start day. See [`Env`].
+    pub env: Env,
     /// Theme picker state: cursor and original selection.
     pub theme_picker: ThemePicker,
     /// Project management state: archive, rename, sort.
@@ -122,7 +121,6 @@ pub struct App {
     /// `ff` picker.
     pub(crate) saved: SavedFilterState,
     pub command_palette: CommandPaletteState,
-    pub week_start: WeekStart,
     /// Timesheet state bundle: anchor date, cursor, sort, calendar picker,
     /// groups cache, copy flash.
     pub timesheet: TimesheetState,
@@ -166,8 +164,7 @@ impl App {
             selection: Selection::default(),
             flash_state: Flash::default(),
             chord: Chord::default(),
-            file_path,
-            config_path: None,
+            env: Env::new(file_path, week_start),
             theme_picker: ThemePicker::new(0),
             project_manager: ProjectManager::new(Self::load_archived_projects()),
             share_state: ShareState::new(note_dir),
@@ -176,7 +173,6 @@ impl App {
             list: VisibleList::default(),
             saved,
             command_palette: CommandPaletteState::default(),
-            week_start,
             timesheet: TimesheetState::new(&today),
             session: Session::new(),
         };
@@ -194,7 +190,7 @@ impl App {
     pub fn open_file(&mut self, file_path: PathBuf, done_path: PathBuf, body: String) {
         let today = self.store.today().to_string();
         self.store = Store::new_with_done(file_path.clone(), done_path, body, today);
-        self.file_path = file_path;
+        self.env.file_path = file_path;
         self.nav.move_top();
         self.recompute_visible();
     }
@@ -265,7 +261,7 @@ impl App {
     /// sees the problem inside the TUI (writing to stderr would smash the
     /// alt-screen).
     pub fn save_prefs(&mut self) {
-        if let Err(e) = self.prefs.save(self.week_start) {
+        if let Err(e) = self.prefs.save(self.env.week_start) {
             self.flash(format!("config save failed: {e}"));
         }
     }
@@ -328,13 +324,13 @@ impl App {
     }
 
     pub fn cycle_week_start(&mut self) {
-        let msg = match self.week_start {
+        let msg = match self.env.week_start {
             WeekStart::Sunday => {
-                self.week_start = WeekStart::Monday;
+                self.env.week_start = WeekStart::Monday;
                 "week_start: monday"
             }
             WeekStart::Monday => {
-                self.week_start = WeekStart::Sunday;
+                self.env.week_start = WeekStart::Sunday;
                 "week_start: sunday"
             }
         };
@@ -597,7 +593,7 @@ impl App {
                 query: query.clone(),
             })
             .collect();
-        self.week_start = new_cfg.week_start.unwrap_or(WeekStart::Sunday);
+        self.env.week_start = new_cfg.week_start.unwrap_or(WeekStart::Sunday);
         self.recompute_visible();
     }
 

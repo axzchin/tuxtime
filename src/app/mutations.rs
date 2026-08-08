@@ -374,7 +374,7 @@ impl App {
     }
 
     pub fn toggle_week_start_date(&mut self) {
-        self.week_start = match self.week_start {
+        self.env.week_start = match self.env.week_start {
             WeekStart::Sunday => WeekStart::Monday,
             WeekStart::Monday => WeekStart::Sunday,
         };
@@ -407,7 +407,7 @@ mod tests {
         app.open_file(new_path.clone(), done, "fresh task\n".into());
 
         assert_eq!(
-            app.file_path, new_path,
+            app.env.file_path, new_path,
             "file_path must point at the new file"
         );
         assert_eq!(app.tasks().len(), 1, "tasks must reflect the new body");
@@ -568,9 +568,9 @@ mod tests {
     fn test_toggling_week_start() {
         let mut app = build_app("");
         app.toggle_week_start_date();
-        assert_eq!(app.week_start, WeekStart::Monday);
+        assert_eq!(app.env.week_start, WeekStart::Monday);
         app.toggle_week_start_date();
-        assert_eq!(app.week_start, WeekStart::Sunday);
+        assert_eq!(app.env.week_start, WeekStart::Sunday);
     }
 
     // ── add_time_to_current_from_input ───────────────────────────────

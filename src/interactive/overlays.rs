@@ -22,9 +22,12 @@ use super::insert::{DraftEffect, apply_to_draft};
 /// `q`/`Esc` quits without creating anything.
 pub(crate) fn handle_welcome(app: &mut App, key: KeyEvent) {
     match key.code {
-        KeyCode::Char('c') => match cli::ensure_file(app.file_path.clone()) {
+        KeyCode::Char('c') => match cli::ensure_file(app.env.file_path.clone()) {
             Ok(_) => app.nav.enter_normal(),
-            Err(e) => app.flash(format!("could not create {}: {e}", app.file_path.display())),
+            Err(e) => app.flash(format!(
+                "could not create {}: {e}",
+                app.env.file_path.display()
+            )),
         },
         KeyCode::Char('s') => match cli::sample_path() {
             Ok(sample) => {

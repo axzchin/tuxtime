@@ -159,7 +159,7 @@ impl App {
                     self.prefs.show_future,
                     today,
                     self.prefs.sort,
-                    &self.week_start,
+                    &self.env.week_start,
                 );
             }
             View::Archive => {

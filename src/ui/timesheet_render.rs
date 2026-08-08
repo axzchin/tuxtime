@@ -322,7 +322,7 @@ pub(crate) fn render_timesheet_calendar(frame: &mut Frame, area: Rect, app: &App
     .style(Style::default().bg(theme.panel));
     lines.push(header);
     // Weekday row.
-    let dow_header = if app.week_start == crate::app::WeekStart::Sunday {
+    let dow_header = if app.env.week_start == crate::app::WeekStart::Sunday {
         Span::styled(
             "  S   M   T   W   T   F   S ",
             Style::default().fg(theme.dim),
@@ -336,7 +336,7 @@ pub(crate) fn render_timesheet_calendar(frame: &mut Frame, area: Rect, app: &App
     let dow = Line::from(vec![Span::raw("  "), dow_header]).style(Style::default().bg(theme.panel));
     lines.push(dow);
     // Calendar grid.
-    for row in calendar_cells(first_of_month, app.week_start) {
+    for row in calendar_cells(first_of_month, app.env.week_start) {
         let mut spans: Vec<Span> = vec![Span::raw("  ")];
         for cell in row {
             match cell {

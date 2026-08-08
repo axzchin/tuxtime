@@ -170,7 +170,7 @@ impl App {
     /// project+activity, billable) so weekly view properly separates days.
     /// Uses `self.timesheet.date` as the anchor (defaults to today). For
     /// weekly view, computes the week containing that date according to
-    /// `self.week_start`. Result is cached in `self.timesheet.groups_cache`.
+    /// `self.env.week_start`. Result is cached in `self.timesheet.groups_cache`.
     pub fn build_timesheet_groups(&self) -> Vec<TimesheetEntry> {
         if let Some(ref cached) = *self.timesheet.groups_cache.borrow() {
             return cached.clone();
@@ -181,7 +181,7 @@ impl App {
             let anchor_date = NaiveDate::parse_from_str(anchor, "%Y-%m-%d").unwrap_or_else(|_| {
                 NaiveDate::parse_from_str(self.today(), "%Y-%m-%d").unwrap_or_default()
             });
-            let target_weekday = match self.week_start {
+            let target_weekday = match self.env.week_start {
                 WeekStart::Monday => Weekday::Mon,
                 WeekStart::Sunday => Weekday::Sun,
             };

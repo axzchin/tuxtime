@@ -41,13 +41,14 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let on = |b: bool| if b { "on" } else { "off" };
 
     let config_path = app
+        .env
         .config_path
         .as_ref()
         .map_or_else(|| "(unavailable)".into(), |p| p.display().to_string());
 
     let items: &[(&str, Option<String>)] = &[
         ("FILES", None),
-        ("  todo file", Some(app.file_path.display().to_string())),
+        ("  todo file", Some(app.env.file_path.display().to_string())),
         ("  config file", Some(config_path)),
         ("", Some(String::new())),
         ("DISPLAY", None),

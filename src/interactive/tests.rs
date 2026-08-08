@@ -48,7 +48,7 @@ fn welcome_c_creates_cwd_file_and_enters_normal() {
     handle_welcome(&mut app, key('c'));
     assert!(path.exists(), "`c` must create the target file");
     assert_eq!(app.nav.mode, Mode::Normal);
-    assert_eq!(app.file_path, path, "`c` keeps the cwd target path");
+    assert_eq!(app.env.file_path, path, "`c` keeps the cwd target path");
     assert!(!app.nav.should_quit);
     let _ = std::fs::remove_file(&path);
 }
@@ -58,11 +58,14 @@ fn welcome_s_opens_sample_and_enters_normal() {
     let (mut app, path) = welcome_app("s");
     handle_welcome(&mut app, key('s'));
     assert_eq!(app.nav.mode, Mode::Normal);
-    assert_ne!(app.file_path, path, "`s` rebinds away from the cwd target");
+    assert_ne!(
+        app.env.file_path, path,
+        "`s` rebinds away from the cwd target"
+    );
     assert!(
-        app.file_path.ends_with("tuxtime-sample.txt"),
+        app.env.file_path.ends_with("tuxtime-sample.txt"),
         "`s` opens the bundled sample, got {:?}",
-        app.file_path
+        app.env.file_path
     );
     assert!(!app.tasks().is_empty(), "sample must load tasks");
     assert!(!path.exists(), "`s` must not create the cwd file");

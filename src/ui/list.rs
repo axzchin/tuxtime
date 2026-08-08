@@ -25,9 +25,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         header_area,
         theme,
         header::HeaderProps {
-            title: Some(&display_path(&app.file_path)),
+            title: Some(&display_path(&app.env.file_path)),
             // title: None,
-            // file: &display_path(&app.file_path),
+            // file: &display_path(&app.env.file_path),
             count: app.visible_indices().len(),
             sort: app.sort_label(),
             filter: filter_label.as_deref(),

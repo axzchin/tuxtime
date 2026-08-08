@@ -149,8 +149,8 @@ impl Prefs {
     /// (like `share_token` / `share_port`, owned by the capture server) and
     /// prefs changed concurrently by another instance survive instead of
     /// being clobbered by a whole-file rewrite from a stale read.
-    /// `week_start` lives on `App`, not on `Prefs`, so callers must pass it
-    /// in so it is persisted alongside the other preferences.
+    /// `week_start` lives on `App::env`, not on `Prefs`, so callers must pass
+    /// it in so it is persisted alongside the other preferences.
     pub fn save(&self, week_start: crate::app::WeekStart) -> io::Result<()> {
         Config::update(|cfg| {
             cfg.theme = Some(self.theme().name.to_string());
