@@ -484,6 +484,18 @@ impl App {
         self.after_mutation(abs);
     }
 
+    /// Refresh the view after a mutation whose success may or may not carry a
+    /// task to follow: follows `follow` when present, otherwise just
+    /// recomputes. Collapses the tail that two-phase flows (e.g. the
+    /// day-boundary prompt) repeat.
+    pub(crate) fn after_follow(&mut self, follow: Option<usize>) {
+        if let Some(abs) = follow {
+            self.after_mutation(abs);
+        } else {
+            self.recompute_visible();
+        }
+    }
+
     /// Handle a store reconcile that reloaded the file from disk: reset
     /// transient input state and refresh the view, matching the old
     /// `apply_external_state` behavior.

@@ -183,7 +183,11 @@ impl App {
     /// forward to a fresh line for today and start the timer on it. Any timer
     /// running on another task is stopped first (its time captured).
     pub fn day_boundary_new_entry(&mut self, abs: usize) {
-        match self.store.carry_forward_and_start(abs) {
+        // The match evaluates to the follow target: `Some(new)` on success,
+        // `None` on every other path. `after_follow` then refreshes exactly
+        // once — following the new line on success, plain recompute otherwise
+        // — so the success path doesn't recompute twice.
+        let follow = match self.store.carry_forward_and_start(abs) {
             CarryForwardOutcome::CarriedStarted {
                 new,
                 project,
@@ -195,15 +199,22 @@ impl App {
                 let act = activity.map(|a| format!("@{a} ")).unwrap_or_default();
                 self.flash(format!("▶ {proj}{act}{body} — new entry for today"));
                 self.session.last_timer_activity = Instant::now();
-                self.after_mutation(new);
+                Some(new)
             }
             CarryForwardOutcome::Carried { .. } | CarryForwardOutcome::OutOfRange => {
                 self.flash("could not start new entry");
+                None
             }
-            CarryForwardOutcome::Aborted(r) => self.handle_reconcile_abort(r),
-            CarryForwardOutcome::Error(e) => self.flash(format!("carry failed: {e}")),
-        }
-        self.recompute_visible();
+            CarryForwardOutcome::Aborted(r) => {
+                self.handle_reconcile_abort(r);
+                None
+            }
+            CarryForwardOutcome::Error(e) => {
+                self.flash(format!("carry failed: {e}"));
+                None
+            }
+        };
+        self.after_follow(follow);
     }
 
     /// Day-boundary prompt "new entry" choice (add-time path): carry the task
@@ -214,7 +225,9 @@ impl App {
             self.flash(format!("invalid duration: {input}"));
             return;
         }
-        match self.store.carry_forward(abs) {
+        // As in `day_boundary_new_entry`: the match yields the follow target
+        // and the tail refreshes exactly once.
+        let follow = match self.store.carry_forward(abs) {
             CarryForwardOutcome::Carried { new, .. } => {
                 let raw = self.store.task_raw(new).unwrap_or_default();
                 let updated = rebuild_token_line(&raw, "dur:", None, &format!("dur:{secs}"));
@@ -226,22 +239,42 @@ impl App {
                             "added {} — new entry for today",
                             format_duration(secs)
                         ));
-                        self.after_mutation(new);
+                        Some(new)
                     }
-                    EditOutcome::Aborted(r) => self.handle_reconcile_abort(r),
-                    EditOutcome::Error(e) => self.flash(format!("edit failed: {e}")),
-                    EditOutcome::Empty | EditOutcome::OutOfRange | EditOutcome::TermNotFound => {}
+                    EditOutcome::Aborted(r) => {
+                        self.handle_reconcile_abort(r);
+                        None
+                    }
+                    EditOutcome::Error(e) => {
+                        self.flash(format!("edit failed: {e}"));
+                        None
+                    }
+                    EditOutcome::Empty | EditOutcome::OutOfRange | EditOutcome::TermNotFound => {
+                        None
+                    }
                 }
             }
-            CarryForwardOutcome::Aborted(r) => self.handle_reconcile_abort(r),
-            CarryForwardOutcome::OutOfRange => self.flash("task vanished"),
-            CarryForwardOutcome::Error(e) => self.flash(format!("carry failed: {e}")),
+            CarryForwardOutcome::Aborted(r) => {
+                self.handle_reconcile_abort(r);
+                None
+            }
+            CarryForwardOutcome::OutOfRange => {
+                self.flash("task vanished");
+                None
+            }
+            CarryForwardOutcome::Error(e) => {
+                self.flash(format!("carry failed: {e}"));
+                None
+            }
             // `carry_forward` never returns CarriedStarted; the arm exists so
             // the match stays exhaustive if the enum grows a new returner.
             #[allow(unreachable_patterns)]
-            CarryForwardOutcome::CarriedStarted { .. } => self.flash("carry failed"),
-        }
-        self.recompute_visible();
+            CarryForwardOutcome::CarriedStarted { .. } => {
+                self.flash("carry failed");
+                None
+            }
+        };
+        self.after_follow(follow);
     }
 
     /// Toggle timer on the task at `abs` without requiring cursor context.
