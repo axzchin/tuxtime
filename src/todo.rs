@@ -263,8 +263,11 @@ pub fn serialize(tasks: &[Task]) -> String {
 /// `path` is one (preserving the link), otherwise writes to a unique sibling
 /// temporary file (`.{stem}.tmp.{pid}.{n}`) and renames it into place. The
 /// unique tmp name means concurrent writers can't clobber each other's temp
-/// file, and the rename makes the target appear atomically. Shared by the
-/// store, archive, and config persistence.
+/// file, and the rename makes the target appear atomically. Missing parent
+/// directories are created, so a stale path never turns into a silent error
+/// — callers that previously relied on a missing dir failing `persist` will
+/// see the dir appear instead. Shared by the store, archive, and config
+/// persistence.
 pub fn write_atomic(path: &Path, body: &str) -> std::io::Result<()> {
     if path.is_symlink() {
         // Write directly through the symlink to preserve it.

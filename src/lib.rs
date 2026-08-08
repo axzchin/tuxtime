@@ -14,6 +14,7 @@ pub mod interactive;
 pub mod keybinds;
 pub(crate) mod nl;
 pub(crate) mod note;
+pub mod now;
 pub mod recurrence;
 pub mod sample;
 pub(crate) mod search;

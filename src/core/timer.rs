@@ -126,7 +126,7 @@ impl Store {
     }
 
     fn timer_start_inner(&mut self, abs: usize) -> TimerOutcome {
-        let now = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
+        let now = crate::now::now_iso();
         let task = &self.tasks[abs];
         let new_raw = rebuild_token_line(&task.raw, "start:", None, &format!("start:{now}"));
         match todo::parse_line(&new_raw) {

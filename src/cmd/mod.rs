@@ -91,8 +91,7 @@ pub fn run(argv: &[String]) -> Result<Option<i32>> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(e) => return Err(e).with_context(|| format!("reading {}", path.display())),
     };
-    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-    let mut store = Store::open_sync_with_done(path, done, body, today);
+    let mut store = Store::open_sync_with_done(path, done, body, crate::now::today_iso());
 
     let json = args.json;
     let force = args.force;

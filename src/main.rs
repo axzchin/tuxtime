@@ -69,7 +69,7 @@ fn main() -> Result<()> {
             return Err(e).with_context(|| format!("reading {}", path.display()));
         }
     };
-    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let today = tuxtime::now::today_iso();
     let cfg = Config::load();
     let keybinds = KeyBindings::load();
     // Load user-supplied themes before constructing App, so the theme named
@@ -184,8 +184,10 @@ fn run(
     let mut dirty = true;
     while !app.nav.should_quit {
         // Pick up midnight rollover so threshold-hidden tasks reveal
-        // themselves without requiring an app restart.
-        if app.refresh_today(chrono::Local::now().format("%Y-%m-%d").to_string()) {
+        // themselves without requiring an app restart. Recompute each tick
+        // — this is the *current* day, which may differ from the startup
+        // `today` once the clock rolls past midnight.
+        if app.refresh_today(tuxtime::now::today_iso()) {
             dirty = true;
         }
         // Drain the startup archive loader (and pick up external edits to
