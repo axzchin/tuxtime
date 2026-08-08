@@ -14,6 +14,7 @@ mod archive;
 mod external;
 mod history;
 mod mutations;
+mod timer;
 
 pub mod filter;
 pub mod outcome;
@@ -21,7 +22,7 @@ pub mod outcome;
 #[cfg(test)]
 pub(crate) mod test_support;
 
-pub(crate) use mutations::{carry_forward_body, rebuild_token_line};
+pub(crate) use timer::{carry_forward_body, rebuild_token_line};
 
 pub use archive::Archive;
 pub use history::History;
