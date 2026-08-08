@@ -63,10 +63,10 @@ pub struct Config {
 impl Config {
     #[must_use]
     pub fn load() -> Self {
-        let Some(path) = Self::path() else {
-            return Self::default();
-        };
-        Self::load_from(&path)
+        match Self::path() {
+            Some(path) => Self::load_from(&path),
+            None => Self::default(),
+        }
     }
 
     /// Plain whole-file write of an already-built config. This is the bare
@@ -121,10 +121,7 @@ impl Config {
     /// from corrupt files.
     #[must_use]
     pub fn load_from(path: &Path) -> Self {
-        match fs::read_to_string(path) {
-            Ok(s) => parse(&s),
-            Err(_) => Self::default(),
-        }
+        crate::xdg::load_config_file(path, parse)
     }
 
     /// Write a config file to an explicit path. Writes directly through a
@@ -160,8 +157,7 @@ impl Config {
     /// Returns None only when neither `XDG_CONFIG_HOME` nor HOME is set.
     #[must_use]
     pub fn path() -> Option<PathBuf> {
-        let base = crate::xdg::config_home()?;
-        Some(Self::path_in(&base))
+        crate::xdg::tuxtime_path("config.toml")
     }
 
     /// Load config from an explicit path, returning an error on read or parse
@@ -176,7 +172,7 @@ impl Config {
     /// Used by tests to avoid mutating process env.
     #[must_use]
     pub fn path_in(xdg_base: &Path) -> PathBuf {
-        xdg_base.join("tuxtime").join("config.toml")
+        crate::xdg::tuxtime_path_in(xdg_base, "config.toml")
     }
 }
 

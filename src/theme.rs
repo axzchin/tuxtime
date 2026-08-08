@@ -230,7 +230,7 @@ pub fn all() -> &'static [&'static Theme] {
 /// only when neither `XDG_CONFIG_HOME` nor HOME is set.
 #[must_use]
 pub fn themes_dir() -> Option<PathBuf> {
-    Some(crate::xdg::config_home()?.join("tuxtime").join("themes"))
+    crate::xdg::tuxtime_path("themes")
 }
 
 /// Read every `*.toml` file in `dir`, parse it as a theme, and return the
