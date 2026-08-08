@@ -177,3 +177,49 @@ pub(crate) fn resolve_normal_key(
         _ => return None,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::test_support::build_app;
+
+    fn key(c: char) -> KeyEvent {
+        KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)
+    }
+
+    #[test]
+    fn builtin_resolves_plain_control_and_named_keys() {
+        assert_eq!(resolve_builtin_single_key(key('q')), Some(Action::Quit));
+        assert_eq!(
+            resolve_builtin_single_key(key('j')),
+            Some(Action::CursorDown)
+        );
+        assert_eq!(
+            resolve_builtin_single_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)),
+            Some(Action::CursorDown)
+        );
+        assert_eq!(
+            resolve_builtin_single_key(key('t')),
+            Some(Action::TimerStartStop)
+        );
+        assert_eq!(
+            resolve_builtin_single_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL)),
+            Some(Action::OpenCommandPalette)
+        );
+        // Unknown keys resolve to nothing, not a panic.
+        assert_eq!(resolve_builtin_single_key(key('~')), None);
+    }
+
+    #[test]
+    fn gg_chord_fires_cursor_top_on_second_press() {
+        let mut app = build_app("");
+        let keybinds = KeyBindings::default();
+        // First 'g' arms the chord and resolves to nothing.
+        assert_eq!(resolve_normal_key(&mut app, key('g'), &keybinds), None);
+        // Second 'g' completes it.
+        assert_eq!(
+            resolve_normal_key(&mut app, key('g'), &keybinds),
+            Some(Action::CursorTop)
+        );
+    }
+}

@@ -378,6 +378,7 @@ fn strip_comment(line: &str) -> &str {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -458,5 +459,91 @@ mod tests {
     fn path_uses_tuxtime_keybinds_toml() {
         let path = KeyBindings::path_in(Path::new("/tmp/config"));
         assert!(path.ends_with("tuxtime/keybinds.toml"));
+    }
+
+    // ---- parse_key / parse_named_key / parse_key_sequence tables ----
+
+    #[test]
+    fn parses_named_keys_and_aliases() {
+        for (text, expect) in [
+            ("Enter", KeyCode::Enter),
+            ("return", KeyCode::Enter),
+            ("Backspace", KeyCode::Backspace),
+            ("Tab", KeyCode::Tab),
+            ("BackTab", KeyCode::BackTab),
+            ("Shift-Tab", KeyCode::BackTab),
+            ("PageDown", KeyCode::PageDown),
+            ("PgUp", KeyCode::PageUp),
+            ("F12", KeyCode::F(12)),
+            ("f3", KeyCode::F(3)),
+            ("Space", KeyCode::Char(' ')),
+            ("Esc", KeyCode::Esc),
+        ] {
+            assert_eq!(parse_key(text).map(|k| k.code), Some(expect), "{text}");
+        }
+        // Out-of-range function keys and garbage are rejected.
+        assert!(parse_named_key("F25").is_none());
+        assert!(parse_named_key("F0").is_none());
+        assert!(parse_key("").is_none());
+    }
+
+    #[test]
+    fn parses_modifiers_and_normalizes() {
+        // Ctrl- lowercases the code and sets CONTROL.
+        let k = parse_key("Ctrl-H").unwrap();
+        assert_eq!(k.code, KeyCode::Char('h'));
+        assert_eq!(k.modifiers, KeyModifiers::CONTROL);
+        // '+' is accepted as a modifier separator (vim-style).
+        let k = parse_key("ctrl+h").unwrap();
+        assert_eq!(k.code, KeyCode::Char('h'));
+        assert_eq!(k.modifiers, KeyModifiers::CONTROL);
+        // Alt+Shift on an uppercase char: SHIFT is folded away but the
+        // uppercase code is preserved (non-Ctrl keys keep their case so
+        // `Shift-a` stays distinct from `a`).
+        let k = parse_key("Alt-Shift-A").unwrap();
+        assert_eq!(k.code, KeyCode::Char('A'));
+        assert_eq!(k.modifiers, KeyModifiers::ALT);
+        // A modifier on a named key is kept.
+        let k = parse_key("Ctrl-F5").unwrap();
+        assert_eq!(k.code, KeyCode::F(5));
+        assert_eq!(k.modifiers, KeyModifiers::CONTROL);
+        // Unknown modifier and multi-char bare text are rejected.
+        assert!(parse_key("Hyper-x").is_none());
+        assert!(parse_key("ab").is_none());
+    }
+
+    #[test]
+    fn parses_chords_and_sequences() {
+        // Two bare chars are a chord (no modifiers, no separators).
+        assert_eq!(parse_key_sequence("ZZ").unwrap().len(), 2);
+        // Whitespace-separated two-key chords parse too.
+        assert_eq!(parse_key_sequence("g t").unwrap().len(), 2);
+        // More than two keys is rejected.
+        assert!(parse_key_sequence("a b c").is_none());
+        // Named / modified keys are a single key, not a chord.
+        assert_eq!(parse_key_sequence("Enter").unwrap().len(), 1);
+        assert_eq!(parse_key_sequence("Ctrl-P").unwrap().len(), 1);
+        assert!(parse_key_sequence("").is_none());
+    }
+
+    #[test]
+    fn chords_require_a_plain_char_leader() {
+        // A 2-key binding is only accepted when the first key is a plain
+        // char (no modifiers) — Ctrl-led chords are rejected.
+        assert!(Binding::parse(Action::OpenHelp, "g t").is_some());
+        assert!(Binding::parse(Action::OpenHelp, "Ctrl-a b").is_none());
+        assert!(Binding::parse(Action::OpenHelp, "Ctrl-a Ctrl-b").is_none());
+    }
+
+    #[test]
+    fn hash_inside_quotes_is_not_a_comment() {
+        // `#` begins a comment only outside quotes; a binding whose value is
+        // `"#"` must survive strip_comment and bind the '#' key.
+        let bindings = KeyBindings::parse("[normal]\nopen_settings = \"#\"\n");
+        let mut chord = Chord::default();
+        assert_eq!(
+            bindings.resolve_normal(key('#'), &mut chord),
+            Some(ResolvedKey::Action(Action::OpenSettings))
+        );
     }
 }
