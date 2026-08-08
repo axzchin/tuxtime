@@ -6,6 +6,7 @@
 
 use super::*;
 use crate::app::test_support::build_app;
+use crate::recurrence::RecUnit;
 
 #[test]
 fn apply_kv_appends_when_absent() {
