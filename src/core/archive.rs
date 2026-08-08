@@ -590,11 +590,17 @@ mod tests {
     #[test]
     fn persist_reports_write_failure() {
         let mut store = build_store("a\n");
-        let missing_parent = std::env::temp_dir()
-            .join(format!("tuxtime-missing-parent-{}", std::process::id()))
-            .join("todo.txt");
-        let _ = std::fs::remove_dir_all(missing_parent.parent().unwrap());
-        store.file_path = missing_parent;
+        // `write_atomic` creates missing parent directories, so a missing
+        // parent is no longer a failure. Use a target whose *parent is a
+        // regular file* instead — creating that "directory" genuinely fails.
+        let dir =
+            std::env::temp_dir().join(format!("tuxtime-parent-is-file-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let not_a_dir = dir.join("file.txt");
+        std::fs::write(&not_a_dir, "x").unwrap();
+        store.file_path = not_a_dir.join("todo.txt");
         assert!(store.persist().is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

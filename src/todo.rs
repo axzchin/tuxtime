@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Why a line couldn't be parsed into a `Task`. Only `Empty` exists today —
 /// the parser is permissive enough that almost anything else produces a
@@ -259,9 +259,30 @@ pub fn serialize(tasks: &[Task]) -> String {
     out
 }
 
-/// Atomically write `body` to `path` (write to .tmp sibling, rename).
+/// Atomically write `body` to `path`. Writes directly through a symlink when
+/// `path` is one (preserving the link), otherwise writes to a unique sibling
+/// temporary file (`.{stem}.tmp.{pid}.{n}`) and renames it into place. The
+/// unique tmp name means concurrent writers can't clobber each other's temp
+/// file, and the rename makes the target appear atomically. Shared by the
+/// store, archive, and config persistence.
 pub fn write_atomic(path: &Path, body: &str) -> std::io::Result<()> {
-    let tmp = path.with_extension("tmp");
+    if path.is_symlink() {
+        // Write directly through the symlink to preserve it.
+        return std::fs::write(path, body);
+    }
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let stem = path
+        .file_name()
+        .map_or_else(|| "file".to_string(), |n| n.to_string_lossy().into_owned());
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let tmp_name = format!(".{stem}.tmp.{}.{}", std::process::id(), n);
+    let tmp = path
+        .parent()
+        .map_or_else(|| PathBuf::from(&tmp_name), |p| p.join(&tmp_name));
     std::fs::write(&tmp, body)?;
     std::fs::rename(&tmp, path)?;
     Ok(())
@@ -825,5 +846,47 @@ mod tests {
         assert_eq!(parsed[0].log.as_deref(), Some("2026-08-06"));
         let serialized = serialize(&parsed);
         assert_eq!(serialized, raw);
+    }
+
+    // ── write_atomic ────────────────────────────────────────────────────
+
+    #[test]
+    fn write_atomic_writes_and_creates_parent_dirs() {
+        let dir =
+            std::env::temp_dir().join(format!("tuxtime-atomic-{}-{}", std::process::id(), line!()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("nested").join("todo.txt");
+        write_atomic(&path, "one\ntwo\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "one\ntwo\n");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // Only meaningful where symlinks exist (not on Windows without
+    // privileges); guards the symlink-preserving branch of write_atomic.
+    #[cfg(unix)]
+    #[test]
+    fn write_atomic_preserves_symlinks() {
+        let dir = std::env::temp_dir().join(format!(
+            "tuxtime-atomic-symlink-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("target.txt");
+        let link = dir.join("link.txt");
+        std::fs::write(&target, "old").unwrap();
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        write_atomic(&link, "new").unwrap();
+        // The link must still be a symlink, and the target must have the new
+        // content (not a replaced link file).
+        assert!(
+            std::fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "new");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

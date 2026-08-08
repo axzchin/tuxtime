@@ -124,33 +124,12 @@ impl Config {
         crate::xdg::load_config_file(path, parse)
     }
 
-    /// Write a config file to an explicit path. Writes directly through a
-    /// symlink when the path is one (preserving the link), otherwise uses
-    /// atomic tmp-then-rename so concurrent writers don't clobber each other.
+    /// Write a config file to an explicit path. Delegates to the shared
+    /// atomic writer, which writes through a symlink when the path is one
+    /// (preserving the link) and otherwise uses a unique tmp name + rename so
+    /// concurrent writers don't clobber each other.
     pub fn save_to(&self, path: &Path) -> io::Result<()> {
-        let body = serialize(self);
-        if path.is_symlink() {
-            // Write directly through the symlink to preserve it.
-            return fs::write(path, body);
-        }
-        // Atomic write: tmp-then-rename.
-        use std::sync::atomic::{AtomicU64, Ordering};
-        static COUNTER: AtomicU64 = AtomicU64::new(0);
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        let stem = path.file_name().map_or_else(
-            || "config".to_string(),
-            |n| n.to_string_lossy().into_owned(),
-        );
-        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let tmp_name = format!(".{stem}.tmp.{}.{}", std::process::id(), n);
-        let tmp = path
-            .parent()
-            .map_or_else(|| PathBuf::from(&tmp_name), |p| p.join(&tmp_name));
-        fs::write(&tmp, body)?;
-        fs::rename(&tmp, path)?;
-        Ok(())
+        crate::todo::write_atomic(path, &serialize(self))
     }
 
     /// Resolve `${XDG_CONFIG_HOME:-$HOME/.config}/tuxtime/config.toml`.
