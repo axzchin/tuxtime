@@ -11,7 +11,7 @@
 
 use std::fs;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Open-or-create `path` and take an exclusive advisory lock on it. The
 /// returned handle holds the lock for its lifetime — drop it (or the process
@@ -28,4 +28,15 @@ pub fn acquire(path: &Path) -> io::Result<fs::File> {
         .open(path)?;
     file.lock()?;
     Ok(file)
+}
+
+/// Join `name` into `path`'s parent directory, falling back to the bare
+/// `name` when `path` has no parent. Every lock sidecar (`inbox.txt
+/// .tuxtime-lock`, `config.toml.tuxtime-lock`) is a sibling of its data file,
+/// so callers use this to derive the sidecar path instead of re-joining
+/// parents by hand.
+#[must_use]
+pub fn sibling(path: &Path, name: &str) -> PathBuf {
+    path.parent()
+        .map_or_else(|| PathBuf::from(name), |p| p.join(name))
 }

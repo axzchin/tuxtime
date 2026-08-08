@@ -22,7 +22,7 @@ pub const LOCK_FILENAME: &str = "inbox.txt.tuxtime-lock";
 /// the current directory if `todo_path` has no parent.
 #[must_use]
 pub fn path_for(todo_path: &Path) -> PathBuf {
-    sibling(todo_path, FILENAME)
+    crate::file_lock::sibling(todo_path, FILENAME)
 }
 
 /// Staging file used during drain. The merge step renames
@@ -34,7 +34,7 @@ pub fn path_for(todo_path: &Path) -> PathBuf {
 /// it as if it were a regular inbox.
 #[must_use]
 pub fn staging_path_for(todo_path: &Path) -> PathBuf {
-    sibling(todo_path, STAGING_FILENAME)
+    crate::file_lock::sibling(todo_path, STAGING_FILENAME)
 }
 
 /// Advisory-lock file guarding `inbox.txt`. Held briefly by both the
@@ -46,7 +46,7 @@ pub fn staging_path_for(todo_path: &Path) -> PathBuf {
 /// reclaimed.
 #[must_use]
 pub fn lock_path_for(todo_path: &Path) -> PathBuf {
-    sibling(todo_path, LOCK_FILENAME)
+    crate::file_lock::sibling(todo_path, LOCK_FILENAME)
 }
 
 /// Acquire the inbox lock. The returned handle holds an exclusive
@@ -58,12 +58,6 @@ pub fn lock_path_for(todo_path: &Path) -> PathBuf {
 pub fn acquire_lock(todo_path: &Path) -> std::io::Result<std::fs::File> {
     let path = lock_path_for(todo_path);
     crate::file_lock::acquire(&path)
-}
-
-fn sibling(todo_path: &Path, name: &str) -> PathBuf {
-    todo_path
-        .parent()
-        .map_or_else(|| PathBuf::from(name), |p| p.join(name))
 }
 
 /// Full save pipeline for one free-text line: natural-language rewrite,

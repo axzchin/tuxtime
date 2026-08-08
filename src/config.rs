@@ -165,11 +165,7 @@ fn lock_path_for(path: &Path) -> PathBuf {
         || "config.toml".to_string(),
         |n| n.to_string_lossy().into_owned(),
     );
-    let locked = format!("{name}.tuxtime-lock");
-    match path.parent() {
-        Some(p) => p.join(locked),
-        None => PathBuf::from(locked),
-    }
+    crate::file_lock::sibling(path, &format!("{name}.tuxtime-lock"))
 }
 
 /// Acquire an exclusive advisory lock on the config's sidecar lock file,
