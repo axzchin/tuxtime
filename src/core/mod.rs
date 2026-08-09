@@ -191,6 +191,19 @@ impl Store {
         self.tasks.iter().any(|t| t.done)
     }
 
+    /// True when any task (live or archived) carries time logged for the
+    /// store's current `today`. This is the signal that time capture has
+    /// happened this day — a fresh launch with nothing logged today means the
+    /// user may have worked for hours outside the app, so the idle nudge
+    /// should fire immediately instead of granting a fresh grace period.
+    #[must_use]
+    pub fn has_time_logged_today(&self) -> bool {
+        let check = |t: &Task| {
+            t.log.as_deref() == Some(self.today.as_str()) && t.dur.unwrap_or(0) > 0
+        };
+        self.tasks.iter().any(check) || self.archive.tasks().iter().any(check)
+    }
+
     /// Update the cached "today". Returns `true` iff the value changed, so the
     /// caller knows to recompute any date-dependent view state.
     pub fn set_today(&mut self, today: String) -> bool {

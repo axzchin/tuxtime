@@ -6,7 +6,7 @@
 //! nudge thresholds.
 
 use super::session::DayBoundaryAction;
-use super::{App, Mode, format_duration, parse_duration_input};
+use super::{App, IdleReason, Mode, format_duration, parse_duration_input};
 use crate::core::outcome::{CarryForwardOutcome, EditOutcome, TimerOutcome, TimerQuitOutcome};
 use crate::core::rebuild_token_line;
 use crate::todo::Task;
@@ -76,6 +76,23 @@ impl App {
         ) {
             return false;
         }
+        // Launch-time backdate: if nothing has been tracked today and no
+        // timer is running, the user may have just reopened the app after a
+        // long gap spent elsewhere (email, court, drafting in another app).
+        // Treat the idle clock as already past the threshold so the very
+        // first tick nudges — the app must not hand out a fresh 15-minute
+        // grace period right after the longest, most billable gaps. Applied
+        // once per session; any later timer activity resets the clock and
+        // the reason.
+        if !self.session.idle_backdated {
+            self.session.idle_backdated = true;
+            if !self.timer_running() && !self.store.has_time_logged_today() {
+                let past = self.prefs.idle_nudge_seconds.saturating_add(1);
+                self.session.last_timer_activity =
+                    Instant::now() - std::time::Duration::from_secs(past);
+                self.session.idle_reason = IdleReason::UntrackedDay;
+            }
+        }
         let idle_secs = self.session.last_timer_activity.elapsed().as_secs();
         // Idle nudge: a full-screen popup that clears the draft/selection and
         // forces the mode back to Normal. Firing it over Insert, Search, the
@@ -110,6 +127,15 @@ impl App {
             self.session.long_timer_nudge_active = false;
         }
         fired || (was_active != self.session.long_timer_nudge_active)
+    }
+
+    /// Record a timer activity (start / stop / manual add): resets the
+    /// idle-nudge clock and marks the idle reason back to the ordinary
+    /// timer-stopped case (a real capture happened, so "nothing tracked
+    /// today" no longer applies).
+    pub(crate) fn note_timer_activity(&mut self) {
+        self.session.last_timer_activity = Instant::now();
+        self.session.idle_reason = IdleReason::TimerStopped;
     }
 
     /// Dismiss any overlay/dialog mode back to Normal, discarding transient
@@ -155,7 +181,7 @@ impl App {
         }
         // Timer is running, so the idle nudge can't fire; reset the activity
         // clock anyway so a later stop keeps the nudge cadence sane.
-        self.session.last_timer_activity = Instant::now();
+        self.note_timer_activity();
     }
 
     /// `[d]iscard gap` on the stale-timer prompt: stop the timer WITHOUT
@@ -181,7 +207,7 @@ impl App {
         match self.store.edit_line(abs, &updated) {
             EditOutcome::Saved { abs } => {
                 self.flash("discarded unrecorded gap — no time added");
-                self.session.last_timer_activity = Instant::now();
+                self.note_timer_activity();
                 self.after_mutation(abs);
             }
             EditOutcome::Aborted(r) => self.handle_reconcile_abort(r),
@@ -320,7 +346,7 @@ impl App {
                         ));
                         // Adding time is a timer activity: reset the idle-nudge
                         // clock so the popup doesn't re-fire right after.
-                        self.session.last_timer_activity = Instant::now();
+                        self.note_timer_activity();
                         Some(new)
                     }
                     EditOutcome::Aborted(r) => {
@@ -372,7 +398,7 @@ impl App {
                 let proj = project.map(|p| format!("+{p} ")).unwrap_or_default();
                 let act = activity.map(|a| format!("@{a} ")).unwrap_or_default();
                 self.flash(format!("▶ {proj}{act}— {body}"));
-                self.session.last_timer_activity = Instant::now();
+                self.note_timer_activity();
             }
             TimerOutcome::Stopped {
                 elapsed_secs,
@@ -388,7 +414,7 @@ impl App {
                 let proj = project.map(|p| format!("+{p} ")).unwrap_or_default();
                 let act = activity.map(|a| format!("@{a} ")).unwrap_or_default();
                 self.flash(format!("■ {proj}{act}{body} — {elapsed} (total {total})"));
-                self.session.last_timer_activity = Instant::now();
+                self.note_timer_activity();
             }
             // A midnight-crossing stop was split into one line per day; the
             // flash reports the per-day breakdown so the user sees where the
@@ -415,7 +441,7 @@ impl App {
                 self.flash(format!(
                     "■ {proj}{act}{body} — split across midnight: {days} ({elapsed} total {total})"
                 ));
-                self.session.last_timer_activity = Instant::now();
+                self.note_timer_activity();
             }
             TimerOutcome::Switched {
                 from_elapsed_secs,
@@ -435,7 +461,7 @@ impl App {
                 let from_proj = from_project.map(|p| format!("+{p}")).unwrap_or_default();
                 let from_act = from_activity.map(|a| format!("@{a}")).unwrap_or_default();
                 self.flash(format!("■ {from_proj}{from_act} {from_elapsed} (total {from_total}) · ▶ {to_proj}{to_act} {to_body}"));
-                self.session.last_timer_activity = Instant::now();
+                self.note_timer_activity();
             }
             TimerOutcome::OutOfRange => self.flash("no task selected"),
             TimerOutcome::Aborted(r) => self.handle_reconcile_abort(r),
@@ -469,7 +495,7 @@ impl App {
                 self.flash(format!(
                     "interrupted {proj}{act}{body} ({elapsed}) — enter new task"
                 ));
-                self.session.last_timer_activity = Instant::now();
+                self.note_timer_activity();
                 // Open a blank Insert dialog for the interruption entry.
                 self.session.manual_time_entry = true;
                 self.session.auto_start_on_save = true;
@@ -478,11 +504,11 @@ impl App {
                 self.selection.exit_edit();
             }
             TimerOutcome::Aborted(r) => {
-                self.session.last_timer_activity = Instant::now();
+                self.note_timer_activity();
                 self.handle_reconcile_abort(r);
             }
             TimerOutcome::Error(e) => {
-                self.session.last_timer_activity = Instant::now();
+                self.note_timer_activity();
                 self.flash(format!("timer: {e}"));
             }
             _ => {}
@@ -537,7 +563,7 @@ impl App {
                 let body = crate::todo::body_only(&updated);
                 self.flash(format!("added {added} — {body} (total {total_str})"));
                 // Adding time is a timer activity: reset the idle-nudge clock.
-                self.session.last_timer_activity = Instant::now();
+                self.note_timer_activity();
                 self.after_mutation(abs);
             }
             EditOutcome::Aborted(r) => self.handle_reconcile_abort(r),
@@ -815,7 +841,7 @@ mod tests {
     #[test]
     fn stale_timer_not_detected_under_threshold() {
         let app = build_app(&format!("Draft +Smith start:{}\n", stale_start(60)));
-        assert!(app.stale_timer_at_startup() == false);
+        assert!(!app.stale_timer_at_startup());
     }
 
     #[test]
@@ -869,6 +895,77 @@ mod tests {
         assert_eq!(app.nav.mode, Mode::Normal);
         assert_eq!(app.nav.view, View::Timesheet, "pre-nudge view restored");
         assert!(app.session.pre_nudge_view.is_none());
+    }
+
+    // ---- launch-time idle backdate (nothing tracked today) ----
+
+    /// A fresh launch with no time tracked today must backdate the idle clock
+    /// so the first Normal-mode tick nudges immediately — no grace period
+    /// after hours spent outside the app.
+    #[test]
+    fn check_nudges_backdates_idle_when_nothing_tracked_today() {
+        let mut app = build_app("Buy milk\n");
+        assert!(!app.timer_running());
+        assert!(
+            !app.store.has_time_logged_today(),
+            "precondition: nothing tracked today"
+        );
+
+        assert!(app.check_nudges());
+
+        assert!(app.session.idle_backdated);
+        assert_eq!(
+            app.session.idle_reason,
+            IdleReason::UntrackedDay,
+            "popup message should say nothing tracked today"
+        );
+        assert_eq!(app.nav.mode, Mode::IdleNudge, "first tick must nudge");
+    }
+
+    /// When time has already been logged today, no backdate happens — the
+    /// idle clock starts fresh and the nudge must not fire immediately.
+    #[test]
+    fn check_nudges_does_not_backdate_when_time_tracked_today() {
+        let mut app = build_app("2026-05-06 Work +X @dev dur:600 log:2026-05-06\n");
+        assert!(app.store.has_time_logged_today());
+
+        assert!(!app.check_nudges());
+
+        assert!(app.session.idle_backdated, "flag set (one-shot) but no nudge");
+        assert_eq!(
+            app.session.idle_reason,
+            IdleReason::TimerStopped,
+            "reason must stay the ordinary timer-stopped case"
+        );
+        assert_eq!(app.nav.mode, Mode::Normal);
+    }
+
+    /// A running timer must also suppress the backdate (the timer is the
+    /// activity — the user is mid-session, not idle).
+    #[test]
+    fn check_nudges_does_not_backdate_when_timer_running() {
+        let mut app = build_app(&format!("Draft +Smith start:{}\n", stale_start(60)));
+        assert!(app.timer_running());
+
+        assert!(!app.check_nudges());
+
+        assert_eq!(app.session.idle_reason, IdleReason::TimerStopped);
+        assert_eq!(app.nav.mode, Mode::Normal);
+    }
+
+    /// Any real timer activity flips the reason back to the ordinary case,
+    /// so a later idle nudge doesn't keep claiming "nothing tracked today".
+    #[test]
+    fn note_timer_activity_resets_idle_reason() {
+        let mut app = build_app("Task\n");
+        app.session.idle_reason = IdleReason::UntrackedDay;
+        app.session.last_timer_activity =
+            std::time::Instant::now() - std::time::Duration::from_secs(901);
+
+        app.toggle_timer_at(0); // start
+
+        assert_eq!(app.session.idle_reason, IdleReason::TimerStopped);
+        assert!(app.session.last_timer_activity.elapsed().as_secs() < 5);
     }
 
     // ---- manual entries reset the idle-nudge clock ----

@@ -123,12 +123,21 @@ pub(crate) fn draw_overlays(
             let r = overlay::message_rect(area);
             frame.render_widget(Clear, r);
             let theme = app.theme();
+            // The message speaks to the actual failure mode: a relaunch after
+            // hours with nothing tracked (UntrackedDay) is a different prompt
+            // than the ordinary "you stopped the timer and didn't start one".
+            let message = match app.session.idle_reason {
+                crate::app::IdleReason::UntrackedDay => {
+                    "Nothing tracked yet today — working without a timer?"
+                }
+                crate::app::IdleReason::TimerStopped => "No timer running!",
+            };
             msgbox::render_message_box(
                 frame,
                 r,
                 theme,
                 " ⏰ Idle Nudge ",
-                "No timer running!",
+                message,
                 "[N]ew entry  [D]ismiss",
             );
         }

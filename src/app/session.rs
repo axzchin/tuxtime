@@ -6,6 +6,19 @@ use std::time::Instant;
 
 use super::types::View;
 
+/// Why the idle nudge is (or would be) showing. Drives the popup message so
+/// it speaks to the actual failure mode instead of always saying the same
+/// thing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IdleReason {
+    /// A timer was stopped and no new one started within the threshold — the
+    /// classic "forgot to start the next timer" case.
+    TimerStopped,
+    /// Nothing has been tracked today at all (e.g. the app just relaunched
+    /// after a long gap spent in other apps).
+    UntrackedDay,
+}
+
 /// What the day-boundary prompt's "new entry" choice should do after the
 /// fresh line is created (one line per task-day, tuxtime-spec.md §3.5).
 #[derive(Debug, Clone)]
@@ -41,6 +54,12 @@ pub struct Session {
     /// Source task index for the upgraded `N` carry-forward insert. Cleared
     /// on save or cancel.
     pub carry_forward_from: Option<usize>,
+    /// True once the launch-time idle backdate has been applied (nothing
+    /// tracked today → treat the idle clock as already past the threshold so
+    /// the first tick nudges). One-shot per session.
+    pub idle_backdated: bool,
+    /// Why the idle nudge is (or would be) showing; drives the popup text.
+    pub idle_reason: IdleReason,
 }
 
 impl Session {
@@ -54,6 +73,8 @@ impl Session {
             manual_time_entry: false,
             pending_day_boundary: None,
             carry_forward_from: None,
+            idle_backdated: false,
+            idle_reason: IdleReason::TimerStopped,
         }
     }
 }

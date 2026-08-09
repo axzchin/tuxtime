@@ -98,7 +98,7 @@ impl App {
                     // Logging time counts as timer activity: reset the idle-
                     // nudge clock so the popup doesn't fire moments after the
                     // user just did the right thing (a manual entry).
-                    self.session.last_timer_activity = std::time::Instant::now();
+                    self.note_timer_activity();
                 }
                 if self.session.auto_start_on_save {
                     self.session.auto_start_on_save = false;
