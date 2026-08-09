@@ -111,6 +111,12 @@ pub fn apply_action(app: &mut App, action: Action) {
             app.save_prefs();
         }
         Action::ChangeWeekStart => app.cycle_week_start(),
+        // Deliberately not `app.dismiss_nudge()`: that helper also restores
+        // the pre-nudge view, which this palette-only action has no business
+        // doing (no nudge popup is showing when the palette is open — a
+        // nudge only fires from Normal mode, where the palette can't be
+        // reached). The clock reset is the whole point: suppress the next
+        // immediate re-fire.
         Action::DismissNudge => {
             app.nav.enter_normal();
             app.session.last_timer_activity = std::time::Instant::now();
