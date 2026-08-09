@@ -283,7 +283,11 @@ pub(crate) fn handle_prompt(app: &mut App, key: KeyEvent) {
                 Mode::PromptIdleNudge | Mode::PromptLongTimerNudge
             ) {
                 // Entered with push_mode (Settings or the mode the command
-                // palette returned to), so pop restores the caller.
+                // palette returned to), so pop restores the caller. This can
+                // also fire while the nudge selection is open (palette →
+                // ConfigureIdleNudge pushes over PickNudgeTask) — the pop
+                // lands back on the selection, which is exactly right, so
+                // this branch must stay ahead of the nudge_picker check.
                 app.nav.pop_mode()
             } else if app.nav.mode() == Mode::PromptRenameProject {
                 Mode::ManageProjects

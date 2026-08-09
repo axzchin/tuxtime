@@ -1885,6 +1885,34 @@ fn nudge_select_fs_enter_returns_to_selection() {
     assert!(app.session.nudge_picker.is_some());
 }
 
+/// A nudge-threshold prompt pushed over the selection (command palette →
+/// ConfigureIdleNudge while the picker is open) must pop back to the
+/// selection, not to the nudge popup or Normal — the pop branch of the
+/// prompt return-mode chain stays ahead of the nudge_picker check.
+#[test]
+fn nudge_select_nudge_prompt_pushed_over_selection_pops_back() {
+    let mut app = crate::app::test_support::build_app("a\nb\nc\n");
+    app.nav.mode = Mode::IdleNudge;
+    handle_idle_nudge(&mut app, key('s'));
+    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+
+    // Model the palette's ConfigureIdleNudge: pushed over the selection
+    // while session.nudge_picker is still set.
+    app.nav.push_mode(Mode::PromptIdleNudge);
+    assert!(app.session.nudge_picker.is_some());
+    handle_prompt(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+
+    assert_eq!(
+        app.nav.mode,
+        Mode::PickNudgeTask,
+        "pop restores the selection, not Normal"
+    );
+    assert!(
+        app.session.nudge_picker.is_some(),
+        "selection survives the popped nudge prompt"
+    );
+}
+
 /// `M` from the start-timer selection deliberately switches recovery
 /// action — manual entry — so the selection ends (unlike `+`/`c`/`fs`,
 /// which are detours on the way to the same choice).
