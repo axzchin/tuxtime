@@ -99,11 +99,7 @@ impl App {
         if self.nav.mode == Mode::PickSavedFilter {
             self.saved.picker.restore = None;
         }
-        if self.session.nudge_picker.is_some() {
-            self.nav.mode = Mode::PickNudgeTask;
-        } else {
-            self.nav.mode = Mode::Normal;
-        }
+        self.nav.mode = picker_return_mode(self);
     }
 
     /// Cancel an open picker. Clears only the filter that was being picked
@@ -120,11 +116,7 @@ impl App {
             _ => {}
         }
         self.nav.cursor = 0;
-        if self.session.nudge_picker.is_some() {
-            self.nav.mode = Mode::PickNudgeTask;
-        } else {
-            self.nav.mode = Mode::Normal;
-        }
+        self.nav.mode = picker_return_mode(self);
         self.recompute_visible();
     }
 
@@ -198,6 +190,16 @@ impl App {
             let name = f.name.clone();
             self.flash(format!("{}  ({}/{})", name, self.saved.picker.idx + 1, len));
         }
+    }
+}
+
+/// Where a filter picker returns: the nudge selection when the picker was
+/// opened from it (a filter is part of choosing a task), else Normal.
+fn picker_return_mode(app: &App) -> Mode {
+    if app.session.nudge_picker.is_some() {
+        Mode::PickNudgeTask
+    } else {
+        Mode::Normal
     }
 }
 

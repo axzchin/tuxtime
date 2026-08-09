@@ -1677,9 +1677,9 @@ fn nudge_select_fp_filter_then_enter_starts_timer() {
         "committing the filter returns to the selection"
     );
     assert_eq!(app.filter().project.as_deref(), Some("Acme"));
-    assert_eq!(app.visible_indices().len(), 2, "only the Acme tasks remain");
-
-    // Enter on the highlighted task starts its timer and finishes.
+    assert_eq!(app.visible_indices().len(), 2, "only the Acme tasks remain"); // Enter on the highlighted task starts its timer and finishes. The
+    // filter commit leaves the cursor at the top of the filtered list, so
+    // the highlighted task is the first Acme task (abs 0).
     handle_pick_nudge_task(
         &mut app,
         KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
