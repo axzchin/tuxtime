@@ -1076,7 +1076,11 @@ mod tests {
         app.enter_nudge_picker(NudgePickAction::StartTimer);
 
         assert_eq!(app.nav.mode, Mode::PickNudgeTask);
-        let picker = app.session.nudge_picker.as_ref().unwrap();
+        let picker = app
+            .session
+            .nudge_picker
+            .as_ref()
+            .expect("picker must be open");
         assert_eq!(picker.abs_list, vec![0, 1], "done tasks must be excluded");
         assert_eq!(picker.cursor, 1, "seed on the selected task");
         assert_eq!(picker.action, NudgePickAction::StartTimer);
