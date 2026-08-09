@@ -307,8 +307,18 @@ pub(crate) fn handle_prompt(app: &mut App, key: KeyEvent) {
                 Mode::PromptContext => app.toggle_context_on_current(&value),
                 Mode::PromptSaveFilter => app.save_current_filter_as(&value),
                 Mode::PromptAddTime => {
-                    app.session.from_nudge = false;
                     app.add_time_to_current_from_input(&value);
+                    // A failed add (invalid duration, write error) from the
+                    // nudge's recovery flow must not drop the reminder: if
+                    // nothing was recorded and the flow didn't defer to the
+                    // day-boundary prompt, return to the popup instead of
+                    // Normal. A real save cleared the flag inside
+                    // `add_time_to_current_at`, so the flag still being set
+                    // here means the capture did not land.
+                    if app.session.from_nudge && app.nav.mode() == Mode::Normal {
+                        app.session.from_nudge = false;
+                        app.nav.set_mode(Mode::IdleNudge);
+                    }
                 }
                 Mode::PromptIdleNudge => {
                     if let Ok(mins) = value.parse::<u64>() {
@@ -420,6 +430,8 @@ pub(crate) fn handle_idle_nudge(app: &mut App, key: KeyEvent) {
             app.session.last_timer_activity = std::time::Instant::now();
         }
         KeyCode::Char('D') | KeyCode::Esc => {
+            // Dismissing the nudge ends any recovery flow for good.
+            app.session.from_nudge = false;
             app.nav.enter_normal();
             if let Some(v) = app.session.pre_nudge_view.take() {
                 app.set_view(v);
@@ -568,7 +580,16 @@ pub(crate) fn handle_day_boundary(app: &mut App, key: KeyEvent) {
             if let Some((abs, action)) = pending {
                 match action {
                     DayBoundaryAction::StartTimer => app.toggle_timer_at(abs),
-                    DayBoundaryAction::AddTime { input } => app.add_time_to_current_at(abs, &input),
+                    DayBoundaryAction::AddTime { input } => {
+                        app.add_time_to_current_at(abs, &input);
+                        // Same guarantee as the prompt: a failed resolution
+                        // (invalid duration, write error) of a nudge-born add
+                        // keeps the reminder alive.
+                        if app.session.from_nudge && app.nav.mode() == Mode::Normal {
+                            app.session.from_nudge = false;
+                            app.nav.set_mode(Mode::IdleNudge);
+                        }
+                    }
                 }
             }
         }
@@ -582,6 +603,12 @@ pub(crate) fn handle_day_boundary(app: &mut App, key: KeyEvent) {
                     DayBoundaryAction::StartTimer => app.day_boundary_new_entry(abs),
                     DayBoundaryAction::AddTime { input } => {
                         app.day_boundary_new_entry_add_time(abs, &input);
+                        // Same guarantee as the prompt: a failed resolution
+                        // of a nudge-born add keeps the reminder alive.
+                        if app.session.from_nudge && app.nav.mode() == Mode::Normal {
+                            app.session.from_nudge = false;
+                            app.nav.set_mode(Mode::IdleNudge);
+                        }
                     }
                 }
             }
@@ -589,6 +616,12 @@ pub(crate) fn handle_day_boundary(app: &mut App, key: KeyEvent) {
         KeyCode::Esc => {
             app.session.pending_day_boundary.take();
             app.nav.pop_mode();
+            // Esc from a day-boundary prompt reached during a nudge recovery
+            // returns to the popup — and never leaks the flag into Normal.
+            if app.session.from_nudge {
+                app.session.from_nudge = false;
+                app.nav.set_mode(Mode::IdleNudge);
+            }
         }
         _ => {}
     }

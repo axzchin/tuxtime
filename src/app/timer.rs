@@ -284,6 +284,9 @@ impl App {
         };
         match picker.action {
             NudgePickAction::StartTimer => {
+                // Starting a timer is itself a recovery — never inherit a
+                // stale flag from a previous flow.
+                self.session.from_nudge = false;
                 self.toggle_timer_at(abs);
                 self.nav.enter_normal();
                 if let Some(v) = self.session.pre_nudge_view.take() {
@@ -532,6 +535,9 @@ impl App {
                         // Adding time is a timer activity: reset the idle-nudge
                         // clock so the popup doesn't re-fire right after.
                         self.note_timer_activity();
+                        // A real capture completes any nudge recovery flow —
+                        // the reminder's job is done.
+                        self.session.from_nudge = false;
                         Some(new)
                     }
                     EditOutcome::Aborted(r) => {
@@ -749,6 +755,9 @@ impl App {
                 self.flash(format!("added {added} — {body} (total {total_str})"));
                 // Adding time is a timer activity: reset the idle-nudge clock.
                 self.note_timer_activity();
+                // A real capture completes any nudge recovery flow (the
+                // flag is only ever set on the nudge's own add-time path).
+                self.session.from_nudge = false;
                 self.after_mutation(abs);
             }
             EditOutcome::Aborted(r) => self.handle_reconcile_abort(r),

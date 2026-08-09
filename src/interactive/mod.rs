@@ -32,8 +32,8 @@ pub(crate) use key_resolve::resolve_normal_key;
 #[cfg(test)]
 pub(crate) use overlays::{
     handle_day_boundary, handle_idle_nudge, handle_long_timer_nudge, handle_manage_projects,
-    handle_pick_nudge_task, handle_pick_timesheet_date, handle_prompt, handle_review_nudge,
-    handle_search, handle_settings, handle_stale_timer, handle_welcome,
+    handle_manual_entry_choice, handle_pick_nudge_task, handle_pick_timesheet_date, handle_prompt,
+    handle_review_nudge, handle_search, handle_settings, handle_stale_timer, handle_welcome,
 };
 #[cfg(test)]
 pub(crate) use timesheet_handler::handle_timesheet_keys;

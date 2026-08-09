@@ -1718,6 +1718,147 @@ fn idle_nudge_m_add_time_esc_returns_to_nudge() {
     assert!(!app.session.from_nudge);
 }
 
+/// An INVALID duration submitted at the nudge's add-time prompt must not
+/// drop the reminder either: nothing was recorded, so the failed attempt
+/// returns to the popup instead of Normal.
+#[test]
+fn idle_nudge_m_add_time_invalid_duration_returns_to_nudge() {
+    let mut app = build_app();
+    app.nav.mode = Mode::IdleNudge;
+
+    handle_idle_nudge(&mut app, key('M'));
+    handle_pick_nudge_task(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(app.nav.mode, Mode::PromptAddTime);
+    assert!(app.session.from_nudge);
+
+    app.draft_set("not-a-duration".into());
+    handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(
+        app.nav.mode,
+        Mode::IdleNudge,
+        "a failed add must keep the reminder alive"
+    );
+    assert!(
+        !app.session.from_nudge,
+        "flag consumed by the failed attempt"
+    );
+    assert!(
+        app.flash_active()
+            .is_some_and(|m| m.contains("invalid duration")),
+        "the failure reason must be visible"
+    );
+    assert_eq!(app.tasks().len(), 3, "nothing may be saved");
+    assert!(app.tasks()[0].raw.contains('a'), "task untouched");
+}
+
+/// A VALID duration submitted at the nudge's add-time prompt completes the
+/// recovery: time lands and the flow exits to Normal.
+#[test]
+fn idle_nudge_m_add_time_valid_exits_to_normal() {
+    let mut app = build_app();
+    app.nav.mode = Mode::IdleNudge;
+
+    handle_idle_nudge(&mut app, key('M'));
+    handle_pick_nudge_task(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    app.draft_set("30".into());
+    handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(
+        app.nav.mode,
+        Mode::Normal,
+        "a real add exits the nudge flow"
+    );
+    assert!(!app.session.from_nudge);
+    assert!(
+        app.tasks()[0].raw.contains("dur:1800"),
+        "30m must be recorded: {}",
+        app.tasks()[0].raw
+    );
+}
+
+/// When the nudge's add-time prompt defers to the day-boundary prompt and
+/// the resolution then FAILS (the entered duration is invalid), the reminder
+/// must still survive — the flag must not be dropped mid-flow.
+#[test]
+fn idle_nudge_m_add_time_day_boundary_invalid_returns_to_nudge() {
+    let mut app = build_app_with_archive("Draft +Smith dur:7200 log:2026-05-05\n", None);
+    app.nav.mode = Mode::IdleNudge;
+
+    handle_idle_nudge(&mut app, key('M'));
+    handle_pick_nudge_task(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    // Validation is deferred until the day-boundary prompt resolves.
+    app.draft_set("oops".into());
+    handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(app.nav.mode, Mode::PromptDayBoundary);
+
+    handle_day_boundary(&mut app, key('c'));
+
+    assert_eq!(
+        app.nav.mode,
+        Mode::IdleNudge,
+        "a failed day-boundary resolution must keep the reminder"
+    );
+    assert!(!app.session.from_nudge);
+    assert_eq!(app.tasks().len(), 1);
+    assert!(!app.tasks()[0].done);
+    assert!(
+        app.tasks()[0].raw.contains("dur:7200"),
+        "no time may be added: {}",
+        app.tasks()[0].raw
+    );
+}
+
+/// Esc from the day-boundary prompt reached during a nudge recovery returns
+/// to the popup and never leaks the flag into Normal.
+#[test]
+fn idle_nudge_m_add_time_day_boundary_esc_returns_to_nudge() {
+    let mut app = build_app_with_archive("Draft +Smith dur:7200 log:2026-05-05\n", None);
+    app.nav.mode = Mode::IdleNudge;
+
+    handle_idle_nudge(&mut app, key('M'));
+    handle_pick_nudge_task(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    app.draft_set("30".into());
+    handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(app.nav.mode, Mode::PromptDayBoundary);
+
+    handle_day_boundary(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+
+    assert_eq!(app.nav.mode, Mode::IdleNudge, "Esc keeps the reminder");
+    assert!(
+        !app.session.from_nudge,
+        "the flag must not leak into Normal"
+    );
+    assert_eq!(app.tasks().len(), 1);
+    assert!(!app.tasks()[0].done);
+}
+
+/// Regression guard: a failed add from a NON-nudge prompt still exits to
+/// Normal — the nudge redirect must only fire for nudge-born flows.
+#[test]
+fn plain_add_time_invalid_exits_to_normal() {
+    let mut app = build_app();
+    app.nav.mode = Mode::ManualEntryChoice;
+
+    handle_manual_entry_choice(&mut app, key('A'));
+    assert_eq!(app.nav.mode, Mode::PromptAddTime);
+    assert!(!app.session.from_nudge);
+
+    app.draft_set("nope".into());
+    handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(
+        app.nav.mode,
+        Mode::Normal,
+        "non-nudge flow keeps its Normal exit"
+    );
+    assert!(!app.session.from_nudge);
+    assert_eq!(app.tasks().len(), 3, "nothing may be saved");
+}
+
 // ---- end-of-day review nudge ----
 
 /// `V` on the review nudge opens the timesheet anchored on today.

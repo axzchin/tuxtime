@@ -89,9 +89,12 @@ pub struct Session {
     pub review_nudge_date: Option<String>,
     /// True while a recovery flow opened from the idle nudge is active: the
     /// `N` new-entry insert, or the add-time prompt reached via the `M`
-    /// task picker. Esc-cancel returns to the nudge popup instead of
-    /// dropping to Normal, so the reminder survives a cancelled recovery
-    /// attempt.
+    /// task picker. Any exit to Normal with this flag still set means the
+    /// recovery was abandoned or failed (Esc-cancel, invalid duration, write
+    /// error) — the UI returns to the nudge popup instead of dropping to
+    /// Normal, so the reminder survives every failed attempt. The flag is
+    /// cleared exactly when a capture actually lands (insert saved, time
+    /// added) or when the nudge is deliberately dismissed.
     pub from_nudge: bool,
 }
 
