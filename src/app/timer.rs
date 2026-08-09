@@ -258,6 +258,9 @@ impl App {
                             "added {} — new entry for today",
                             format_duration(secs, self.prefs.rounding_increment)
                         ));
+                        // Adding time is a timer activity: reset the idle-nudge
+                        // clock so the popup doesn't re-fire right after.
+                        self.session.last_timer_activity = Instant::now();
                         Some(new)
                     }
                     EditOutcome::Aborted(r) => {
@@ -473,6 +476,8 @@ impl App {
                 let total_str = format_duration(total, self.prefs.rounding_increment);
                 let body = crate::todo::body_only(&updated);
                 self.flash(format!("added {added} — {body} (total {total_str})"));
+                // Adding time is a timer activity: reset the idle-nudge clock.
+                self.session.last_timer_activity = Instant::now();
                 self.after_mutation(abs);
             }
             EditOutcome::Aborted(r) => self.handle_reconcile_abort(r),
@@ -724,6 +729,65 @@ mod tests {
             "(A) 2026-05-06 Draft motion revised +Smith @drafting"
         );
         assert_eq!(app.session.carry_forward_from, None, "cleared on save");
+    }
+
+    // ---- manual entries reset the idle-nudge clock ----
+
+    /// `M → A` (add time to current task) is a timer activity: the idle-nudge
+    /// clock must reset so the "No timer running!" popup doesn't fire moments
+    /// after the user just logged a forgotten block.
+    #[test]
+    fn add_time_resets_idle_nudge_clock() {
+        let mut app = build_app("Draft +Smith\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+        // Make the idle clock look stale (past the 15-min default).
+        app.session.last_timer_activity =
+            std::time::Instant::now() - std::time::Duration::from_secs(901);
+
+        app.add_time_to_current_from_input("30");
+
+        assert!(
+            app.session.last_timer_activity.elapsed().as_secs() < 5,
+            "adding time must reset the idle-nudge clock"
+        );
+    }
+
+    /// `M → N` (manual blank entry with a dur:) is also a timer activity and
+    /// must reset the idle-nudge clock.
+    #[test]
+    fn manual_entry_save_resets_idle_nudge_clock() {
+        let mut app = build_app("");
+        app.session.manual_time_entry = true;
+        app.session.last_timer_activity =
+            std::time::Instant::now() - std::time::Duration::from_secs(901);
+        app.draft_set("Call with Jim +Smith @phone dur:30".into());
+
+        let outcome = app.add_from_draft();
+
+        assert_eq!(outcome, crate::app::AddOutcome::Saved);
+        assert!(
+            app.session.last_timer_activity.elapsed().as_secs() < 5,
+            "saving a manual entry must reset the idle-nudge clock"
+        );
+    }
+
+    /// A plain new task (`n`) is NOT a timer activity — it must not reset the
+    /// clock, so the nudge can still remind the user they haven't timed work.
+    #[test]
+    fn plain_add_does_not_reset_idle_nudge_clock() {
+        let mut app = build_app("");
+        app.session.last_timer_activity =
+            std::time::Instant::now() - std::time::Duration::from_secs(901);
+        app.draft_set("Buy milk".into());
+
+        let outcome = app.add_from_draft();
+
+        assert_eq!(outcome, crate::app::AddOutcome::Saved);
+        assert!(
+            app.session.last_timer_activity.elapsed().as_secs() >= 900,
+            "a plain add must not reset the idle-nudge clock"
+        );
     }
 
     // ---- long-timer nudge popup ----

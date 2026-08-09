@@ -83,7 +83,8 @@ impl App {
 
         // If entered via manual time entry (`M`), convert `dur:` values from
         // flexible user input (minutes, decimal hours, clock time) to raw seconds.
-        let text = if self.session.manual_time_entry {
+        let was_manual = self.session.manual_time_entry;
+        let text = if was_manual {
             self.session.manual_time_entry = false;
             self.convert_dur_in_text(&text)
         } else {
@@ -93,6 +94,12 @@ impl App {
         match self.store.add_finalized(&text) {
             CoreAdd::Added { abs } => {
                 self.commit("added", abs);
+                if was_manual {
+                    // Logging time counts as timer activity: reset the idle-
+                    // nudge clock so the popup doesn't fire moments after the
+                    // user just did the right thing (a manual entry).
+                    self.session.last_timer_activity = std::time::Instant::now();
+                }
                 if self.session.auto_start_on_save {
                     self.session.auto_start_on_save = false;
                     // Start the timer on the newly-created interruption entry.
