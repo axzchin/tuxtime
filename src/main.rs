@@ -123,8 +123,8 @@ fn main() -> Result<()> {
     // and operating systems, shortening long paths to fit a fixed budget.
     let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
     let title = ui::title::terminal_title(&path, home.as_deref(), ui::title::DEFAULT_BUDGET);
-    let _ = crossterm::execute!(io::stdout(), crossterm::terminal::SetTitle(title));
-    let result = run(terminal, &mut app_state, &keybinds, config_rx);
+    let _ = crossterm::execute!(io::stdout(), crossterm::terminal::SetTitle(title.clone()));
+    let result = run(terminal, &mut app_state, &keybinds, config_rx, title);
     ratatui::restore();
     // Clear the title on exit so the shell retitles on its next prompt rather
     // than leaving `tuxtime …` behind.
@@ -188,8 +188,13 @@ fn run(
     app: &mut App,
     keybinds: &KeyBindings,
     config_rx: Option<mpsc::Receiver<()>>,
+    base_title: String,
 ) -> Result<()> {
     let mut dirty = true;
+    // Whether the terminal title is currently showing the nudge alert (and
+    // the BEL has rung). Updated on transitions only, so the title doesn't
+    // churn every tick.
+    let mut alerting = false;
     while !app.nav.should_quit {
         // Pick up midnight rollover so threshold-hidden tasks reveal
         // themselves without requiring an app restart. Recompute each tick
@@ -262,6 +267,32 @@ fn run(
                 // for the live HH:MM:SS display in the status bar.
                 dirty = true;
             }
+        }
+        // Nudge alert sync: while a nudge is active (idle/long-timer/stale
+        // popup or the long-timer status flag), put an alert in the terminal
+        // title and ring the bell once — the only attention-grabbers that
+        // reach the user when the terminal is unfocused (the popup alone is
+        // invisible from another app). Restores the base title when the
+        // nudge clears.
+        let nudge_alert = app.session.long_timer_nudge_active
+            || matches!(
+                app.nav.mode,
+                Mode::IdleNudge | Mode::LongTimerNudge | Mode::StaleTimer
+            );
+        if nudge_alert && !alerting {
+            let _ = crossterm::execute!(
+                io::stdout(),
+                crossterm::terminal::SetTitle(format!("{base_title} ⏰ — timer check"))
+            );
+            let _ = io::stdout().write_all(b"\x07");
+            let _ = io::stdout().flush();
+            alerting = true;
+        } else if !nudge_alert && alerting {
+            let _ = crossterm::execute!(
+                io::stdout(),
+                crossterm::terminal::SetTitle(base_title.clone())
+            );
+            alerting = false;
         }
         if app.flash_should_clear() {
             app.clear_flash();
