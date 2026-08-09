@@ -547,6 +547,48 @@ fn nudge_task_picker() {
 }
 
 #[test]
+fn review_nudge_popup() {
+    // End-of-day review: shows today's tracked total and offers the
+    // reconciliation actions.
+    let body = "2026-05-06 Draft motion +Smith @drafting dur:7200 log:2026-05-06\n\
+                2026-05-06 Call with client +Smith @meeting dur:1800 log:2026-05-06\n";
+    std::fs::write(FIXTURE_PATH, body).expect("seed fixture file");
+    let mut app = App::new(
+        PathBuf::from(FIXTURE_PATH),
+        body.to_string(),
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.env.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.prefs.density = Density::Compact;
+    app.nav.mode = Mode::ReviewNudge;
+    snapshot_app("review_nudge", &app);
+}
+
+#[test]
+fn timesheet_daily_with_coverage_line() {
+    // Daily timesheet with workday bounds configured. Anchored on a PAST day
+    // so the "day in progress" suffix (which depends on the wall clock) can
+    // never appear — the snapshot stays deterministic.
+    let body = "2026-05-05 Draft motion +Smith @drafting dur:7200\n\
+                2026-05-05 Review discovery +Smith @research dur:3600\n";
+    std::fs::write(FIXTURE_PATH, body).expect("seed fixture file");
+    let mut app = App::new(
+        PathBuf::from(FIXTURE_PATH),
+        body.to_string(),
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.env.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.prefs.density = Density::Compact;
+    app.prefs.workday_start = Some("09:00".into());
+    app.prefs.workday_end = Some("18:00".into());
+    app.set_view(View::Timesheet);
+    app.timesheet.date = "2026-05-05".into();
+    snapshot_app("timesheet_daily_with_coverage", &app);
+}
+
+#[test]
 fn manual_entry_choice_popup() {
     let mut app = make_app();
     app.nav.mode = Mode::ManualEntryChoice;

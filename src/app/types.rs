@@ -75,6 +75,10 @@ pub enum Mode {
     /// (or add time to), instead of blindly hitting whatever the cursor is
     /// on. `j/k` navigate, `Enter` commits, `Esc` returns to the nudge.
     PickNudgeTask,
+    /// End-of-day review nudge — once per day, after the configured
+    /// `review_time`, remind the user to reconcile the day's entries.
+    /// `[V]iew timesheet / [M] add time / [s]kip for today`.
+    ReviewNudge,
     /// Manual entry choice popup — [C]urrent task description or [N]ew blank entry.
     ManualEntryChoice,
     /// Project management view (`<P>`) — archive/unarchive/rename projects.

@@ -57,7 +57,7 @@ pub use draft_overlay::{
     recurrence_next_preview,
 };
 pub use duration::{
-    billable_units, format_billable, format_billable_units, rounding_increment_label,
+    billable_units, format_billable, format_billable_units, parse_clock, rounding_increment_label,
 };
 pub(crate) use duration::{format_duration, parse_duration_input};
 pub use env::Env;

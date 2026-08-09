@@ -1585,6 +1585,34 @@ fn pick_nudge_task_esc_returns_to_idle_nudge() {
     assert_eq!(app.nav.mode, Mode::IdleNudge);
 }
 
+// ---- end-of-day review nudge ----
+
+/// `V` on the review nudge opens the timesheet anchored on today.
+#[test]
+fn review_nudge_v_opens_timesheet() {
+    let mut app = build_app();
+    app.nav.mode = Mode::ReviewNudge;
+
+    handle_review_nudge(&mut app, key('V'));
+
+    assert_eq!(app.view(), View::Timesheet);
+    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.timesheet.date, app.today(), "anchored on today");
+}
+
+/// `s` on the review nudge skips it (and won't re-fire today — the once-per-
+/// day slot is already consumed).
+#[test]
+fn review_nudge_s_skips() {
+    let mut app = build_app();
+    app.nav.mode = Mode::ReviewNudge;
+
+    handle_review_nudge(&mut app, key('s'));
+
+    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.view(), View::List);
+}
+
 // ---- idle nudge safety ----
 
 /// The idle nudge must not fire while the user is in a mode with transient

@@ -6,6 +6,8 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph};
 
+use chrono::Timelike;
+
 use crate::app::App;
 use crate::ui::calendar_utils::{calendar_cells, calendar_footer, format_focused, month_name};
 use crate::ui::msgbox;
@@ -253,6 +255,34 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                 .bg(theme.panel)
                 .add_modifier(Modifier::BOLD),
         )));
+        // End-of-day coverage: how much of the configured workday this day's
+        // entries account for (daily view only — weekly spans many days).
+        // Bare h/m formatting here; the billable parens are for copy, not
+        // for an audit line.
+        if !app.timesheet.weekly {
+            let now = chrono::Local::now();
+            let now_min = now.hour() * 60 + now.minute();
+            if let Some((span_secs, unaccounted, in_progress)) = app.workday_coverage(
+                &app.timesheet.date,
+                grand_total,
+                now_min,
+                app.today(),
+            ) {
+                let fmt = |s: u64| format!("{}h {}m", s / 3600, (s % 3600) / 60);
+                let suffix = if in_progress { " — day in progress" } else { "" };
+                lines.push(Line::from(Span::styled(
+                    format!(
+                        "  Unaccounted: {} of {}{suffix}",
+                        fmt(unaccounted),
+                        fmt(span_secs)
+                    ),
+                    Style::default()
+                        .fg(theme.dim)
+                        .bg(theme.panel)
+                        .add_modifier(Modifier::BOLD),
+                )));
+            }
+        }
     }
 
     // Scroll if content exceeds space

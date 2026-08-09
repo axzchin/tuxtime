@@ -277,7 +277,7 @@ fn run(
         let nudge_alert = app.session.long_timer_nudge_active
             || matches!(
                 app.nav.mode,
-                Mode::IdleNudge | Mode::LongTimerNudge | Mode::StaleTimer
+                Mode::IdleNudge | Mode::LongTimerNudge | Mode::StaleTimer | Mode::ReviewNudge
             );
         if nudge_alert && !alerting {
             let _ = crossterm::execute!(

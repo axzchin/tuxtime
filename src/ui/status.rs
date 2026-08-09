@@ -36,6 +36,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         Mode::Welcome => "WELCOME".into(),
         Mode::IdleNudge => "IDLE NUDGE".into(),
         Mode::PickNudgeTask => "PICK TASK".into(),
+        Mode::ReviewNudge => "END-OF-DAY".into(),
         Mode::LongTimerNudge => "LONG TIMER".into(),
         Mode::StaleTimer => "STALE TIMER".into(),
         Mode::ManualEntryChoice => "MANUAL ENTRY".into(),
@@ -118,6 +119,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             Mode::LongTimerNudge => "S stop timer · D dismiss".to_string(),
             Mode::IdleNudge => "S start timer · M add time · N new entry · D dismiss".to_string(),
             Mode::PickNudgeTask => "j/k navigate · Enter select · Esc back".to_string(),
+            Mode::ReviewNudge => "V view timesheet · M add time · S skip".to_string(),
             Mode::PickTimesheetDate => {
                 "hjkl/arrows navigate  ·  type date  ·  Enter select  ·  Esc cancel  ·  t today"
                     .to_string()

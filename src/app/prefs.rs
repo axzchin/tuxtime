@@ -47,6 +47,14 @@ pub struct Prefs {
     /// Billable rounding increment in decimal hours: `0.1` (6 min, default),
     /// `0.25` (15 min), or `0` for no rounding (exact decimal hours).
     pub rounding_increment: f64,
+    /// End-of-day review prompt time as `HH:MM` (e.g. `17:00`). `None`
+    /// disables the wrap-up nudge.
+    pub review_time: Option<String>,
+    /// Workday start (`HH:MM`) — with `workday_end`, drives the unaccounted-
+    /// time coverage line in the daily timesheet.
+    pub workday_start: Option<String>,
+    /// Workday end (`HH:MM`).
+    pub workday_end: Option<String>,
 }
 
 impl Prefs {
@@ -74,6 +82,9 @@ impl Prefs {
             long_timer_nudge_seconds: cfg.long_timer_nudge_seconds.unwrap_or(7200),
             prompt_on_day_boundary: cfg.prompt_on_day_boundary.unwrap_or(true),
             rounding_increment: cfg.rounding_increment.unwrap_or(0.1),
+            review_time: cfg.review_time.clone(),
+            workday_start: cfg.workday_start.clone(),
+            workday_end: cfg.workday_end.clone(),
         }
     }
 
@@ -188,6 +199,9 @@ impl Prefs {
             cfg.long_timer_nudge_seconds = Some(self.long_timer_nudge_seconds);
             cfg.prompt_on_day_boundary = Some(self.prompt_on_day_boundary);
             cfg.rounding_increment = Some(self.rounding_increment);
+            cfg.review_time = self.review_time.clone();
+            cfg.workday_start = self.workday_start.clone();
+            cfg.workday_end = self.workday_end.clone();
         })
     }
 }

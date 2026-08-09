@@ -1,0 +1,36 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(&buf)
+---
+ FILTERS                   ▶▮◀ /tmp/tuxtime-snapshot.txt  •  2 tas DETAIL                           
+                                                                                                    
+ PROJECTS                  (2)  NO PRIORITY  ───────────────────── priority                         
+   +Smith            2      1 ▸     Draft motion +Smith @drafting  created   2026-05-06             
+                            2       Call with client +Smith @meeti projects  +Smith                 
+ CONTEXTS                                                          contexts  @drafting              
+   @drafting         1                                                                              
+   @meeting          1                                             RAW                              
+                                                                                                    
+                                                                   2026-05-06 Draft motion +Smith   
+                                                                   @drafting dur:7200               
+                                                                   log:2026-05-06                   
+                                                                                                    
+                    ┌ ⏰  End-of-Day Review ────────────────────────────────────┐                    
+                    │  You've tracked 2h 30m (2.5h) today — anything missing?  │                    
+                    │                                                          │                    
+                    │     [V]iew timesheet  [M] add time  [s]kip for today     │                    
+                    │                                                          │                    
+                    └──────────────────────────────────────────────────────────┘                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+ END-OF-DAY   V view timesheet · M add time · S skip         2 open · 2026-05-06 · tuxtime 2026.7.1

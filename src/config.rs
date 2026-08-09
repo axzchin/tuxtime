@@ -62,6 +62,15 @@ pub struct Config {
     /// `0.25` (15 min), or `0` for no rounding (exact decimal hours shown).
     /// Applies to timesheet display and copy, never to the raw tracking.
     pub rounding_increment: Option<f64>,
+    /// End-of-day review prompt time as `HH:MM` (e.g. `17:00`). Once per day,
+    /// after this time, the app reminds the user to reconcile the day's
+    /// entries. Omit to disable.
+    pub review_time: Option<String>,
+    /// Start of the workday as `HH:MM` — with `workday_end`, drives the
+    /// "unaccounted time" coverage line in the daily timesheet view.
+    pub workday_start: Option<String>,
+    /// End of the workday as `HH:MM`. See `workday_start`.
+    pub workday_end: Option<String>,
 }
 
 impl Config {
@@ -225,6 +234,12 @@ fn parse(s: &str) -> Config {
                 // silently mean "no rounding" (or corrupt the formatters).
                 c.rounding_increment = v.parse::<f64>().ok().filter(|x| x.is_finite() && *x >= 0.0);
             }
+            // Wall-clock strings are normalized and validated so a typo
+            // ("25:00", "banana") silently disables the feature instead of
+            // producing garbage comparisons at runtime.
+            "review_time" => c.review_time = parse_clock_config(v),
+            "workday_start" => c.workday_start = parse_clock_config(v),
+            "workday_end" => c.workday_end = parse_clock_config(v),
             // Saved searches: `filter.<name> = <query>`. The name is the
             // (trimmed) text after the `filter.` prefix; the query is the
             // (unquoted) value, which may itself contain `=`. A repeated
@@ -306,7 +321,23 @@ fn serialize(c: &Config) -> String {
     if let Some(v) = c.rounding_increment {
         let _ = writeln!(out, "rounding_increment = {v}");
     }
+    if let Some(v) = &c.review_time {
+        let _ = writeln!(out, "review_time = {v}");
+    }
+    if let Some(v) = &c.workday_start {
+        let _ = writeln!(out, "workday_start = {v}");
+    }
+    if let Some(v) = &c.workday_end {
+        let _ = writeln!(out, "workday_end = {v}");
+    }
     out
+}
+
+/// Parse + normalize a `HH:MM` wall-clock string for the config. `None` for
+/// anything that isn't a valid clock time, so a hand-typed mistake disables
+/// the feature rather than corrupting it.
+fn parse_clock_config(v: &str) -> Option<String> {
+    crate::app::parse_clock(v.trim()).map(|(h, m)| format!("{h:02}:{m:02}"))
 }
 
 fn parse_bool(s: &str) -> Option<bool> {
@@ -346,11 +377,29 @@ mod tests {
             long_timer_nudge_seconds: Some(7200),
             prompt_on_day_boundary: Some(true),
             rounding_increment: Some(0.25),
+            review_time: Some("17:00".into()),
+            workday_start: Some("09:00".into()),
+            workday_end: Some("18:00".into()),
         };
 
         let s = serialize(&c);
         let parsed = parse(&s);
         assert_eq!(parsed, c);
+    }
+
+    #[test]
+    fn clock_strings_validated_and_normalized() {
+        let c = parse("review_time = 17:00\nworkday_start = 9:00\nworkday_end = 18:30\n");
+        assert_eq!(c.review_time.as_deref(), Some("17:00"));
+        // Non-zero-padded input is normalized to two digits.
+        assert_eq!(c.workday_start.as_deref(), Some("09:00"));
+        assert_eq!(c.workday_end.as_deref(), Some("18:30"));
+
+        // Malformed values are dropped (feature disabled), not stored.
+        let c = parse("review_time = banana\nworkday_start = 25:00\nworkday_end = 9am\n");
+        assert_eq!(c.review_time, None);
+        assert_eq!(c.workday_start, None);
+        assert_eq!(c.workday_end, None);
     }
 
     #[test]
@@ -528,6 +577,9 @@ mod tests {
             long_timer_nudge_seconds: None,
             prompt_on_day_boundary: Some(false),
             rounding_increment: Some(0.1),
+            review_time: None,
+            workday_start: None,
+            workday_end: None,
         };
         written.save_to(&path).expect("save should succeed");
         assert!(path.exists());

@@ -409,6 +409,32 @@ pub(crate) fn handle_idle_nudge(app: &mut App, key: KeyEvent) {
     }
 }
 
+/// End-of-day review nudge: `V` opens the timesheet (today), `M` opens the
+/// manual-entry choice, `S`/`Esc` skips — the review won't re-fire today.
+pub(crate) fn handle_review_nudge(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Char('v' | 'V') => {
+            app.timesheet.date = app.today().to_string();
+            app.timesheet.cursor = 0;
+            app.nav.enter_normal();
+            app.session.pre_nudge_view = None;
+            app.set_view(View::Timesheet);
+        }
+        KeyCode::Char('m' | 'M') => {
+            app.nav.enter_normal();
+            app.session.pre_nudge_view = None;
+            app.nav.set_mode(Mode::ManualEntryChoice);
+        }
+        KeyCode::Char('s' | 'S') | KeyCode::Esc => {
+            app.nav.enter_normal();
+            if let Some(v) = app.session.pre_nudge_view.take() {
+                app.set_view(v);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// Nudge task picker: `j`/`k` move the highlight, `Enter` commits the chosen
 /// task (start timer or add time per the action), `Esc` returns to the idle
 /// nudge popup.

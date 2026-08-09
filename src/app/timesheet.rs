@@ -346,6 +346,35 @@ impl App {
         totals
     }
 
+    /// Workday coverage for the timesheet's anchor day: how much of the
+    /// configured workday (`workday_start` → `workday_end`) the tracked
+    /// seconds account for. Returns `(span_secs, unaccounted_secs,
+    /// in_progress)` — `in_progress` is true when the anchor is today and the
+    /// clock hasn't reached `workday_end` yet, so the renderer can say
+    /// "day in progress" instead of implying the day is done. `None` when
+    /// the workday bounds aren't configured (or are malformed/inverted).
+    /// `now_min`/`now_date` are passed in so tests stay deterministic.
+    #[must_use]
+    pub fn workday_coverage(
+        &self,
+        anchor_date: &str,
+        tracked_secs: u64,
+        now_min: u32,
+        now_date: &str,
+    ) -> Option<(u64, u64, bool)> {
+        let start = crate::app::parse_clock(self.prefs.workday_start.as_deref()?)?;
+        let end = crate::app::parse_clock(self.prefs.workday_end.as_deref()?)?;
+        let start_min = start.0 * 60 + start.1;
+        let end_min = end.0 * 60 + end.1;
+        if end_min <= start_min {
+            return None;
+        }
+        let span_secs = u64::from(end_min - start_min) * 60;
+        let unaccounted = span_secs.saturating_sub(tracked_secs);
+        let in_progress = anchor_date == now_date && now_min < end_min;
+        Some((span_secs, unaccounted, in_progress))
+    }
+
     /// Totals for the timesheet's current period: `(total_secs,
     /// billable_secs, non_billable_secs)`. Pinned at the top of the detail
     /// sidebar so the numbers stay visible while the center scrolls.
@@ -479,5 +508,72 @@ impl App {
     pub fn timesheet_calendar_cancel(&mut self) {
         self.timesheet.date_input.clear();
         self.nav.mode = Mode::Normal;
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use crate::app::test_support::build_app_with_config;
+    use crate::config::Config;
+
+    fn app_with_workday(start: &str, end: &str) -> App {
+        let cfg = Config {
+            workday_start: Some(start.into()),
+            workday_end: Some(end.into()),
+            ..Config::default()
+        };
+        build_app_with_config("2026-05-06 Work +X @dev dur:3600 log:2026-05-06\n", cfg)
+    }
+
+    #[test]
+    fn workday_coverage_computes_unaccounted() {
+        let app = app_with_workday("09:00", "18:00");
+        // 9h span, 1h tracked → 8h unaccounted; past anchor → not in progress.
+        let (span, unaccounted, in_progress) =
+            app.workday_coverage("2026-05-05", 3600, 17 * 60, "2026-05-06").unwrap();
+        assert_eq!(span, 9 * 3600);
+        assert_eq!(unaccounted, 8 * 3600);
+        assert!(!in_progress, "past days are never 'in progress'");
+    }
+
+    #[test]
+    fn workday_coverage_in_progress_when_today_before_end() {
+        let app = app_with_workday("09:00", "18:00");
+        let (_, _, in_progress) =
+            app.workday_coverage("2026-05-06", 3600, 10 * 60, "2026-05-06").unwrap();
+        assert!(in_progress);
+    }
+
+    #[test]
+    fn workday_coverage_in_progress_false_after_end() {
+        let app = app_with_workday("09:00", "18:00");
+        let (_, _, in_progress) =
+            app.workday_coverage("2026-05-06", 3600, 19 * 60, "2026-05-06").unwrap();
+        assert!(!in_progress);
+    }
+
+    #[test]
+    fn workday_coverage_clamps_at_zero() {
+        let app = app_with_workday("09:00", "18:00");
+        let (_, unaccounted, _) =
+            app.workday_coverage("2026-05-06", 12 * 3600, 19 * 60, "2026-05-06").unwrap();
+        assert_eq!(unaccounted, 0);
+    }
+
+    #[test]
+    fn workday_coverage_none_without_bounds() {
+        let app = build_app_with_config("2026-05-06 Work +X\n", Config::default());
+        assert_eq!(app.workday_coverage("2026-05-06", 0, 0, "2026-05-06"), None);
+    }
+
+    #[test]
+    fn workday_coverage_none_when_end_before_start() {
+        let app = app_with_workday("18:00", "09:00");
+        assert_eq!(
+            app.workday_coverage("2026-05-06", 0, 0, "2026-05-06"),
+            None
+        );
     }
 }

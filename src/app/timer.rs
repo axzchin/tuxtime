@@ -8,12 +8,14 @@
 use super::session::DayBoundaryAction;
 use super::{
     App, IdleReason, Mode, NudgePickAction, NudgePickerState, View, format_duration,
-    parse_duration_input,
+    parse_clock, parse_duration_input,
 };
 use crate::core::outcome::{CarryForwardOutcome, EditOutcome, TimerOutcome, TimerQuitOutcome};
 use crate::core::rebuild_token_line;
 use crate::todo::Task;
 use std::time::Instant;
+
+use chrono::Timelike;
 
 /// The day a task's accumulated time belongs to: its `log:` value when valid,
 /// else its creation date. `None` when neither is a usable calendar date.
@@ -75,7 +77,7 @@ impl App {
         // If a nudge popup is already showing, don't re-trigger.
         if matches!(
             self.nav.mode,
-            Mode::IdleNudge | Mode::LongTimerNudge | Mode::StaleTimer
+            Mode::IdleNudge | Mode::LongTimerNudge | Mode::StaleTimer | Mode::ReviewNudge
         ) {
             return false;
         }
@@ -111,6 +113,28 @@ impl App {
             self.exit_overlay_to_normal();
             self.nav.mode = Mode::IdleNudge;
             fired = true;
+        }
+        // End-of-day review: once per day, once the configured `review_time`
+        // has passed, ask the user to reconcile the day. Only when something
+        // has been tracked today (the "tracked nothing at all" failure is
+        // already covered by the launch-time idle backdate + idle nudge) and
+        // only from Normal mode, so it never clobbers the other nudges or
+        // in-progress composition.
+        if self.nav.mode == Mode::Normal
+            && let Some(rt) = &self.prefs.review_time
+            && let Some((rh, rm)) = parse_clock(rt)
+            && self.has_time_tracked_today()
+            && self.session.review_nudge_date.as_deref() != Some(self.today())
+        {
+            let now = chrono::Local::now();
+            let now_min = now.hour() * 60 + now.minute();
+            if now_min >= rh * 60 + rm {
+                self.session.review_nudge_date = Some(self.today().to_string());
+                self.session.pre_nudge_view = Some(self.nav.view);
+                self.exit_overlay_to_normal();
+                self.nav.mode = Mode::ReviewNudge;
+                fired = true;
+            }
         }
         // Long-timer nudge: popup from Normal mode (same state-safety rule as
         // the idle nudge — it must not destroy in-progress composition), plus
@@ -314,6 +338,35 @@ impl App {
     /// True when the active timer is running on the task at `abs`.
     pub fn is_timer_running_on(&self, abs: usize) -> bool {
         self.store.is_timer_running_on(abs)
+    }
+
+    /// True when any entry (active or archived) carries time logged for
+    /// today — the gate for the end-of-day review nudge.
+    pub fn has_time_tracked_today(&self) -> bool {
+        self.store.has_time_logged_today()
+    }
+
+    /// Total seconds of time logged today (active + archived), for the
+    /// end-of-day review popup's message.
+    pub fn today_tracked_secs(&self) -> u64 {
+        let today = self.today();
+        let f = |t: &crate::todo::Task| -> u64 {
+            if t.dur.unwrap_or(0) == 0 {
+                return 0;
+            }
+            let work = t
+                .log
+                .as_deref()
+                .filter(|s| crate::todo::is_iso_date(s))
+                .or(t.created_date.as_deref());
+            if work == Some(today) {
+                t.dur.unwrap_or(0)
+            } else {
+                0
+            }
+        };
+        self.tasks().iter().map(f).sum::<u64>()
+            + self.store.archive().tasks().iter().map(f).sum::<u64>()
     }
 
     /// Convert a `dur:VALUE` token in `text` from flexible user input (minutes,
@@ -1061,6 +1114,62 @@ mod tests {
 
         assert_eq!(app.session.idle_reason, IdleReason::TimerStopped);
         assert!(app.session.last_timer_activity.elapsed().as_secs() < 5);
+    }
+
+    // ---- end-of-day review nudge ----
+
+    /// Once the configured review time has passed and something is tracked
+    /// today, the review fires — once per day.
+    #[test]
+    fn review_nudge_fires_once_after_review_time() {
+        let mut app = build_app("2026-05-06 Work +X @dev dur:600 log:2026-05-06\n");
+        app.prefs.review_time = Some("00:00".into()); // always passed
+        assert!(app.has_time_tracked_today());
+
+        assert!(app.check_nudges());
+        assert_eq!(app.nav.mode, Mode::ReviewNudge);
+
+        // Already shown today: must not re-fire.
+        app.nav.mode = Mode::Normal;
+        assert!(!app.check_nudges(), "review must not re-fire the same day");
+        assert_eq!(app.nav.mode, Mode::Normal);
+    }
+
+    /// The review nudge only fires when time has been tracked today — the
+    /// "nothing tracked at all" failure is the idle nudge's job.
+    #[test]
+    fn review_nudge_skipped_when_nothing_tracked_today() {
+        let mut app = build_app("Buy milk\n");
+        app.prefs.review_time = Some("00:00".into());
+        assert!(!app.has_time_tracked_today());
+
+        // The launch-time backdate fires the IDLE nudge instead (and the
+        // review block yields to it — mode is no longer Normal by then).
+        assert!(app.check_nudges());
+        assert_eq!(app.nav.mode, Mode::IdleNudge);
+        assert!(
+            app.session.review_nudge_date.is_none(),
+            "review must not consume its once-per-day slot when it didn't fire"
+        );
+    }
+
+    /// A malformed review time disables the feature entirely.
+    #[test]
+    fn review_nudge_not_fired_with_malformed_time() {
+        let mut app = build_app("2026-05-06 Work +X @dev dur:600 log:2026-05-06\n");
+        app.prefs.review_time = Some("99:99".into());
+        assert!(!app.check_nudges());
+        assert_eq!(app.nav.mode, Mode::Normal);
+    }
+
+    /// today_tracked_secs sums only today's logged time, active + archived.
+    #[test]
+    fn today_tracked_secs_counts_today_only() {
+        let app = build_app(
+            "2026-05-06 Today +X @dev dur:600 log:2026-05-06\n\
+             2026-05-05 Yesterday +Y @dev dur:900 log:2026-05-05\n",
+        );
+        assert_eq!(app.today_tracked_secs(), 600);
     }
 
     // ---- nudge task picker (S / M from the idle nudge) ----

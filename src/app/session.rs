@@ -84,6 +84,9 @@ pub struct Session {
     /// Transient state for the nudge task picker (`Mode::PickNudgeTask`).
     /// `None` when the picker isn't open.
     pub nudge_picker: Option<NudgePickerState>,
+    /// The day the end-of-day review nudge was last shown (`YYYY-MM-DD`),
+    /// so it fires at most once per day.
+    pub review_nudge_date: Option<String>,
 }
 
 impl Session {
@@ -100,6 +103,7 @@ impl Session {
             idle_backdated: false,
             idle_reason: IdleReason::TimerStopped,
             nudge_picker: None,
+            review_nudge_date: None,
         }
     }
 }

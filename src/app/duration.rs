@@ -82,6 +82,25 @@ pub fn rounding_increment_label(increment_hours: f64) -> String {
     }
 }
 
+/// Parse a `HH:MM` wall-clock string (e.g. `"17:00"`, `"09:30"`, and the
+/// hand-typed `"9:00"`) into `(hour, minute)`. Returns `None` for anything
+/// else — malformed config values simply disable the feature that uses them.
+/// Used by the end-of-day review time and the workday coverage bounds.
+#[must_use]
+pub fn parse_clock(s: &str) -> Option<(u32, u32)> {
+    let s = s.trim();
+    let (h_part, m_part) = s.split_once(':')?;
+    if h_part.is_empty() || h_part.len() > 2 || m_part.len() != 2 {
+        return None;
+    }
+    if !h_part.bytes().all(|b| b.is_ascii_digit()) || !m_part.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let h: u32 = h_part.parse().ok()?;
+    let m: u32 = m_part.parse().ok()?;
+    (h < 24 && m < 60).then_some((h, m))
+}
+
 /// Parse a user-supplied duration string into seconds. Accepts:
 /// - plain minutes (no suffix): `90` → 5400s (90 min)
 /// - explicit minutes: `90m` → 5400s
@@ -256,5 +275,25 @@ mod tests {
         assert_eq!(format_duration(4020, 0.1), "1h 7m (1.2h)");
         assert_eq!(format_duration(4020, 0.25), "1h 7m (1.25h)");
         assert_eq!(format_duration(4020, 0.0), "1h 7m (1.12h)");
+    }
+
+    #[test]
+    fn parse_clock_accepts_valid_and_rejects_garbage() {
+        assert_eq!(parse_clock("17:00"), Some((17, 0)));
+        assert_eq!(parse_clock("09:30"), Some((9, 30)));
+        // A hand-typed single-digit hour is fine (normalized at the config
+        // layer when serialized back).
+        assert_eq!(parse_clock("9:00"), Some((9, 0)));
+        assert_eq!(parse_clock("00:00"), Some((0, 0)));
+        assert_eq!(parse_clock("23:59"), Some((23, 59)));
+        // Malformed: bad separator, one-digit minutes, non-digits, out of
+        // range, empty.
+        assert_eq!(parse_clock("17-00"), None);
+        assert_eq!(parse_clock("9:3"), None);
+        assert_eq!(parse_clock("banana"), None);
+        assert_eq!(parse_clock("25:00"), None);
+        assert_eq!(parse_clock("17:60"), None);
+        assert_eq!(parse_clock(""), None);
+        assert_eq!(parse_clock("  "), None);
     }
 }
