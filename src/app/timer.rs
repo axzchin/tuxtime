@@ -30,6 +30,14 @@ fn effective_log_date(t: &Task) -> Option<&str> {
         })
 }
 
+/// True when a `start:` timestamp's calendar day is before `today` — the
+/// timer was left running overnight. Extracted for direct testing: the
+/// wall-clock elapsed comparison is hard to isolate from the date check in
+/// an integration test.
+fn timer_start_crossed_day(start: Option<&str>, today: &str) -> bool {
+    start.is_some_and(|s| s.get(..10).is_some_and(|d| d < today))
+}
+
 impl App {
     // ---- timer helpers ----
 
@@ -187,16 +195,23 @@ impl App {
     }
 
     /// True when the restored timer looks like a *zombie*: the app was closed
-    /// or killed while it was running and the elapsed time has since blown
-    /// past the long-timer threshold. Such a session would silently bill all
-    /// the away time (e.g. an overnight gap), so startup should ask the user
-    /// how to handle it instead of just keeping it running.
+    /// or killed while it was running and either the elapsed time has blown
+    /// past the long-timer threshold, or the start stamp lives on a previous
+    /// calendar day (an overnight stay, however short). Either way the session
+    /// would silently bill away time, so startup should ask the user how to
+    /// handle it instead of just keeping it running.
     pub fn stale_timer_at_startup(&self) -> bool {
         if !self.timer_running() {
             return false;
         }
-        self.timer_elapsed_secs()
-            .is_some_and(|e| e >= self.prefs.long_timer_nudge_seconds)
+        let over_threshold = self
+            .timer_elapsed_secs()
+            .is_some_and(|e| e >= self.prefs.long_timer_nudge_seconds);
+        let crossed_day = timer_start_crossed_day(
+            self.active_timer_task().and_then(|t| t.start.as_deref()),
+            self.store.today(),
+        );
+        over_threshold || crossed_day
     }
 
     /// `[k]eep counting` on the stale-timer prompt: dismiss the popup and
@@ -305,17 +320,35 @@ impl App {
 
     /// `[d]iscard gap` on the stale-timer prompt: stop the timer WITHOUT
     /// crediting the elapsed time — the away period was not billable work.
-    /// Strips the `start:` tag and leaves `dur:` untouched.
+    /// Strips the `start:` tag and leaves `dur:` untouched. Both the token
+    /// the parser treats as the timer tag (the first `start:` token — the
+    /// same one `resync_timer` keys off) and any timestamp-shaped `start:`
+    /// token are removed, so the timer cannot survive on a leftover tag.
+    /// Narrative `start:` tokens the parser ignores (a second `start:` word
+    /// later in the body) stay put.
     pub fn discard_stale_timer(&mut self) {
         let Some(abs) = self.store.active_timer_abs() else {
             return;
         };
         let raw = self.store.task_raw(abs).unwrap_or_default();
+        // Strip exactly the tokens todo.rs recognizes as the timer tag: any
+        // `start:` token with a non-empty (non-quoted) value — the same rule
+        // `find_kv` uses, which is what `resync_timer` keys off on reload.
+        // That covers the ISO timestamp, hand-typed `start:noon` (resync falls
+        // back to now), and duplicates alike, so the timer cannot survive on
+        // a leftover tag. A bare narrative `start:` (empty value) is NOT a
+        // tag per the parser and survives — the pre-hardening code stripped
+        // any token merely beginning with `start:`, destroying prose like
+        // "meeting start: sharp".
+        let is_timer_tag = |tok: &str| -> bool {
+            tok.strip_prefix("start:")
+                .is_some_and(|v| !v.is_empty() && !v.starts_with('"'))
+        };
         let body = crate::todo::body_after_priority(&raw);
         let prefix = &raw[..raw.len() - body.len()];
         let cleaned = body
             .split_whitespace()
-            .filter(|tok| !tok.starts_with("start:"))
+            .filter(|tok| !is_timer_tag(tok))
             .collect::<Vec<_>>()
             .join(" ");
         let updated = if prefix.is_empty() {
@@ -998,6 +1031,46 @@ mod tests {
         assert!(!app.stale_timer_at_startup());
     }
 
+    /// A timer whose start stamp lives on a previous calendar day is stale
+    /// even when the elapsed time is under the long-timer threshold — an
+    /// overnight stay would silently bill the whole gap on stop.
+    #[test]
+    fn stale_timer_detected_when_start_crossed_day_under_threshold() {
+        // The store's `today` is 2026-05-06; a start stamped the day before
+        // must be stale regardless of the 2h elapsed threshold.
+        let app = build_app("Draft +Smith start:2026-05-05T23:50:00\n");
+        assert!(app.timer_running());
+        // Force the elapsed-based check off so only the day-crossing branch
+        // can make it stale.
+        assert!(
+            timer_start_crossed_day(
+                app.active_timer_task().and_then(|t| t.start.as_deref()),
+                "2026-05-06"
+            ),
+            "precondition: start dated the previous day"
+        );
+        assert!(app.stale_timer_at_startup());
+    }
+
+    /// The day-crossing predicate itself: only a start dated strictly before
+    /// `today` is stale.
+    #[test]
+    fn timer_start_crossed_day_predicate() {
+        assert!(timer_start_crossed_day(
+            Some("2026-05-05T23:59:59"),
+            "2026-05-06"
+        ));
+        assert!(!timer_start_crossed_day(
+            Some("2026-05-06T00:00:00"),
+            "2026-05-06"
+        ));
+        assert!(!timer_start_crossed_day(None, "2026-05-06"));
+        assert!(!timer_start_crossed_day(
+            Some("2026-05-06T23:59:59"),
+            "2026-05-05"
+        ));
+    }
+
     /// `[d]iscard gap` must strip `start:` without crediting the elapsed
     /// time — the away period was not billable work. Pre-existing time tags
     /// (`dur:`, `log:`) must survive untouched.
@@ -1027,6 +1100,44 @@ mod tests {
             !raw.contains("dur:10900"),
             "the gap must not be credited (3600 + ~7300): {raw}"
         );
+    }
+
+    /// Discard strips the parsed `start:` tag but leaves a bare narrative
+    /// `start:` (empty value) untouched — the pre-hardening code removed any
+    /// token merely *beginning* with `start:`, destroying prose like
+    /// "meeting start: sharp".
+    #[test]
+    fn discard_stale_timer_keeps_narrative_start_token() {
+        let raw = format!("Draft start:{} start:\n", stale_start(7300));
+        let mut app = build_app(&raw);
+        assert!(app.timer_running());
+
+        app.discard_stale_timer();
+
+        assert!(!app.timer_running(), "discard must stop the timer");
+        let raw = app.task_raw(0).unwrap_or_default();
+        assert!(
+            raw.contains("start:"),
+            "narrative start: must survive: {raw}"
+        );
+        assert!(
+            !raw.contains("start:2026"),
+            "the timestamp tag must be stripped: {raw}"
+        );
+    }
+
+    /// A hand-typed non-timestamp start (`start:noon`) is still a timer tag
+    /// per the parser (resync falls back to now), so discard must strip it
+    /// too or the "stopped" timer would keep running from load.
+    #[test]
+    fn discard_stale_timer_strips_hand_typed_start() {
+        let mut app = build_app("Draft start:noon\n");
+        assert!(app.timer_running());
+
+        app.discard_stale_timer();
+
+        assert!(!app.timer_running(), "hand-typed tag must not keep a timer");
+        assert!(!app.task_raw(0).unwrap_or_default().contains("start:noon"));
     }
 
     /// `[k]eep counting` must leave the timer running and restore the
