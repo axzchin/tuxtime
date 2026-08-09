@@ -1642,6 +1642,95 @@ fn nudge_select_search_filters_list() {
     assert_eq!(app.visible_indices().len(), 1, "only task b remains");
 }
 
+/// `f p` inside the list-based selection filters by project and KEEPS the
+/// selection alive: committing the project returns to the selection, and
+/// Enter then starts the timer on the filtered task. (Regression: the
+/// filter picker used to replace the mode outright and drop back to Normal,
+/// where the idle nudge re-fired before a task could be picked — the
+/// selection was silently abandoned.)
+#[test]
+fn nudge_select_fp_filter_then_enter_starts_timer() {
+    let mut app =
+        crate::app::test_support::build_app("Brief +Acme\ndraft motion +Acme\ncall +Globex\n");
+    app.nav.mode = Mode::IdleNudge;
+    app.session.pre_nudge_view = Some(View::Timesheet);
+
+    handle_idle_nudge(&mut app, key('s'));
+    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+
+    // f p opens the project picker over the selection.
+    handle_pick_nudge_task(&mut app, key('f'), &KeyBindings::default());
+    handle_pick_nudge_task(&mut app, key('p'), &KeyBindings::default());
+    assert_eq!(app.nav.mode, Mode::PickProject);
+    assert!(
+        app.session.nudge_picker.is_some(),
+        "selection must survive opening the filter picker"
+    );
+    // Seeded from the cursor task's first project.
+    assert_eq!(app.filter().project.as_deref(), Some("Acme"));
+
+    // Commit the project: back into the selection with the filter applied.
+    handle_pick(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(
+        app.nav.mode,
+        Mode::PickNudgeTask,
+        "committing the filter returns to the selection"
+    );
+    assert_eq!(app.filter().project.as_deref(), Some("Acme"));
+    assert_eq!(app.visible_indices().len(), 2, "only the Acme tasks remain");
+
+    // Enter on the highlighted task starts its timer and finishes.
+    handle_pick_nudge_task(
+        &mut app,
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        &KeyBindings::default(),
+    );
+
+    assert!(app.timer_running());
+    assert!(
+        app.is_timer_running_on(0),
+        "timer on the highlighted Acme task"
+    );
+    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.view, View::Timesheet, "pre-nudge view restored");
+    assert!(app.session.nudge_picker.is_none());
+    assert_eq!(
+        app.filter().project.as_deref(),
+        None,
+        "pre-selection filter (none) restored on exit"
+    );
+}
+
+/// `f p` then Esc — cancelling the filter picker — returns to the selection
+/// with the picked filter cleared, so the user can still choose a task.
+#[test]
+fn nudge_select_fp_esc_returns_to_selection() {
+    let mut app =
+        crate::app::test_support::build_app("Brief +Acme\ndraft motion +Acme\ncall +Globex\n");
+    app.nav.mode = Mode::IdleNudge;
+
+    handle_idle_nudge(&mut app, key('s'));
+    handle_pick_nudge_task(&mut app, key('f'), &KeyBindings::default());
+    handle_pick_nudge_task(&mut app, key('p'), &KeyBindings::default());
+    assert_eq!(app.nav.mode, Mode::PickProject);
+
+    handle_pick(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+
+    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert_eq!(app.filter().project.as_deref(), None);
+    assert!(
+        app.session.nudge_picker.is_some(),
+        "selection must survive cancelling the filter"
+    );
+    // And the selection itself still Escs back to the nudge.
+    handle_pick_nudge_task(
+        &mut app,
+        KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+        &KeyBindings::default(),
+    );
+    assert_eq!(app.nav.mode, Mode::IdleNudge);
+}
+
 // ---- sidebar toggles in every view ----
 
 /// `[`/`]` are view-independent chrome: they must toggle the sidebars in

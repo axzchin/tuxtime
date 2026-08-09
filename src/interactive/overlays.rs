@@ -494,10 +494,22 @@ pub(crate) fn handle_pick_nudge_task(app: &mut App, key: KeyEvent, keybinds: &Ke
 
 /// A delegated key that left the selection into a mode pushed *over* it
 /// (search, command palette) is still part of the selection — it pops back.
-/// But a key that replaced the mode outright (`n`, `e`, `,`, `?`, `P`, …)
-/// abandons the selection: restore the pre-selection filter and drop the
-/// stale picker state so the cleared filter never leaks into Normal.
+/// The filter pickers (project / context / saved-filter) replace the mode
+/// outright but are *also* part of the selection: they preview their filter
+/// directly on the list and return to it on accept or cancel, so they must
+/// never count as an abandonment — dropping back to Normal would let the
+/// idle nudge re-fire on the next tick (still idle, no timer started) and
+/// yank the user out of a task they were about to pick. But a key that
+/// replaced the mode outright (`n`, `e`, `,`, `?`, `P`, …) abandons the
+/// selection: restore the pre-selection filter and drop the stale picker
+/// state so the cleared filter never leaks into Normal.
 fn maybe_abandon_nudge_selection(app: &mut App) {
+    if matches!(
+        app.nav.mode(),
+        Mode::PickProject | Mode::PickContext | Mode::PickSavedFilter
+    ) {
+        return;
+    }
     if app.nav.mode() != Mode::PickNudgeTask && app.nav.peek_under() != Some(Mode::PickNudgeTask) {
         app.nudge_picker_abandon();
     }

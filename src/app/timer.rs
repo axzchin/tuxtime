@@ -297,6 +297,19 @@ impl App {
                 // Starting a timer is itself a recovery — never inherit a
                 // stale flag from a previous flow.
                 self.session.from_nudge = false;
+                if self.should_prompt_day_boundary(abs) {
+                    // The chosen task carries time from a previous day. Ask
+                    // first (continue the same entry vs a fresh one for
+                    // today) exactly like `t` in the list — never silently
+                    // move the entry onto today's sheet. The selection stays
+                    // open beneath the prompt so a resolve (c/n) starts the
+                    // timer and finishes the selection, while Esc drops back
+                    // into the selection to pick a different task.
+                    self.session.nudge_picker = Some(picker);
+                    self.session.pending_day_boundary = Some((abs, DayBoundaryAction::StartTimer));
+                    self.nav.push_mode(Mode::PromptDayBoundary);
+                    return;
+                }
                 self.toggle_timer_at(abs);
                 self.restore_filter(picker.prev_filter, picker.prev_cursor);
                 self.nav.enter_normal();
@@ -1469,6 +1482,75 @@ mod tests {
             app.flash_active()
                 .is_some_and(|m| m.contains("First") && m.contains("add time to")),
             "flash must name the chosen task"
+        );
+    }
+
+    /// Enter (S) on a task carrying time from a previous day asks about the
+    /// day boundary first — exactly like `t` in the list — instead of
+    /// silently continuing the old entry onto today's sheet. Resolving with
+    /// `c` starts the timer on the same entry and finishes the selection.
+    #[test]
+    fn nudge_picker_start_timer_prompts_on_previous_day_task() {
+        let mut app = build_app("Draft +Smith dur:7200 log:2026-05-05\nSecond +Jones\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+        app.enter_nudge_picker(NudgePickAction::StartTimer);
+
+        app.nudge_picker_accept(); // Enter on the previous-day task
+
+        assert_eq!(app.nav.mode, Mode::PromptDayBoundary);
+        assert!(!app.timer_running(), "no timer until the prompt resolves");
+        assert!(
+            app.session.nudge_picker.is_some(),
+            "selection must stay open beneath the prompt"
+        );
+
+        // Continue the same entry: timer starts, selection finishes.
+        crate::interactive::handle_day_boundary(&mut app, key('c'));
+        assert!(app.timer_running(), "timer must start on resolve");
+        assert!(app.is_timer_running_on(0));
+        assert_eq!(app.nav.mode, Mode::Normal);
+        assert!(app.session.nudge_picker.is_none());
+    }
+
+    /// Resolving the day-boundary prompt with `n` (new entry for today) also
+    /// completes the recovery: the carried-forward fresh line carries the
+    /// timer and the selection finishes.
+    #[test]
+    fn nudge_picker_day_boundary_new_entry_completes_selection() {
+        let mut app = build_app("Draft +Smith dur:7200 log:2026-05-05\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+        app.enter_nudge_picker(NudgePickAction::StartTimer);
+        app.nudge_picker_accept();
+
+        assert_eq!(app.nav.mode, Mode::PromptDayBoundary);
+        crate::interactive::handle_day_boundary(&mut app, key('n'));
+
+        assert!(app.timer_running());
+        assert_eq!(app.nav.mode, Mode::Normal);
+        assert!(app.session.nudge_picker.is_none());
+    }
+
+    /// Esc from the day-boundary prompt drops back into the selection with
+    /// the picker intact, so the user can navigate to a different task
+    /// instead of being forced out.
+    #[test]
+    fn nudge_picker_day_boundary_esc_returns_to_selection() {
+        let mut app = build_app("Draft +Smith dur:7200 log:2026-05-05\nSecond +Jones\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+        app.enter_nudge_picker(NudgePickAction::StartTimer);
+        app.nudge_picker_accept();
+
+        assert_eq!(app.nav.mode, Mode::PromptDayBoundary);
+        crate::interactive::handle_day_boundary(&mut app, esc());
+
+        assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+        assert!(!app.timer_running());
+        assert!(
+            app.session.nudge_picker.is_some(),
+            "selection must survive Esc from the prompt"
         );
     }
 

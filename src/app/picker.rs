@@ -90,12 +90,20 @@ impl App {
 
     /// Commit an open picker (Enter): keep the previewed filter, return to
     /// Normal. For the saved-filter picker this also drops the revert
-    /// snapshot so a later cancel elsewhere can't resurrect it.
+    /// snapshot so a later cancel elsewhere can't resurrect it. A picker
+    /// opened from the nudge selection (`f p` / `f c` / `f f` while choosing
+    /// a task) returns to the selection — landing in Normal would let the
+    /// idle nudge re-fire on the next tick (still idle, no timer) before
+    /// the user can pick a task.
     pub fn pick_accept(&mut self) {
         if self.nav.mode == Mode::PickSavedFilter {
             self.saved.picker.restore = None;
         }
-        self.nav.mode = Mode::Normal;
+        if self.session.nudge_picker.is_some() {
+            self.nav.mode = Mode::PickNudgeTask;
+        } else {
+            self.nav.mode = Mode::Normal;
+        }
     }
 
     /// Cancel an open picker. Clears only the filter that was being picked
@@ -112,7 +120,11 @@ impl App {
             _ => {}
         }
         self.nav.cursor = 0;
-        self.nav.mode = Mode::Normal;
+        if self.session.nudge_picker.is_some() {
+            self.nav.mode = Mode::PickNudgeTask;
+        } else {
+            self.nav.mode = Mode::Normal;
+        }
         self.recompute_visible();
     }
 
@@ -366,5 +378,48 @@ mod tests {
         // Backward from finance → health
         app.pick_step(false);
         assert_eq!(app.filter.project.as_deref(), Some("health"));
+    }
+
+    /// A filter picker opened from the nudge selection (`f p` while choosing
+    /// a task) returns to the selection on commit — landing in Normal would
+    /// let the idle nudge re-fire (still idle, no timer) before a task can
+    /// be picked.
+    #[test]
+    fn pick_accept_returns_to_selection_when_nudge_picker_open() {
+        let mut app = build_app(crate::sample::TODO_RAW);
+        app.enter_nudge_picker(crate::app::NudgePickAction::StartTimer);
+        app.enter_pick_project();
+        assert_eq!(app.nav.mode, Mode::PickProject);
+
+        app.pick_accept();
+
+        assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+        assert!(
+            app.session.nudge_picker.is_some(),
+            "selection must survive the filter commit"
+        );
+        assert!(
+            app.filter().project.is_some(),
+            "committed filter must stay applied for the selection"
+        );
+    }
+
+    /// Escaping a filter picker opened from the selection also returns to
+    /// it, with only the picked filter cleared.
+    #[test]
+    fn pick_cancel_returns_to_selection_when_nudge_picker_open() {
+        let mut app = build_app(crate::sample::TODO_RAW);
+        app.enter_nudge_picker(crate::app::NudgePickAction::StartTimer);
+        app.enter_pick_project();
+        assert_eq!(app.nav.mode, Mode::PickProject);
+
+        app.pick_cancel();
+
+        assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+        assert!(app.session.nudge_picker.is_some());
+        assert!(
+            app.filter().project.is_none(),
+            "cancel clears only the picked filter"
+        );
     }
 }
