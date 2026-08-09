@@ -121,8 +121,6 @@ pub(crate) fn draw_overlays(
             render_timesheet_calendar(frame, area, app);
         }
         Mode::IdleNudge => {
-            let r = overlay::message_rect(area);
-            frame.render_widget(Clear, r);
             let theme = app.theme();
             // The message speaks to the actual failure mode: a relaunch after
             // hours with nothing tracked (UntrackedDay) is a different prompt
@@ -133,6 +131,12 @@ pub(crate) fn draw_overlays(
                 }
                 crate::app::IdleReason::TimerStopped => "No timer running!",
             };
+            // Wrap to the box width and grow the box to fit; short messages
+            // keep the original 6-row box so the layout doesn't jump around.
+            let wrap_w = overlay::message_wrap_w(area);
+            let wrapped = msgbox::wrapped_line_count(message, wrap_w) as u16;
+            let r = overlay::message_rect_for(area, wrapped);
+            frame.render_widget(Clear, r);
             msgbox::render_message_box(
                 frame,
                 r,
@@ -148,12 +152,14 @@ pub(crate) fn draw_overlays(
             nudge_picker::render_banner(frame, body_area, app);
         }
         Mode::ReviewNudge => {
-            let r = overlay::message_rect(area);
-            frame.render_widget(Clear, r);
             let theme = app.theme();
             let tracked =
                 crate::app::format_duration(app.today_tracked_secs(), app.prefs.rounding_increment);
             let message = format!("You've tracked {tracked} today — anything missing?");
+            let wrap_w = overlay::message_wrap_w(area);
+            let wrapped = msgbox::wrapped_line_count(&message, wrap_w) as u16;
+            let r = overlay::message_rect_for(area, wrapped);
+            frame.render_widget(Clear, r);
             msgbox::render_message_box(
                 frame,
                 r,
@@ -164,21 +170,22 @@ pub(crate) fn draw_overlays(
             );
         }
         Mode::LongTimerNudge => {
-            let r = overlay::message_rect(area);
-            frame.render_widget(Clear, r);
             let theme = app.theme();
+            let message = "Timer has been running for a while — still tracking?";
+            let wrap_w = overlay::message_wrap_w(area);
+            let wrapped = msgbox::wrapped_line_count(message, wrap_w) as u16;
+            let r = overlay::message_rect_for(area, wrapped);
+            frame.render_widget(Clear, r);
             msgbox::render_message_box(
                 frame,
                 r,
                 theme,
                 " ⏰ Long Timer Nudge ",
-                "Timer has been running for a while — still tracking?",
+                message,
                 "[S]top timer  [D]ismiss",
             );
         }
         Mode::StaleTimer => {
-            let r = overlay::message_rect(area);
-            frame.render_widget(Clear, r);
             let theme = app.theme();
             let elapsed = app.timer_elapsed_secs().unwrap_or(0);
             let elapsed_str = crate::app::format_duration(elapsed, app.prefs.rounding_increment);
@@ -186,6 +193,12 @@ pub(crate) fn draw_overlays(
                 "Timer was running when tuxtime last closed — {elapsed_str} elapsed. \
                  Log it, keep counting, or discard the gap?"
             );
+            // The stale message wraps to three rows at the default width; the
+            // box grows to fit so the [K]/[S]/[D] footer is never clipped.
+            let wrap_w = overlay::message_wrap_w(area);
+            let wrapped = msgbox::wrapped_line_count(&message, wrap_w) as u16;
+            let r = overlay::message_rect_for(area, wrapped);
+            frame.render_widget(Clear, r);
             msgbox::render_message_box(
                 frame,
                 r,
@@ -196,15 +209,18 @@ pub(crate) fn draw_overlays(
             );
         }
         Mode::ManualEntryChoice => {
-            let r = overlay::message_rect(area);
-            frame.render_widget(Clear, r);
             let theme = app.theme();
+            let message = "How would you like to describe this entry?";
+            let wrap_w = overlay::message_wrap_w(area);
+            let wrapped = msgbox::wrapped_line_count(message, wrap_w) as u16;
+            let r = overlay::message_rect_for(area, wrapped);
+            frame.render_widget(Clear, r);
             msgbox::render_message_box(
                 frame,
                 r,
                 theme,
                 " ✏ Manual Time Entry ",
-                "How would you like to describe this entry?",
+                message,
                 "[N]ew blank entry  [A]dd to current task  [Esc] cancel",
             );
         }

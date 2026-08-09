@@ -30,7 +30,9 @@ const PALETTE_MAX_H: u16 = 20;
 const PALETTE_MIN_W: u16 = 50;
 const PALETTE_MAX_W: u16 = 80;
 
-/// Static prompt message boxes (idle nudge, manual-entry choice).
+/// Prompt message boxes (idle nudge, stale timer, manual-entry choice):
+/// `MESSAGE_W` wide, `MESSAGE_H` tall for short messages, growing with the
+/// wrapped message (see [`message_rect_for`]).
 const MESSAGE_W: u16 = 60;
 const MESSAGE_H: u16 = 6;
 
@@ -108,10 +110,26 @@ pub(crate) fn welcome_rect(parent: Rect) -> Rect {
     centered_in(parent, WELCOME_W, WELCOME_H)
 }
 
-/// The static prompt message boxes (idle nudge, manual-entry choice).
+/// Width the prompt message boxes word-wrap to (box width minus borders), so
+/// the caller can count the wrapped lines before sizing the box.
 #[must_use]
-pub(crate) fn message_rect(parent: Rect) -> Rect {
-    centered_in(parent, MESSAGE_W, MESSAGE_H)
+pub(crate) fn message_wrap_w(parent: Rect) -> usize {
+    usize::from(MESSAGE_W.min(parent.width))
+        .saturating_sub(2)
+        .max(16)
+}
+
+/// The prompt message boxes (idle nudge, stale timer, manual-entry choice):
+/// `MESSAGE_W` wide, growing with the wrapped message (`wrapped_lines` rows
+/// plus borders, blank, footer), keeping [`MESSAGE_H`] for short messages and
+/// capping at the parent's height.
+#[must_use]
+pub(crate) fn message_rect_for(parent: Rect, wrapped_lines: u16) -> Rect {
+    let w = MESSAGE_W.min(parent.width);
+    let h = (wrapped_lines + 4)
+        .max(MESSAGE_H)
+        .min(parent.height.saturating_sub(2).max(5));
+    centered_in(parent, w, h)
 }
 
 /// The empty-state box: the welcome footprint, clamped with small margins so
@@ -334,6 +352,19 @@ mod tests {
         // Narrow terminal shrinks the width and the wrap width with it.
         assert_eq!(day_boundary_rect(rect(50, 30), 1), Rect::new(0, 11, 50, 7));
         assert_eq!(day_boundary_wrap_w(rect(50, 30)), 48);
+    }
+
+    #[test]
+    fn message_rect_for_grows_with_wrapped_lines() {
+        // One wrapped line keeps the original 6-row box (snapshot-stable).
+        assert_eq!(message_rect_for(rect(100, 30), 1), Rect::new(20, 12, 60, 6));
+        assert_eq!(message_wrap_w(rect(100, 30)), 58);
+        // The stale-timer message wraps to three rows: the box grows to 7 so
+        // the [K]/[S]/[D] footer is never clipped.
+        assert_eq!(message_rect_for(rect(100, 30), 3), Rect::new(20, 11, 60, 7));
+        // Narrow terminal shrinks the width and the wrap width with it.
+        assert_eq!(message_rect_for(rect(50, 30), 3), Rect::new(0, 11, 50, 7));
+        assert_eq!(message_wrap_w(rect(50, 30)), 48);
     }
 
     #[test]

@@ -1518,6 +1518,29 @@ fn stale_timer_k_keeps_counting() {
     assert_eq!(app.nav.mode, Mode::Normal);
 }
 
+/// `K` also acknowledges the timer is long-running: the long-timer popup must
+/// not re-fire on the very next tick over the same timer (the status-bar ⏰
+/// flag stays on, exactly like dismissing the long-timer nudge itself).
+#[test]
+fn stale_timer_k_does_not_rearm_long_timer_popup() {
+    // 7300s elapsed ≥ the 7200s (2h) default long-timer threshold.
+    let mut app = stale_timer_app(7300, "k2");
+
+    handle_stale_timer(&mut app, key('k'));
+
+    assert_eq!(app.nav.mode, Mode::Normal);
+    assert!(app.timer_running());
+    assert!(
+        app.session.long_timer_nudge_active,
+        "the status bar must keep its ⏰ indicator"
+    );
+    assert!(
+        !app.check_nudges(),
+        "the long-timer popup must not re-fire immediately after keep"
+    );
+    assert_eq!(app.nav.mode, Mode::Normal);
+}
+
 // ---- idle nudge recovery actions (S / M task picker) ----
 
 /// `S` from the idle nudge opens the task picker in start-timer mode; the

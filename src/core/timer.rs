@@ -101,27 +101,36 @@ impl Store {
             return TimerQuitOutcome::NoTimer;
         }
         let outcome = self.timer_stop_inner();
-        if let TimerOutcome::Stopped {
-            abs,
-            elapsed_secs,
-            total_secs,
-            ..
-        } = outcome
-        {
-            self.push_history();
-            if let Err(e) = self.persist() {
-                return TimerQuitOutcome::Error(e);
-            }
-            return TimerQuitOutcome::Stopped {
+        match outcome {
+            // A midnight-crossing session also rewrites the list (one line
+            // per day) — that rewrite must be persisted on quit too, or the
+            // elapsed time is silently dropped. The quit outcome collapses
+            // the split to the same abs/elapsed/total a plain stop carries;
+            // the per-day chunks are only for the caller's flash message.
+            TimerOutcome::Stopped {
                 abs,
                 elapsed_secs,
                 total_secs,
-            };
-        }
-        if let TimerOutcome::Error(e) = outcome {
-            TimerQuitOutcome::Error(e)
-        } else {
-            TimerQuitOutcome::NoTimer
+                ..
+            }
+            | TimerOutcome::StoppedSplit {
+                abs,
+                elapsed_secs,
+                total_secs,
+                ..
+            } => {
+                self.push_history();
+                if let Err(e) = self.persist() {
+                    return TimerQuitOutcome::Error(e);
+                }
+                TimerQuitOutcome::Stopped {
+                    abs,
+                    elapsed_secs,
+                    total_secs,
+                }
+            }
+            TimerOutcome::Error(e) => TimerQuitOutcome::Error(e),
+            _ => TimerQuitOutcome::NoTimer,
         }
     }
 
@@ -262,7 +271,13 @@ impl Store {
 
     fn timer_stop(&mut self) -> TimerOutcome {
         let outcome = self.timer_stop_inner();
-        if matches!(outcome, TimerOutcome::Stopped { .. }) {
+        // A midnight-crossing stop splits into per-day lines; that rewrite
+        // must reach the file too, or the next reconcile/quit reverts it and
+        // the elapsed time silently vanishes.
+        if matches!(
+            outcome,
+            TimerOutcome::Stopped { .. } | TimerOutcome::StoppedSplit { .. }
+        ) {
             self.push_history();
             if let Err(e) = self.persist() {
                 return TimerOutcome::Error(e);
@@ -826,6 +841,60 @@ mod tests {
         assert!(new.raw.contains("@drafting"));
         assert!(new.raw.contains("dur:1800"));
         assert!(new.raw.contains("log:2026-05-06"));
+    }
+
+    // ---- split sessions persist on stop and on quit ----
+
+    /// A midnight-crossing stop splits into per-day lines; the split must be
+    /// written to disk, not left in memory only — otherwise the next
+    /// reconcile reverts it and the elapsed time silently vanishes.
+    #[test]
+    fn timer_stop_persists_split() {
+        // A start two days back always crosses at least one midnight,
+        // whatever the real date the test happens to run on.
+        let start = (chrono::Local::now() - chrono::Duration::days(2))
+            .format("%Y-%m-%dT%H:%M:%S")
+            .to_string();
+        let mut store = build_store(&format!("Draft motion +Smith start:{start}\n"));
+        assert!(matches!(
+            store.timer_toggle(0),
+            TimerOutcome::StoppedSplit { .. }
+        ));
+        assert!(
+            matches!(store.reconcile(), Reconcile::Unchanged),
+            "the split must reach the file: disk must equal memory"
+        );
+        assert!(store.tasks().len() >= 2, "one open line per session day");
+        assert!(store.tasks()[0].done, "start-day line consumed");
+        assert!(
+            store.tasks().iter().all(|t| t.start.is_none()),
+            "start: must be stripped from every split line"
+        );
+    }
+
+    /// Quitting with a midnight-crossing timer must capture and persist the
+    /// split the same way a plain stop does — not silently drop the session.
+    #[test]
+    fn stop_timer_on_quit_persists_split() {
+        let start = (chrono::Local::now() - chrono::Duration::days(2))
+            .format("%Y-%m-%dT%H:%M:%S")
+            .to_string();
+        let mut store = build_store(&format!("Draft motion +Smith start:{start}\n"));
+        let out = store.stop_timer_on_quit();
+        assert!(
+            matches!(out, TimerQuitOutcome::Stopped { .. }),
+            "quit must not drop a midnight-crossing session, got {out:?}"
+        );
+        assert!(
+            matches!(store.reconcile(), Reconcile::Unchanged),
+            "the split must reach the file on quit"
+        );
+        assert!(store.tasks().len() >= 2);
+        assert!(store.tasks()[0].done);
+        assert!(
+            store.tasks().iter().all(|t| t.start.is_none()),
+            "start: must be stripped from every split line"
+        );
     }
 
     #[test]

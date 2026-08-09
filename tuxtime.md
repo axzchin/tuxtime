@@ -343,6 +343,12 @@ lawyer's day:
   the long-timer threshold, launch asks `[K]eep counting / [S]top & log /
   [D]iscard gap`. `D` strips `start:` without crediting the away time, so a
   zombie session (closed terminal overnight) can never silently bill hours.
+  `K` keeps it running *and* counts as acknowledging the long-timer, so the
+  long-timer popup doesn't instantly re-fire over the same timer.
+- **Midnight-crossing sessions are never lost** — a stop that crosses
+  midnight splits the elapsed time into one line per calendar day, and that
+  split is written to disk on a normal stop **and on quit**, so closing the
+  app with an overnight timer still captures every day's time.
 - **Launch-time idle backdate** — on a fresh launch with nothing tracked
   today and no running timer, the idle clock starts already past the
   threshold, so the first tick nudges instead of granting a fresh 15-minute

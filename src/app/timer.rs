@@ -241,6 +241,12 @@ impl App {
     pub fn keep_stale_timer(&mut self) {
         // Timer is running, so the idle nudge can't fire; dismissing still
         // resets the activity clock so a later stop keeps the cadence sane.
+        //
+        // Keeping also acknowledges the timer is long-running: set the
+        // status-bar ⏰ flag so the long-timer popup doesn't instantly
+        // re-fire over the same timer the moment this prompt closes (the
+        // flag semantics match pressing D on the long-timer nudge itself).
+        self.session.long_timer_nudge_active = true;
         self.dismiss_nudge();
     }
 
