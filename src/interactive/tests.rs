@@ -1582,6 +1582,142 @@ fn pick_nudge_task_esc_returns_to_idle_nudge() {
     assert_eq!(app.nav.mode, Mode::IdleNudge);
 }
 
+// ---- sidebar toggles in every view ----
+
+/// `[`/`]` are view-independent chrome: they must toggle the sidebars in
+/// the Timesheet view too, not just the list. (Regression: the timesheet
+/// key handler previously swallowed every key except Esc/V/Z//.)
+#[test]
+fn timesheet_brackets_toggle_sidebars() {
+    let mut app = build_timesheet_app();
+    app.set_view(View::Timesheet);
+    let left = app.prefs.layout.left;
+    let right = app.prefs.layout.right;
+
+    dispatch(&mut app, key('['), &KeyBindings::default());
+    dispatch(&mut app, key(']'), &KeyBindings::default());
+
+    assert_ne!(
+        app.prefs.layout.left, left,
+        "[ must toggle the left sidebar"
+    );
+    assert_ne!(
+        app.prefs.layout.right, right,
+        "] must toggle the right sidebar"
+    );
+    assert_eq!(
+        app.view(),
+        View::Timesheet,
+        "sidebar toggles must not leave the timesheet"
+    );
+}
+
+/// `[`/`]` must also work inside the Project Manager view.
+#[test]
+fn manage_projects_brackets_toggle_sidebars() {
+    let mut app = build_app();
+    app.nav.mode = Mode::ManageProjects;
+    let left = app.prefs.layout.left;
+    let right = app.prefs.layout.right;
+
+    handle_manage_projects(&mut app, key('['));
+    handle_manage_projects(&mut app, key(']'));
+
+    assert_ne!(app.prefs.layout.left, left);
+    assert_ne!(app.prefs.layout.right, right);
+    assert_eq!(
+        app.nav.mode,
+        Mode::ManageProjects,
+        "sidebar toggles must not leave the project manager"
+    );
+}
+
+/// `N` from the idle nudge opens a blank insert; Esc-cancelling it must
+/// return to the nudge popup — the reminder survives an aborted recovery.
+#[test]
+fn idle_nudge_n_esc_returns_to_nudge() {
+    let mut app = build_app();
+    app.nav.mode = Mode::IdleNudge;
+
+    handle_idle_nudge(&mut app, key('N'));
+    assert_eq!(app.nav.mode, Mode::Insert);
+    assert!(
+        app.session.from_nudge,
+        "insert must be marked as nudge-born"
+    );
+
+    // First Esc in insert sub-mode switches to normal input mode; the
+    // second exits — back to the nudge, not Normal.
+    handle_insert(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    handle_insert(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+
+    assert_eq!(
+        app.nav.mode,
+        Mode::IdleNudge,
+        "Esc from the nudge's N insert must return to the nudge"
+    );
+    assert!(
+        !app.session.from_nudge,
+        "the nudge-born marker must be consumed"
+    );
+}
+
+/// Saving the entry opened via the nudge's `N` exits to Normal (a real
+/// capture happened — the reminder's job is done).
+#[test]
+fn idle_nudge_n_save_exits_to_normal() {
+    let mut app = build_app();
+    app.nav.mode = Mode::IdleNudge;
+
+    handle_idle_nudge(&mut app, key('N'));
+    assert_eq!(app.nav.mode, Mode::Insert);
+    app.draft_set_insert("Buy milk".into());
+
+    handle_insert(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(app.nav.mode, Mode::Normal, "save must exit to Normal");
+    assert_eq!(app.tasks().len(), 4, "the new task must be saved");
+    assert!(!app.session.from_nudge, "marker must be cleared on save");
+}
+
+/// An insert NOT born from the nudge still Esc's back to Normal (no
+/// behavior change outside the nudge flow).
+#[test]
+fn plain_insert_esc_exits_to_normal() {
+    let mut app = build_app();
+    app.nav.mode = Mode::Insert;
+    app.draft_clear();
+
+    handle_insert(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    handle_insert(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+
+    assert_eq!(app.nav.mode, Mode::Normal);
+}
+
+/// `M` → picker → Enter (add-time prompt): Esc from that prompt must return
+/// to the nudge, mirroring the N insert's cancel behavior.
+#[test]
+fn idle_nudge_m_add_time_esc_returns_to_nudge() {
+    let mut app = build_app();
+    app.nav.mode = Mode::IdleNudge;
+
+    handle_idle_nudge(&mut app, key('M'));
+    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    // Commit the picker → the add-time prompt.
+    handle_pick_nudge_task(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(app.nav.mode, Mode::PromptAddTime);
+    assert!(app.session.from_nudge);
+
+    handle_prompt(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+
+    assert_eq!(
+        app.nav.mode,
+        Mode::IdleNudge,
+        "Esc from the nudge's add-time prompt must return to the nudge"
+    );
+    assert!(!app.session.from_nudge);
+}
+
 // ---- end-of-day review nudge ----
 
 /// `V` on the review nudge opens the timesheet anchored on today.

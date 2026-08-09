@@ -291,6 +291,10 @@ impl App {
                 }
             }
             NudgePickAction::AddTime => {
+                // Remember the prompt came from the nudge so an Esc-cancel
+                // returns to the popup (the reminder survives an aborted
+                // recovery) while a successful add exits to Normal.
+                self.session.from_nudge = true;
                 // Point the list cursor at the chosen task so the add-time
                 // prompt targets it, then open the prompt.
                 self.set_view(View::List);

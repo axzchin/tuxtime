@@ -87,6 +87,12 @@ pub struct Session {
     /// The day the end-of-day review nudge was last shown (`YYYY-MM-DD`),
     /// so it fires at most once per day.
     pub review_nudge_date: Option<String>,
+    /// True while a recovery flow opened from the idle nudge is active: the
+    /// `N` new-entry insert, or the add-time prompt reached via the `M`
+    /// task picker. Esc-cancel returns to the nudge popup instead of
+    /// dropping to Normal, so the reminder survives a cancelled recovery
+    /// attempt.
+    pub from_nudge: bool,
 }
 
 impl Session {
@@ -104,6 +110,7 @@ impl Session {
             idle_reason: IdleReason::TimerStopped,
             nudge_picker: None,
             review_nudge_date: None,
+            from_nudge: false,
         }
     }
 }

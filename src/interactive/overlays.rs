@@ -272,6 +272,11 @@ pub(crate) fn handle_prompt(app: &mut App, key: KeyEvent) {
                 app.nav.pop_mode()
             } else if app.nav.mode() == Mode::PromptRenameProject {
                 Mode::ManageProjects
+            } else if app.nav.mode() == Mode::PromptAddTime && app.session.from_nudge {
+                // Esc from the nudge's add-time recovery flow returns to the
+                // nudge popup — the reminder survives a cancelled attempt.
+                app.session.from_nudge = false;
+                Mode::IdleNudge
             } else {
                 Mode::Normal
             };
@@ -301,7 +306,10 @@ pub(crate) fn handle_prompt(app: &mut App, key: KeyEvent) {
                 Mode::PromptProject => app.add_project_to_current(&value),
                 Mode::PromptContext => app.toggle_context_on_current(&value),
                 Mode::PromptSaveFilter => app.save_current_filter_as(&value),
-                Mode::PromptAddTime => app.add_time_to_current_from_input(&value),
+                Mode::PromptAddTime => {
+                    app.session.from_nudge = false;
+                    app.add_time_to_current_from_input(&value);
+                }
                 Mode::PromptIdleNudge => {
                     if let Ok(mins) = value.parse::<u64>() {
                         if mins > 0 {
@@ -370,6 +378,15 @@ pub(crate) fn handle_manage_projects(app: &mut App, key: KeyEvent) {
         KeyCode::Char('s') => {
             app.cycle_project_sort();
         }
+        // Sidebar toggles work here too — view-independent chrome.
+        KeyCode::Char('[') => {
+            app.prefs.toggle_left();
+            app.save_prefs();
+        }
+        KeyCode::Char(']') => {
+            app.prefs.toggle_right();
+            app.save_prefs();
+        }
         KeyCode::Char('/') => {
             // Push search over ManageProjects so Esc/Enter pops straight back.
             app.draft_clear();
@@ -391,6 +408,10 @@ pub(crate) fn handle_idle_nudge(app: &mut App, key: KeyEvent) {
         KeyCode::Char('s' | 'S') => app.enter_nudge_picker(crate::app::NudgePickAction::StartTimer),
         KeyCode::Char('m' | 'M') => app.enter_nudge_picker(crate::app::NudgePickAction::AddTime),
         KeyCode::Char('N' | 'n') => {
+            // Remember the insert came from the nudge so an Esc-cancel
+            // returns to the popup (the reminder survives an aborted
+            // recovery) while a save exits to Normal.
+            app.session.from_nudge = true;
             app.set_view(View::List);
             app.draft_clear();
             app.session.manual_time_entry = false;

@@ -10,7 +10,7 @@
 //! the draft buffer — callers like search and the command palette reuse
 //! [`apply_to_draft`] to share the same text-editing behavior.
 
-use crate::app::{AddOutcome, App, DialogInputMode, OverlayKind};
+use crate::app::{AddOutcome, App, DialogInputMode, Mode, OverlayKind};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::overlays::handle_autocomplete_keys;
@@ -183,9 +183,19 @@ fn commit_draft(app: &mut App) -> AddOutcome {
     }
 }
 
-/// Transition out of Insert mode back to Normal, clearing transient state.
-fn exit_insert(app: &mut App) {
-    app.nav.enter_normal();
+/// Transition out of Insert mode, clearing transient state. Returns to the
+/// idle-nudge popup when the insert was opened from the nudge (`N` recovery
+/// action) and the user cancelled with Esc — the reminder must survive an
+/// aborted recovery attempt. On a real save (or an insert entered outside
+/// the nudge) returns to Normal.
+fn exit_insert(app: &mut App, cancelled: bool) {
+    let from_nudge = app.session.from_nudge;
+    app.session.from_nudge = false;
+    if from_nudge && cancelled {
+        app.nav.mode = Mode::IdleNudge;
+    } else {
+        app.nav.enter_normal();
+    }
     app.draft_clear();
     app.selection.exit_edit();
     app.session.manual_time_entry = false;
@@ -201,18 +211,18 @@ pub(crate) fn handle_insert_normal(app: &mut App, key: KeyEvent) {
         KeyCode::Enter if !ctrl => {
             let outcome = commit_draft(app);
             if !matches!(outcome, AddOutcome::Parsed) {
-                exit_insert(app);
+                exit_insert(app, false);
             }
         }
         KeyCode::Enter if ctrl => {
             let outcome = commit_draft(app);
             if outcome == AddOutcome::Saved {
-                exit_insert(app);
+                exit_insert(app, false);
                 app.toggle_timer();
             }
         }
         KeyCode::Esc => {
-            exit_insert(app);
+            exit_insert(app, true);
         }
         KeyCode::Char('h') | KeyCode::Left => app.draft_left(),
         KeyCode::Char('l') | KeyCode::Right => app.draft_right(),
@@ -321,13 +331,13 @@ pub(crate) fn handle_insert(app: &mut App, key: KeyEvent) {
             // todo.txt and is asking the user to confirm — stay in Insert so
             // they can review/edit before a second Enter saves.
             if !matches!(outcome, AddOutcome::Parsed) {
-                exit_insert(app);
+                exit_insert(app, false);
             }
         }
         KeyCode::Enter if ctrl => {
             let outcome = commit_draft(app);
             if outcome == AddOutcome::Saved {
-                exit_insert(app);
+                exit_insert(app, false);
                 app.toggle_timer();
             }
         }

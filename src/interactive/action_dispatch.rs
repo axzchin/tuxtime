@@ -349,7 +349,15 @@ pub(crate) fn handle_normal(app: &mut App, key: KeyEvent, keybinds: &KeyBindings
     if app.view() == View::Timesheet
         && !matches!(
             key.code,
-            KeyCode::Esc | KeyCode::Char('V') | KeyCode::Char('Z') | KeyCode::Char('/')
+            KeyCode::Esc
+                | KeyCode::Char('V')
+                | KeyCode::Char('Z')
+                | KeyCode::Char('/')
+                // Sidebar toggles are view-independent chrome — let them fall
+                // through to the normal key resolver so `[`/`]` work in every
+                // view (including Timesheet), not just the list.
+                | KeyCode::Char('[')
+                | KeyCode::Char(']')
         )
     {
         handle_timesheet_keys(app, key);
