@@ -214,16 +214,34 @@ impl App {
         over_threshold || crossed_day
     }
 
-    /// `[k]eep counting` on the stale-timer prompt: dismiss the popup and
-    /// leave the timer running (the user is asserting the time is real).
-    pub fn keep_stale_timer(&mut self) {
+    /// Dismiss any nudge (or the stale-timer popup) back to Normal: restore
+    /// the pre-nudge view and reset the idle-nudge clock so the popup can't
+    /// re-fire on the next tick. The shared exit for the popup dismiss keys
+    /// (`D`/`Esc` on the idle, long-timer and stale-timer prompts), `keep`
+    /// on the stale-timer prompt, and the view-switch exit from the nudge
+    /// task selection.
+    ///
+    /// The clock is reset directly rather than via
+    /// [`note_timer_activity`](Self::note_timer_activity), so a pure
+    /// dismissal never rewrites the idle reason — the user is still
+    /// untracked, and the nudge will nag again once the clock lapses (only
+    /// the instant re-fire is suppressed). Callers that captured time first
+    /// (stopped a timer, discarded a gap) have already refreshed the clock;
+    /// the duplicate write here is harmless.
+    pub(crate) fn dismiss_nudge(&mut self) {
         self.nav.enter_normal();
         if let Some(v) = self.session.pre_nudge_view.take() {
             self.set_view(v);
         }
-        // Timer is running, so the idle nudge can't fire; reset the activity
-        // clock anyway so a later stop keeps the nudge cadence sane.
-        self.note_timer_activity();
+        self.session.last_timer_activity = std::time::Instant::now();
+    }
+
+    /// `[k]eep counting` on the stale-timer prompt: dismiss the popup and
+    /// leave the timer running (the user is asserting the time is real).
+    pub fn keep_stale_timer(&mut self) {
+        // Timer is running, so the idle nudge can't fire; dismissing still
+        // resets the activity clock so a later stop keeps the cadence sane.
+        self.dismiss_nudge();
     }
 
     // ---- nudge task picker (S / M from the idle nudge) ----
@@ -392,9 +410,11 @@ impl App {
     /// lapses — only the instant re-fire is suppressed.
     pub fn nudge_picker_exit_to_view(&mut self) {
         self.nudge_picker_abandon();
-        self.nav.enter_normal();
+        // The user chose where to go (V/a already switched the view), so a
+        // stale pre-nudge view must not override it — clear it before the
+        // dismiss, whose restore then sees None and leaves the view alone.
         self.session.pre_nudge_view = None;
-        self.session.last_timer_activity = std::time::Instant::now();
+        self.dismiss_nudge();
     }
 
     /// Put the user's search/project/context filter state back the way it

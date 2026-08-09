@@ -453,11 +453,7 @@ pub(crate) fn handle_idle_nudge(app: &mut App, key: KeyEvent) {
         KeyCode::Char('D') | KeyCode::Esc => {
             // Dismissing the nudge ends any recovery flow for good.
             app.session.from_nudge = false;
-            app.nav.enter_normal();
-            if let Some(v) = app.session.pre_nudge_view.take() {
-                app.set_view(v);
-            }
-            app.session.last_timer_activity = std::time::Instant::now();
+            app.dismiss_nudge();
         }
         _ => {}
     }
@@ -579,18 +575,11 @@ pub(crate) fn handle_stale_timer(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Char('s' | 'S') => {
             app.stop_running_timer();
-            app.nav.enter_normal();
-            if let Some(v) = app.session.pre_nudge_view.take() {
-                app.set_view(v);
-            }
-            app.session.last_timer_activity = std::time::Instant::now();
+            app.dismiss_nudge();
         }
         KeyCode::Char('d' | 'D') => {
             app.discard_stale_timer();
-            app.nav.enter_normal();
-            if let Some(v) = app.session.pre_nudge_view.take() {
-                app.set_view(v);
-            }
+            app.dismiss_nudge();
         }
         KeyCode::Char('k' | 'K') | KeyCode::Esc => {
             app.keep_stale_timer();
@@ -606,18 +595,10 @@ pub(crate) fn handle_long_timer_nudge(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Char('S' | 's') => {
             app.stop_running_timer();
-            app.nav.enter_normal();
-            if let Some(v) = app.session.pre_nudge_view.take() {
-                app.set_view(v);
-            }
-            app.session.last_timer_activity = std::time::Instant::now();
+            app.dismiss_nudge();
         }
         KeyCode::Char('D') | KeyCode::Esc => {
-            app.nav.enter_normal();
-            if let Some(v) = app.session.pre_nudge_view.take() {
-                app.set_view(v);
-            }
-            app.session.last_timer_activity = std::time::Instant::now();
+            app.dismiss_nudge();
         }
         _ => {}
     }
