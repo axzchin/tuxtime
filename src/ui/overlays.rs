@@ -143,7 +143,9 @@ pub(crate) fn draw_overlays(
             );
         }
         Mode::PickNudgeTask => {
-            nudge_picker::render(frame, area, app);
+            // The selection runs on the real list view; the banner strip
+            // just announces the mode and the commit keys.
+            nudge_picker::render_banner(frame, body_area, app);
         }
         Mode::ReviewNudge => {
             let r = overlay::message_rect(area);

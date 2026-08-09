@@ -63,7 +63,7 @@ pub fn dispatch(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
         Mode::Welcome => handle_welcome(app, key),
         Mode::Normal | Mode::Visual => handle_normal(app, key, keybinds),
         Mode::IdleNudge => handle_idle_nudge(app, key),
-        Mode::PickNudgeTask => handle_pick_nudge_task(app, key),
+        Mode::PickNudgeTask => handle_pick_nudge_task(app, key, keybinds),
         Mode::ReviewNudge => handle_review_nudge(app, key),
         Mode::LongTimerNudge => handle_long_timer_nudge(app, key),
         Mode::StaleTimer => handle_stale_timer(app, key),

@@ -15,11 +15,11 @@ expression: buffer_to_text(&buf)
    status bar                  on                                                                   
    filter sidebar              on  ([ to toggle)                                                    
    detail sidebar              on  (] to toggle)                                                    
-   show done in list                                                                                
-   show future in list                                                                              
-                                                                                                    
- BEHAVIOR                                                                                           
-   default sort                                                                                     
+   show done in list     ┌ IDLE NUDGE (MIN) ──────────────────────────────┐                         
+   show future in list   │  ⏰ 15█                                         │                         
+                         │                                                │                         
+ BEHAVIOR                │                                                │                         
+   default sort          └────────────────────────────────────────────────┘                         
    idle nudge                  15 min  (i to change)                                                
    long timer nudge            120 min  (l to change)                                               
    rounding increment          0.1h  (r to cycle)                                                   

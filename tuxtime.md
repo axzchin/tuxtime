@@ -211,11 +211,15 @@
 ### 25. Add Time to Current Task (`M → A`)
 - When a lawyer forgets to start the timer but can estimate how long they worked
 - `M` → `A` → type duration (e.g. `30`, `1.5`, `14:30`) → `Enter`
+- A leading `-` **removes** time instead — the correction for a timer left
+  running too long: `-30` removes 30 minutes, `-1.5` removes 1.5 hours. The
+  result is clamped at zero so a task never goes negative; flash says
+  `"removed 30m — Draft motion (total 1h 30m)"`
 - `add_time_to_current_from_input()` on `App`: parses duration via `parse_duration_input()`, edits the task line via `store.edit_line()`, replaces/adds `dur:` value using plain string operations
 - Handles `EditOutcome` properly (Saved, Aborted, Error, Empty, OutOfRange)
 - Flash: `"added 30m — Draft motion (total 2h 0m)"`
 - `Mode::PromptAddTime` follows the same pattern as `PromptProject`/`PromptSaveFilter` — routes through `handle_prompt`, renders as centered prompt overlay
-- Status bar label `"ADD TIME"`, hint `"type duration (e.g. 30, 1.5, 14:30) · Enter add · Esc cancel"`
+- Status bar label `"ADD TIME"`, hint `"type duration (e.g. 30, 1.5, 14:30; -30 removes) · Enter add · Esc cancel"`
 - Dialog label: `⏱ ADD TIME`
 
 **Files**: `src/app/types.rs`, `src/app/mod.rs`, `src/main.rs`, `src/ui/mod.rs`, `src/ui/dialog.rs`, `src/ui/status.rs`
@@ -344,10 +348,15 @@ lawyer's day:
   threshold, so the first tick nudges instead of granting a fresh 15-minute
   grace period after hours spent outside the app. The popup says "Nothing
   tracked yet today" (vs. the ordinary "No timer running!").
-- **Idle nudge recovery actions** — the popup now offers `[S]tart timer` and
-  `[M] add time`; both open a **task picker** (`Mode::PickNudgeTask`) so the
-  timer never blind-starts whatever task the cursor happens to be on. The
-  user consciously picks a task; `Enter` commits, `Esc` returns to the nudge.
+- **Idle nudge recovery actions** — the popup offers `[S]tart timer` and
+  `[M] add time`; both open a **task picker** (`Mode::PickNudgeTask`) that
+  runs on the real list view, so the timer never blind-starts whatever task
+  the cursor happened to be on. All list functionality stays live while
+  choosing — `j`/`k` navigation, `/` search, `+`/`@` filters, `t` to start
+  directly — with a banner strip + status hints announcing the selection
+  mode. `Enter` commits the highlighted task, `Esc` returns to the nudge.
+  The active search/filter is cleared on entry (so no task is hidden) and
+  restored on exit.
 - **Nudge alert in the terminal title + BEL** — when a nudge is active, the
   window title becomes `… ⏰ — timer check` and the bell rings once, so the
   reminder reaches the user when the terminal is unfocused (in another app).
@@ -401,12 +410,14 @@ lawyer's day:
 | `/` | Search/filter narratives | Timesheet |
 | `j`/`k` | Navigate groups | Timesheet |
 | `Esc`/`V`/`q` | Dismiss Timesheet (V toggles back to List) | Timesheet |
-| `S` (in nudge) | Task picker → start timer on chosen task | IdleNudge |
-| `M` (in nudge) | Task picker → add time to chosen task | IdleNudge |
+| `S` (in nudge) | List selection → start timer on highlighted | IdleNudge |
+| `M` (in nudge) | List selection → add time to highlighted | IdleNudge |
 | `N` (in nudge) | New blank entry | IdleNudge |
 | `D`/`Esc` (in nudge) | Dismiss nudge | IdleNudge |
-| `j`/`k` | Navigate task picker | PickNudgeTask |
-| `Enter` | Commit picked task | PickNudgeTask |
+| `j`/`k` | Navigate the list | PickNudgeTask |
+| `/` | Search/filter the list | PickNudgeTask |
+| `t` | Start timer on highlighted (completes selection) | PickNudgeTask |
+| `Enter` | Commit highlighted task | PickNudgeTask |
 | `Esc` | Back to idle nudge | PickNudgeTask |
 | `K`/`S`/`D` | Keep counting / stop & log / discard gap | StaleTimer |
 | `V` | Open timesheet (today) | ReviewNudge |

@@ -7,8 +7,8 @@
 
 use super::session::DayBoundaryAction;
 use super::{
-    App, IdleReason, Mode, NudgePickAction, NudgePickerState, View, format_duration, parse_clock,
-    parse_duration_input,
+    App, Filter, IdleReason, Mode, NudgePickAction, NudgePickerState, View, format_duration,
+    parse_clock, parse_duration_input,
 };
 use crate::core::outcome::{CarryForwardOutcome, EditOutcome, TimerOutcome, TimerQuitOutcome};
 use crate::core::rebuild_token_line;
@@ -228,66 +228,69 @@ impl App {
 
     // ---- nudge task picker (S / M from the idle nudge) ----
 
-    /// Open the nudge task picker for the given action. Lists all open tasks
-    /// (unfiltered — the user is choosing deliberately, filters would hide
-    /// the very task they mean), seeding the cursor on the currently selected
-    /// task when it's among them. The whole point: a nudge must never start a
-    /// timer (or add time) to a random task just because it happens to be
-    /// under the cursor.
+    /// Open the nudge task picker for the given action. Runs on the *real
+    /// list view* so the user keeps full navigation, search and filtering
+    /// while choosing — no separate dialog. The active search/filter is
+    /// cleared so every open task is visible (the same "nothing hidden"
+    /// guarantee the old standalone dialog offered) and saved so the
+    /// selection can restore it on exit. The cursor is seeded on the first
+    /// open task. The whole point stands: a nudge must never start a timer
+    /// (or add time) to a random task just because it happens to be under
+    /// the cursor — the highlighted task is the deliberate choice.
     pub fn enter_nudge_picker(&mut self, action: NudgePickAction) {
-        let abs_list: Vec<usize> = self
-            .store
-            .tasks()
-            .iter()
-            .enumerate()
-            .filter(|(_, t)| !t.done)
-            .map(|(i, _)| i)
-            .collect();
-        if abs_list.is_empty() {
+        if !self.store.tasks().iter().any(|t| !t.done) {
             self.flash("no open tasks — press n to create one");
             self.nav.mode = Mode::IdleNudge;
             return;
         }
-        let cursor = self
-            .cur_abs()
-            .and_then(|a| abs_list.iter().position(|x| *x == a))
-            .unwrap_or(0);
-        self.session.nudge_picker = Some(NudgePickerState {
-            abs_list,
-            cursor,
+        let state = NudgePickerState {
             action,
-        });
+            prev_filter: self.filter.clone(),
+        };
+        // Force the list view and reveal every open task.
+        self.set_view(View::List);
+        self.set_project_filter(None);
+        self.set_context_filter(None);
+        self.clear_search();
+        // Seed the cursor on the first open task so Enter is always safe.
+        self.recompute_visible();
+        if let Some(pos) = self
+            .visible_indices()
+            .iter()
+            .position(|&a| !self.store.tasks()[a].done)
+        {
+            self.nav.cursor = pos;
+        }
+        self.session.nudge_picker = Some(state);
         self.nav.mode = Mode::PickNudgeTask;
     }
 
-    /// Move the picker highlight (clamped to the list).
-    pub fn nudge_picker_step(&mut self, forward: bool) {
-        if let Some(p) = self.session.nudge_picker.as_mut() {
-            p.cursor = if forward {
-                (p.cursor + 1).min(p.abs_list.len().saturating_sub(1))
-            } else {
-                p.cursor.saturating_sub(1)
-            };
-        }
-    }
-
-    /// Commit the picker: start the timer (or open add-time) on the chosen
-    /// task, then leave the nudge flow back to Normal (restoring the
-    /// pre-nudge view).
+    /// Commit the picker: start the timer (or open add-time) on the task
+    /// highlighted in the list, restoring the pre-selection search/filter.
+    /// The user consciously navigated to that row — the visible highlight IS
+    /// the choice the picker exists to force.
     pub fn nudge_picker_accept(&mut self) {
         let Some(picker) = self.session.nudge_picker.take() else {
             return;
         };
-        let Some(&abs) = picker.abs_list.get(picker.cursor) else {
+        let Some(abs) = self.cur_abs() else {
             self.nav.mode = Mode::IdleNudge;
             return;
         };
+        // A completed task must never receive time — stay in selection mode
+        // (filter still cleared) so the user can pick an open one.
+        if self.store.tasks()[abs].done {
+            self.session.nudge_picker = Some(picker);
+            self.flash("that task is done — pick an open one");
+            return;
+        }
         match picker.action {
             NudgePickAction::StartTimer => {
                 // Starting a timer is itself a recovery — never inherit a
                 // stale flag from a previous flow.
                 self.session.from_nudge = false;
                 self.toggle_timer_at(abs);
+                self.restore_filter(picker.prev_filter);
                 self.nav.enter_normal();
                 if let Some(v) = self.session.pre_nudge_view.take() {
                     self.set_view(v);
@@ -298,13 +301,20 @@ impl App {
                 // returns to the popup (the reminder survives an aborted
                 // recovery) while a successful add exits to Normal.
                 self.session.from_nudge = true;
+                self.restore_filter(picker.prev_filter);
+                // If the restored filter would hide the chosen task, keep
+                // the selection's unfiltered view so the add-time prompt
+                // targets the task the user actually picked.
+                if !self.visible_indices().contains(&abs) {
+                    self.set_project_filter(None);
+                    self.set_context_filter(None);
+                    self.clear_search();
+                }
                 // Point the list cursor at the chosen task so the add-time
                 // prompt targets it, then open the prompt.
-                self.set_view(View::List);
                 if let Some(pos) = self.visible_indices().iter().position(|&a| a == abs) {
                     self.nav.cursor = pos;
                 }
-                self.recompute_visible();
                 let body = self
                     .store
                     .tasks()
@@ -319,10 +329,36 @@ impl App {
     }
 
     /// Esc from the picker returns to the idle-nudge popup so the user can
-    /// pick a different action (or dismiss).
+    /// pick a different action (or dismiss), restoring the pre-selection
+    /// search/filter.
     pub fn nudge_picker_cancel(&mut self) {
-        self.session.nudge_picker = None;
+        if let Some(p) = self.session.nudge_picker.take() {
+            self.restore_filter(p.prev_filter);
+        }
         self.nav.mode = Mode::IdleNudge;
+    }
+
+    /// End the picker without the Enter key — used when a timer is started
+    /// mid-selection (`t`), which completes the recovery on its own. Restores
+    /// the pre-selection search/filter and the pre-nudge view.
+    pub fn nudge_picker_finish(&mut self) {
+        if let Some(p) = self.session.nudge_picker.take() {
+            self.restore_filter(p.prev_filter);
+        }
+        self.nav.enter_normal();
+        if let Some(v) = self.session.pre_nudge_view.take() {
+            self.set_view(v);
+        }
+    }
+
+    /// Put the user's search/project/context filter state back the way it
+    /// was before the picker opened (one visible-cache rebuild).
+    fn restore_filter(&mut self, prev: Filter) {
+        self.filter.search = prev.search;
+        self.filter.project = prev.project;
+        self.filter.context = prev.context;
+        self.nav.move_top();
+        self.recompute_visible();
     }
 
     /// `[d]iscard gap` on the stale-timer prompt: stop the timer WITHOUT
@@ -511,8 +547,14 @@ impl App {
     }
 
     /// Day-boundary prompt "new entry" choice (add-time path): carry the task
-    /// forward, then add `input` as `dur:` on the fresh line.
+    /// forward, then add `input` as `dur:` on the fresh line. Subtracting is
+    /// meaningless on a brand-new line (it starts at zero), so negative
+    /// input is rejected here — the correction flow targets existing time.
     pub fn day_boundary_new_entry_add_time(&mut self, abs: usize, input: &str) {
+        if input.trim().starts_with('-') {
+            self.flash("cannot subtract from a new entry");
+            return;
+        }
         let secs = parse_duration_input(input);
         if secs == 0 {
             self.flash(format!("invalid duration: {input}"));
@@ -730,16 +772,27 @@ impl App {
     }
 
     /// Add `input` (minutes, hours, or clock time) as `dur:` to the task at
-    /// `abs`, stamping today's `log:`. Shared by the direct add-time path and
-    /// the day-boundary prompt's "continue same entry" choice.
+    /// `abs`, stamping today's `log:`. A leading `-` (e.g. `-30`, `-1.5`)
+    /// *removes* time instead — the correction path for a timer left running
+    /// too long — clamped so a task never goes below zero. Shared by the
+    /// direct add-time path and the day-boundary prompt's "continue same
+    /// entry" choice.
     pub fn add_time_to_current_at(&mut self, abs: usize, input: &str) {
-        let secs = parse_duration_input(input);
-        if secs == 0 {
+        let trimmed = input.trim();
+        let (delta, removing) = match trimmed.strip_prefix('-') {
+            Some(rest) => (parse_duration_input(rest), true),
+            None => (parse_duration_input(trimmed), false),
+        };
+        if delta == 0 {
             self.flash(format!("invalid duration: {input}"));
             return;
         }
         let current = self.store.tasks()[abs].dur.unwrap_or(0);
-        let total = current + secs;
+        let total = if removing {
+            current.saturating_sub(delta)
+        } else {
+            current + delta
+        };
         // Replace/add the `dur:` token and stamp the `log:` date through the
         // store's shared token-rewrite helper, so all raw-line surgery stays
         // in one place. The log date makes manual additions show up on
@@ -749,10 +802,14 @@ impl App {
         let updated = rebuild_token_line(&updated, "log:", None, &format!("log:{}", self.today()));
         match self.store.edit_line(abs, &updated) {
             EditOutcome::Saved { abs } => {
-                let added = format_duration(secs, self.prefs.rounding_increment);
+                let delta_str = format_duration(delta, self.prefs.rounding_increment);
                 let total_str = format_duration(total, self.prefs.rounding_increment);
                 let body = crate::todo::body_only(&updated);
-                self.flash(format!("added {added} — {body} (total {total_str})"));
+                if removing {
+                    self.flash(format!("removed {delta_str} — {body} (total {total_str})"));
+                } else {
+                    self.flash(format!("added {delta_str} — {body} (total {total_str})"));
+                }
                 // Adding time is a timer activity: reset the idle-nudge clock.
                 self.note_timer_activity();
                 // A real capture completes any nudge recovery flow (the
@@ -1301,44 +1358,70 @@ mod tests {
 
     // ---- nudge task picker (S / M from the idle nudge) ----
 
-    /// The picker must list open tasks (done excluded) and seed the cursor
-    /// on the currently selected task when it's among them.
+    /// The picker runs on the real list: the active search/filter is cleared
+    /// so every open task is visible (the "nothing hidden" guarantee of the
+    /// old standalone dialog), the saved filter is stashed for restore, and
+    /// the cursor is seeded on the first open task.
     #[test]
-    fn nudge_picker_lists_open_tasks_and_seeds_cursor() {
+    fn nudge_picker_reveals_all_open_tasks_and_seeds_cursor() {
         let mut app = build_app("First +A\nSecond +B\nx 2026-05-05 Done +C\n");
+        // An active filter + stale cursor must not hide anything.
+        app.set_project_filter(Some("A".into()));
+        app.set_search("zzz".into());
         app.nav.cursor = 1;
         app.recompute_visible();
 
         app.enter_nudge_picker(NudgePickAction::StartTimer);
 
         assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+        assert_eq!(app.nav.view, View::List);
+        assert!(
+            app.filter().search.is_empty(),
+            "search must be cleared for the selection"
+        );
+        assert!(
+            app.filter().project.is_none(),
+            "project filter must be cleared for the selection"
+        );
+        let seeded = app.cur_abs().expect("cursor must land on a task");
+        assert!(
+            !app.store.tasks()[seeded].done,
+            "cursor must seed on an open task"
+        );
         let picker = app
             .session
             .nudge_picker
             .as_ref()
             .expect("picker must be open");
-        assert_eq!(picker.abs_list, vec![0, 1], "done tasks must be excluded");
-        assert_eq!(picker.cursor, 1, "seed on the selected task");
         assert_eq!(picker.action, NudgePickAction::StartTimer);
+        assert_eq!(
+            picker.prev_filter.search, "zzz",
+            "previous search must be saved for restore"
+        );
+        assert_eq!(
+            picker.prev_filter.project.as_deref(),
+            Some("A"),
+            "previous project filter must be saved for restore"
+        );
     }
 
-    /// Enter on the picker starts the timer on the CHOSEN task — not the
-    /// cursor's task — and returns to the pre-nudge view.
+    /// Enter on the picker starts the timer on the highlighted task — the
+    /// row the user navigated to — and returns to the pre-nudge view.
     #[test]
-    fn nudge_picker_start_timer_targets_chosen_task() {
+    fn nudge_picker_start_timer_targets_highlighted_task() {
         let mut app = build_app("First +A\nSecond +B\n");
-        // Cursor sits on task 0; the picker will choose task 1 instead.
         app.nav.cursor = 0;
         app.recompute_visible();
         app.session.pre_nudge_view = Some(View::Timesheet);
 
         app.enter_nudge_picker(NudgePickAction::StartTimer);
-        app.nudge_picker_step(true); // move to task 1
+        // Navigate the real list to the second task and commit.
+        app.nav.cursor = 1;
         app.nudge_picker_accept();
 
         assert!(
             app.is_timer_running_on(1),
-            "timer must run on the CHOSEN task, not the cursor's"
+            "timer must run on the HIGHLIGHTED task"
         );
         assert!(!app.is_timer_running_on(0));
         assert_eq!(app.nav.mode, Mode::Normal);
@@ -1347,15 +1430,15 @@ mod tests {
     }
 
     /// Enter on the add-time picker opens the add-time prompt targeting the
-    /// chosen task, with the confirmation flash naming it.
+    /// highlighted task, with the confirmation flash naming it.
     #[test]
-    fn nudge_picker_add_time_targets_chosen_task() {
+    fn nudge_picker_add_time_targets_highlighted_task() {
         let mut app = build_app("First +A\nSecond +B\n");
         app.nav.cursor = 1;
         app.recompute_visible();
 
         app.enter_nudge_picker(NudgePickAction::AddTime);
-        app.nudge_picker_step(false); // move up to task 0
+        app.nav.cursor = 0; // highlight First
         app.nudge_picker_accept();
 
         assert_eq!(app.nav.mode, Mode::PromptAddTime);
@@ -1368,16 +1451,79 @@ mod tests {
         );
     }
 
-    /// Esc from the picker returns to the idle-nudge popup.
+    /// Finishing the selection (Enter) restores the search/filter that was
+    /// active before it opened.
     #[test]
-    fn nudge_picker_esc_returns_to_idle_nudge() {
-        let mut app = build_app("First\n");
+    fn nudge_picker_restores_previous_filter_on_exit() {
+        let mut app = build_app("First +A\nSecond +B\n");
+        app.set_search("First".into());
+        app.set_project_filter(Some("A".into()));
         app.enter_nudge_picker(NudgePickAction::StartTimer);
+        assert!(
+            app.filter().search.is_empty(),
+            "precondition: search cleared during selection"
+        );
+
+        app.nudge_picker_accept();
+
+        assert_eq!(
+            app.filter().search,
+            "First",
+            "previous search must come back after the selection"
+        );
+        assert_eq!(
+            app.filter().project.as_deref(),
+            Some("A"),
+            "previous project filter must come back"
+        );
+    }
+
+    /// Esc from the picker returns to the idle-nudge popup AND restores the
+    /// pre-selection filter — a cancelled choice must not change the user's
+    /// list state.
+    #[test]
+    fn nudge_picker_cancel_restores_filter() {
+        let mut app = build_app("First +A\nSecond +B\n");
+        app.set_project_filter(Some("B".into()));
+        app.enter_nudge_picker(NudgePickAction::StartTimer);
+        assert!(app.filter().project.is_none());
 
         app.nudge_picker_cancel();
 
         assert_eq!(app.nav.mode, Mode::IdleNudge);
         assert!(app.session.nudge_picker.is_none());
+        assert_eq!(
+            app.filter().project.as_deref(),
+            Some("B"),
+            "filter must be restored on Esc"
+        );
+    }
+
+    /// A completed task under the cursor must never receive time: Enter
+    /// refuses, stays in selection mode, and the reminder survives.
+    #[test]
+    fn nudge_picker_accept_refuses_done_task() {
+        let mut app = build_app("First\nx 2026-05-05 Done\n");
+        app.prefs.show_done = true; // done tasks appear in the list
+        app.enter_nudge_picker(NudgePickAction::StartTimer);
+        app.nav.cursor = 1; // highlight the done task
+
+        app.nudge_picker_accept();
+
+        assert!(!app.timer_running(), "no timer on a done task");
+        assert_eq!(
+            app.nav.mode,
+            Mode::PickNudgeTask,
+            "must stay in selection mode to pick an open task"
+        );
+        assert!(
+            app.session.nudge_picker.is_some(),
+            "selection state must survive the refusal"
+        );
+        assert!(
+            app.flash_active().is_some_and(|m| m.contains("done")),
+            "flash must explain the refusal"
+        );
     }
 
     /// No open tasks: the picker can't open; stay on the idle nudge.
@@ -1386,6 +1532,86 @@ mod tests {
         let mut app = build_app("");
         app.enter_nudge_picker(NudgePickAction::StartTimer);
         assert_eq!(app.nav.mode, Mode::IdleNudge);
+    }
+
+    // ---- subtract time (negative durations in the add-time prompt) ----
+
+    /// `-30` removes 30 minutes from the task's accumulated time instead of
+    /// adding; the flash says "removed".
+    #[test]
+    fn add_time_negative_removes_minutes() {
+        let mut app = build_app("Draft +Smith dur:7200\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+
+        app.add_time_to_current_from_input("-30");
+
+        assert_eq!(app.tasks()[0].dur, Some(5400), "2h − 30m = 1.5h");
+        assert!(
+            app.flash_active()
+                .is_some_and(|m| m.contains("removed 30m") && m.contains("total 1h 30m")),
+            "flash must confirm the removal, got: {:?}",
+            app.flash_active()
+        );
+    }
+
+    /// A negative decimal hour removes that many hours; the result clamps at
+    /// zero when the subtraction would go below it.
+    #[test]
+    fn add_time_negative_clamps_at_zero() {
+        let mut app = build_app("Draft +Smith dur:600\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+
+        app.add_time_to_current_from_input("-1h");
+
+        assert_eq!(
+            app.tasks()[0].dur,
+            Some(0),
+            "10m − 1h must clamp at 0, never go negative"
+        );
+        assert!(
+            app.flash_active().is_some_and(|m| m.contains("total 0m")),
+            "flash must report the clamped total, got: {:?}",
+            app.flash_active()
+        );
+    }
+
+    /// `-1.5h` removes 1.5 hours using the same flexible duration grammar.
+    #[test]
+    fn add_time_negative_decimal_hours() {
+        let mut app = build_app("Draft +Smith dur:7200\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+
+        app.add_time_to_current_from_input("-1.5h");
+
+        assert_eq!(app.tasks()[0].dur, Some(1800), "2h − 1.5h = 30m");
+    }
+
+    /// A negative duration on the day-boundary "new entry" path is refused:
+    /// a fresh line starts at zero, so there is nothing to subtract.
+    #[test]
+    fn add_time_negative_refused_on_new_entry() {
+        let mut app = build_app("Draft +Smith dur:7200 log:2026-05-05\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+
+        app.add_time_to_current_from_input("-30");
+        assert_eq!(app.nav.mode(), Mode::PromptDayBoundary);
+        crate::interactive::handle_day_boundary(&mut app, key('n'));
+
+        assert_eq!(
+            app.tasks().len(),
+            1,
+            "no carry on a refused negative new-entry add"
+        );
+        assert!(
+            app.flash_active()
+                .is_some_and(|m| m.contains("cannot subtract")),
+            "flash must explain the refusal, got: {:?}",
+            app.flash_active()
+        );
     }
 
     // ---- manual entries reset the idle-nudge clock ----

@@ -15,11 +15,11 @@ expression: buffer_to_styled(&buf)
 {fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
 {fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
 {fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
-{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                        {/}                                                  {bg=#1f232b}                        {/}{fg=#2a2f38 bg=#1f232b}│{/}
-{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                        {/}                                                  {bg=#1f232b}                        {/}{fg=#2a2f38 bg=#1f232b}│{/}
-{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                        {/}                                                  {bg=#1f232b}                        {/}{fg=#2a2f38 bg=#1f232b}│{/}
-{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                        {/}                                                  {bg=#1f232b}                        {/}{fg=#2a2f38 bg=#1f232b}│{/}
-{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                        {/}                                                  {bg=#1f232b}                        {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                        {/}{fg=#2a2f38 bg=#1f232b}┌{/}{fg=#8aa9c9 bg=#1f232b mod=bold} RENAME PROJECT {/}{fg=#2a2f38 bg=#1f232b}────────────────────────────────┐{/}{bg=#1f232b}                        {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                        {/}{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}  {/}{fg=#7fb3a8 bg=#1f232b mod=bold}+{/}{fg=#c8ccd4 bg=#1f232b}work2█{/}{bg=#1f232b}                                       {/}{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                        {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                        {/}{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                {/}{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                        {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                        {/}{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                {/}{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                        {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                        {/}{fg=#2a2f38 bg=#1f232b}└────────────────────────────────────────────────┘{/}{bg=#1f232b}                        {/}{fg=#2a2f38 bg=#1f232b}│{/}
 {fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
 {fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}
 {fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                                                                  {/}{fg=#2a2f38 bg=#1f232b}│{/}

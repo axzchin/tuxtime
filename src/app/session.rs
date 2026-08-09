@@ -4,7 +4,7 @@
 
 use std::time::Instant;
 
-use super::types::View;
+use super::types::{Filter, View};
 
 /// What the nudge task picker commits on Enter. The picker exists so a nudge
 /// never blindly starts a timer (or adds time) to whatever task happens to be
@@ -18,13 +18,18 @@ pub enum NudgePickAction {
 }
 
 /// Transient state for the nudge task picker (`Mode::PickNudgeTask`): the
-/// list of open tasks offered and the highlight position.
+/// action to commit on Enter plus the search/filter state in place before
+/// the picker opened. The picker runs on the *real list view* — full
+/// navigation, search and filters — so it needs no task list of its own:
+/// the visible list IS the offer, and the highlighted task is the choice.
 #[derive(Debug, Clone)]
 pub struct NudgePickerState {
-    /// Absolute indices of the open (not done) tasks offered for selection.
-    pub abs_list: Vec<usize>,
-    pub cursor: usize,
+    /// What Enter commits: start the timer, or open the add-time prompt.
     pub action: NudgePickAction,
+    /// The search text + project/context filters in place before the picker
+    /// opened. Restored when the selection ends so the picker never leaves
+    /// the user's list state changed.
+    pub prev_filter: Filter,
 }
 
 /// Why the idle nudge is (or would be) showing. Drives the popup message so

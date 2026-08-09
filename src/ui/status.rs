@@ -4,7 +4,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-use crate::app::{App, DialogInputMode, Mode, View};
+use crate::app::{App, DialogInputMode, Mode, NudgePickAction, View};
 use crate::ui::dialog::draft_cursor_spans;
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
@@ -35,7 +35,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         Mode::PickTheme => "PICK THEME".into(),
         Mode::Welcome => "WELCOME".into(),
         Mode::IdleNudge => "IDLE NUDGE".into(),
-        Mode::PickNudgeTask => "PICK TASK".into(),
+        Mode::PickNudgeTask => match app.session.nudge_picker.as_ref().map(|p| p.action) {
+            Some(NudgePickAction::StartTimer) => "START TIMER".into(),
+            Some(NudgePickAction::AddTime) => "ADD TIME".into(),
+            None => "PICK TASK".into(),
+        },
         Mode::ReviewNudge => "END-OF-DAY".into(),
         Mode::LongTimerNudge => "LONG TIMER".into(),
         Mode::StaleTimer => "STALE TIMER".into(),
@@ -112,13 +116,21 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             }
             Mode::PromptSaveFilter => "type a filter name · Enter save · Esc cancel".to_string(),
             Mode::PromptAddTime => {
-                "type duration (e.g. 30, 1.5, 14:30) · Enter add · Esc cancel".to_string()
+                "type duration (e.g. 30, 1.5, 14:30; -30 removes) · Enter add · Esc cancel"
+                    .to_string()
             }
             Mode::PromptIdleNudge => "type minutes · Enter save · Esc cancel".to_string(),
             Mode::PromptLongTimerNudge => "type minutes · Enter save · Esc cancel".to_string(),
             Mode::LongTimerNudge => "S stop timer · D dismiss".to_string(),
             Mode::IdleNudge => "S start timer · M add time · N new entry · D dismiss".to_string(),
-            Mode::PickNudgeTask => "j/k navigate · Enter select · Esc back".to_string(),
+            Mode::PickNudgeTask => {
+                let commit = match app.session.nudge_picker.as_ref().map(|p| p.action) {
+                    Some(NudgePickAction::StartTimer) => "Enter start timer on highlighted",
+                    Some(NudgePickAction::AddTime) => "Enter add time on highlighted",
+                    None => "Enter select",
+                };
+                format!("{commit} · j/k navigate · / search · +/@ filter · t start · Esc back")
+            }
             Mode::ReviewNudge => "V view timesheet · M add time · S skip".to_string(),
             Mode::PickTimesheetDate => {
                 "hjkl/arrows navigate  ·  type date  ·  Enter select  ·  Esc cancel  ·  t today"

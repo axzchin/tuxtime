@@ -419,12 +419,20 @@ fn preview_line<'a>(app: &App) -> Line<'a> {
     Line::from(spans).style(Style::default().bg(theme.panel))
 }
 
+/// Every prompt mode in one match, so a mode added here can't silently fall
+/// through to a cleared (black) box. `PromptAddTime`, the two nudge-threshold
+/// prompts and the rename prompt used to hit the `_ => return` arm, leaving
+/// the caller's `Clear` as an empty rectangle on screen.
 pub fn render_prompt(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
-    let (sigil, label) = match app.nav.mode {
-        Mode::PromptProject => ("+", " ADD PROJECT "),
-        Mode::PromptContext => ("@", " TOGGLE CONTEXT "),
-        Mode::PromptSaveFilter => ("✦", " SAVE FILTER AS "),
+    let (sigil, label, sigil_color) = match app.nav.mode {
+        Mode::PromptProject => ("+", " ADD PROJECT ", theme.project),
+        Mode::PromptContext => ("@", " TOGGLE CONTEXT ", theme.context),
+        Mode::PromptSaveFilter => ("✦", " SAVE FILTER AS ", theme.accent),
+        Mode::PromptAddTime => ("⏱", " ADD TIME ", theme.accent),
+        Mode::PromptIdleNudge => ("⏰", " IDLE NUDGE (MIN) ", theme.accent),
+        Mode::PromptLongTimerNudge => ("⏰", " LONG TIMER NUDGE (MIN) ", theme.accent),
+        Mode::PromptRenameProject => ("+", " RENAME PROJECT ", theme.project),
         _ => return,
     };
     let inner = msgbox::frame_box(
@@ -452,11 +460,7 @@ pub fn render_prompt(frame: &mut Frame, area: Rect, app: &App) {
         Span::styled(
             sigil,
             Style::default()
-                .fg(if sigil == "+" {
-                    theme.project
-                } else {
-                    theme.context
-                })
+                .fg(sigil_color)
                 .add_modifier(Modifier::BOLD),
         ),
     ];

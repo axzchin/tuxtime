@@ -8,10 +8,11 @@
 
 use crate::app::{App, DayBoundaryAction, Mode, View};
 use crate::cli;
+use crate::keybinds::KeyBindings;
 use crate::todo;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use super::action_dispatch::apply_action;
+use super::action_dispatch::{apply_action, handle_normal};
 use super::insert::{DraftEffect, apply_to_draft};
 
 // ---------------------------------------------------------------------------
@@ -474,16 +475,28 @@ pub(crate) fn handle_review_nudge(app: &mut App, key: KeyEvent) {
     }
 }
 
-/// Nudge task picker: `j`/`k` move the highlight, `Enter` commits the chosen
-/// task (start timer or add time per the action), `Esc` returns to the idle
-/// nudge popup.
-pub(crate) fn handle_pick_nudge_task(app: &mut App, key: KeyEvent) {
+/// Nudge task picker: runs on the *real list view*, so every list key keeps
+/// working — navigation (`j`/`k`, arrows, `gg`), search (`/`), filters
+/// (`fp`/`fc`/`ff`), sidebars, even `t` to start a timer directly. `Enter`
+/// commits the highlighted task (start timer or add time per the action),
+/// `Esc` returns to the idle nudge popup.
+pub(crate) fn handle_pick_nudge_task(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
     match key.code {
-        KeyCode::Char('j') | KeyCode::Down => app.nudge_picker_step(true),
-        KeyCode::Char('k') | KeyCode::Up => app.nudge_picker_step(false),
         KeyCode::Enter => app.nudge_picker_accept(),
         KeyCode::Esc => app.nudge_picker_cancel(),
-        _ => {}
+        _ => {
+            handle_normal(app, key, keybinds);
+            maybe_finish_nudge_selection(app);
+        }
+    }
+}
+
+/// A timer started while the list-based selection is open (via `t` — or the
+/// day-boundary prompt reached from `t`) completes the recovery on its own:
+/// exit to Normal, restoring the pre-selection filter and pre-nudge view.
+fn maybe_finish_nudge_selection(app: &mut App) {
+    if app.nav.mode() == Mode::PickNudgeTask && app.timer_running() {
+        app.nudge_picker_finish();
     }
 }
 
@@ -594,6 +607,9 @@ pub(crate) fn handle_day_boundary(app: &mut App, key: KeyEvent) {
                     }
                 }
             }
+            // `t` inside the nudge selection that deferred to this prompt
+            // now has its timer running — the selection's job is done.
+            maybe_finish_nudge_selection(app);
         }
         KeyCode::Char('n' | 'N') => {
             // New entry for today: carry forward (consuming the old line),
@@ -611,6 +627,9 @@ pub(crate) fn handle_day_boundary(app: &mut App, key: KeyEvent) {
                     }
                 }
             }
+            // `t` inside the nudge selection that deferred to this prompt
+            // now has its timer running — the selection's job is done.
+            maybe_finish_nudge_selection(app);
         }
         KeyCode::Esc => {
             app.session.pending_day_boundary.take();

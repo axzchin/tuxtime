@@ -1560,9 +1560,15 @@ fn pick_nudge_task_enter_starts_timer_on_chosen() {
 
     handle_idle_nudge(&mut app, key('s'));
     assert_eq!(app.nav.mode, Mode::PickNudgeTask);
-    app.nudge_picker_step(true);
-    app.nudge_picker_step(true); // highlight task c
-    handle_pick_nudge_task(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    // The selection runs on the real list: j/k navigate it, Enter commits
+    // the highlighted task.
+    handle_pick_nudge_task(&mut app, key('j'), &KeyBindings::default());
+    handle_pick_nudge_task(&mut app, key('j'), &KeyBindings::default());
+    handle_pick_nudge_task(
+        &mut app,
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        &KeyBindings::default(),
+    );
 
     assert!(app.timer_running());
     assert!(app.is_timer_running_on(2), "timer must run on task c");
@@ -1577,9 +1583,63 @@ fn pick_nudge_task_esc_returns_to_idle_nudge() {
     handle_idle_nudge(&mut app, key('s'));
     assert_eq!(app.nav.mode, Mode::PickNudgeTask);
 
-    handle_pick_nudge_task(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    handle_pick_nudge_task(
+        &mut app,
+        KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+        &KeyBindings::default(),
+    );
 
     assert_eq!(app.nav.mode, Mode::IdleNudge);
+}
+
+/// `t` inside the list-based selection starts the timer on the highlighted
+/// task and completes the recovery: back to Normal with the pre-nudge view
+/// restored. (Starting a timer IS the nudge's goal.)
+#[test]
+fn nudge_select_t_starts_timer_and_exits() {
+    let mut app = build_app(); // tasks a, b, c
+    app.nav.mode = Mode::IdleNudge;
+    app.session.pre_nudge_view = Some(View::Timesheet);
+
+    handle_idle_nudge(&mut app, key('s'));
+    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    handle_pick_nudge_task(&mut app, key('j'), &KeyBindings::default());
+    handle_pick_nudge_task(&mut app, key('t'), &KeyBindings::default());
+
+    assert!(app.timer_running());
+    assert!(app.is_timer_running_on(1), "timer on the highlighted task");
+    assert_eq!(
+        app.nav.mode,
+        Mode::Normal,
+        "selection completes when a timer starts"
+    );
+    assert_eq!(app.nav.view, View::Timesheet, "pre-nudge view restored");
+    assert!(app.session.nudge_picker.is_none());
+}
+
+/// `/` inside the list-based selection opens the normal search; accepting
+/// it pops back into the selection with the list filtered — the exact
+/// functionality the old dialog lacked.
+#[test]
+fn nudge_select_search_filters_list() {
+    let mut app = build_app(); // tasks a, b, c
+    app.nav.mode = Mode::IdleNudge;
+
+    handle_idle_nudge(&mut app, key('s'));
+    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    handle_pick_nudge_task(&mut app, key('/'), &KeyBindings::default());
+    assert_eq!(app.nav.mode, Mode::Search);
+
+    handle_search(&mut app, key('b'));
+    handle_search(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(
+        app.nav.mode,
+        Mode::PickNudgeTask,
+        "accepting the search returns to the selection"
+    );
+    assert_eq!(app.filter().search, "b");
+    assert_eq!(app.visible_indices().len(), 1, "only task b remains");
 }
 
 // ---- sidebar toggles in every view ----
@@ -1704,7 +1764,11 @@ fn idle_nudge_m_add_time_esc_returns_to_nudge() {
     handle_idle_nudge(&mut app, key('M'));
     assert_eq!(app.nav.mode, Mode::PickNudgeTask);
     // Commit the picker → the add-time prompt.
-    handle_pick_nudge_task(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    handle_pick_nudge_task(
+        &mut app,
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        &KeyBindings::default(),
+    );
     assert_eq!(app.nav.mode, Mode::PromptAddTime);
     assert!(app.session.from_nudge);
 
@@ -1727,7 +1791,11 @@ fn idle_nudge_m_add_time_invalid_duration_returns_to_nudge() {
     app.nav.mode = Mode::IdleNudge;
 
     handle_idle_nudge(&mut app, key('M'));
-    handle_pick_nudge_task(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    handle_pick_nudge_task(
+        &mut app,
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        &KeyBindings::default(),
+    );
     assert_eq!(app.nav.mode, Mode::PromptAddTime);
     assert!(app.session.from_nudge);
 
@@ -1760,7 +1828,11 @@ fn idle_nudge_m_add_time_valid_exits_to_normal() {
     app.nav.mode = Mode::IdleNudge;
 
     handle_idle_nudge(&mut app, key('M'));
-    handle_pick_nudge_task(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    handle_pick_nudge_task(
+        &mut app,
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        &KeyBindings::default(),
+    );
 
     app.draft_set("30".into());
     handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
@@ -1787,7 +1859,11 @@ fn idle_nudge_m_add_time_day_boundary_invalid_returns_to_nudge() {
     app.nav.mode = Mode::IdleNudge;
 
     handle_idle_nudge(&mut app, key('M'));
-    handle_pick_nudge_task(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    handle_pick_nudge_task(
+        &mut app,
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        &KeyBindings::default(),
+    );
 
     // Validation is deferred until the day-boundary prompt resolves.
     app.draft_set("oops".into());
@@ -1820,7 +1896,11 @@ fn idle_nudge_m_add_time_day_boundary_new_entry_invalid_returns_to_nudge() {
     app.nav.mode = Mode::IdleNudge;
 
     handle_idle_nudge(&mut app, key('M'));
-    handle_pick_nudge_task(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    handle_pick_nudge_task(
+        &mut app,
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        &KeyBindings::default(),
+    );
 
     app.draft_set("oops".into());
     handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
@@ -1855,7 +1935,11 @@ fn idle_nudge_m_add_time_day_boundary_esc_returns_to_nudge() {
     app.nav.mode = Mode::IdleNudge;
 
     handle_idle_nudge(&mut app, key('M'));
-    handle_pick_nudge_task(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    handle_pick_nudge_task(
+        &mut app,
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        &KeyBindings::default(),
+    );
 
     app.draft_set("30".into());
     handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
