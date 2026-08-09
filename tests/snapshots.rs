@@ -543,6 +543,7 @@ fn nudge_task_picker() {
     app.session.nudge_picker = Some(tuxtime::app::NudgePickerState {
         action: tuxtime::app::NudgePickAction::StartTimer,
         prev_filter: app.filter().clone(),
+        prev_cursor: app.nav.cursor,
     });
     snapshot_app("nudge_task_picker", &app);
 }

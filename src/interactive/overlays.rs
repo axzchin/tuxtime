@@ -487,7 +487,19 @@ pub(crate) fn handle_pick_nudge_task(app: &mut App, key: KeyEvent, keybinds: &Ke
         _ => {
             handle_normal(app, key, keybinds);
             maybe_finish_nudge_selection(app);
+            maybe_abandon_nudge_selection(app);
         }
+    }
+}
+
+/// A delegated key that left the selection into a mode pushed *over* it
+/// (search, command palette) is still part of the selection — it pops back.
+/// But a key that replaced the mode outright (`n`, `e`, `,`, `?`, `P`, …)
+/// abandons the selection: restore the pre-selection filter and drop the
+/// stale picker state so the cleared filter never leaks into Normal.
+fn maybe_abandon_nudge_selection(app: &mut App) {
+    if app.nav.mode() != Mode::PickNudgeTask && app.nav.peek_under() != Some(Mode::PickNudgeTask) {
+        app.nudge_picker_abandon();
     }
 }
 

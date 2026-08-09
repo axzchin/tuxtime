@@ -30,6 +30,9 @@ pub struct NudgePickerState {
     /// opened. Restored when the selection ends so the picker never leaves
     /// the user's list state changed.
     pub prev_filter: Filter,
+    /// The list cursor position before the picker opened, restored on exit
+    /// so a nudge recovery never drops the user's place in the list.
+    pub prev_cursor: usize,
 }
 
 /// Why the idle nudge is (or would be) showing. Drives the popup message so

@@ -246,6 +246,7 @@ impl App {
         let state = NudgePickerState {
             action,
             prev_filter: self.filter.clone(),
+            prev_cursor: self.nav.cursor,
         };
         // Force the list view and reveal every open task.
         self.set_view(View::List);
@@ -273,6 +274,13 @@ impl App {
         let Some(picker) = self.session.nudge_picker.take() else {
             return;
         };
+        // The commit always resolves against the LIST highlight. A delegated
+        // key can wander into another view (V → timesheet) while the
+        // selection is still open; come back first so the timer never starts
+        // on a non-list cursor.
+        if self.nav.view != View::List {
+            self.set_view(View::List);
+        }
         let Some(abs) = self.cur_abs() else {
             self.nav.mode = Mode::IdleNudge;
             return;
@@ -290,7 +298,7 @@ impl App {
                 // stale flag from a previous flow.
                 self.session.from_nudge = false;
                 self.toggle_timer_at(abs);
-                self.restore_filter(picker.prev_filter);
+                self.restore_filter(picker.prev_filter, picker.prev_cursor);
                 self.nav.enter_normal();
                 if let Some(v) = self.session.pre_nudge_view.take() {
                     self.set_view(v);
@@ -301,14 +309,15 @@ impl App {
                 // returns to the popup (the reminder survives an aborted
                 // recovery) while a successful add exits to Normal.
                 self.session.from_nudge = true;
-                self.restore_filter(picker.prev_filter);
+                self.restore_filter(picker.prev_filter, picker.prev_cursor);
                 // If the restored filter would hide the chosen task, keep
                 // the selection's unfiltered view so the add-time prompt
                 // targets the task the user actually picked.
                 if !self.visible_indices().contains(&abs) {
-                    self.set_project_filter(None);
-                    self.set_context_filter(None);
-                    self.clear_search();
+                    self.filter.search.clear();
+                    self.filter.project = None;
+                    self.filter.context = None;
+                    self.recompute_visible();
                 }
                 // Point the list cursor at the chosen task so the add-time
                 // prompt targets it, then open the prompt.
@@ -333,7 +342,7 @@ impl App {
     /// search/filter.
     pub fn nudge_picker_cancel(&mut self) {
         if let Some(p) = self.session.nudge_picker.take() {
-            self.restore_filter(p.prev_filter);
+            self.restore_filter(p.prev_filter, p.prev_cursor);
         }
         self.nav.mode = Mode::IdleNudge;
     }
@@ -343,7 +352,7 @@ impl App {
     /// the pre-selection search/filter and the pre-nudge view.
     pub fn nudge_picker_finish(&mut self) {
         if let Some(p) = self.session.nudge_picker.take() {
-            self.restore_filter(p.prev_filter);
+            self.restore_filter(p.prev_filter, p.prev_cursor);
         }
         self.nav.enter_normal();
         if let Some(v) = self.session.pre_nudge_view.take() {
@@ -351,14 +360,26 @@ impl App {
         }
     }
 
+    /// A delegated key left the selection for a non-overlay mode (`n`, `e`,
+    /// `,`, `?`, `P`, …) — the selection is over. Restore the pre-selection
+    /// search/filter and drop the stale state WITHOUT touching the mode the
+    /// user is now in.
+    pub fn nudge_picker_abandon(&mut self) {
+        if let Some(p) = self.session.nudge_picker.take() {
+            self.restore_filter(p.prev_filter, p.prev_cursor);
+        }
+    }
+
     /// Put the user's search/project/context filter state back the way it
-    /// was before the picker opened (one visible-cache rebuild).
-    fn restore_filter(&mut self, prev: Filter) {
+    /// was before the picker opened and restore the cursor to its pre-nudge
+    /// position (clamped to the rebuilt list). One visible-cache rebuild.
+    fn restore_filter(&mut self, prev: Filter, prev_cursor: usize) {
         self.filter.search = prev.search;
         self.filter.project = prev.project;
         self.filter.context = prev.context;
-        self.nav.move_top();
         self.recompute_visible();
+        self.nav
+            .set_cursor(prev_cursor.min(self.visible_indices().len().saturating_sub(1)));
     }
 
     /// `[d]iscard gap` on the stale-timer prompt: stop the timer WITHOUT
@@ -1499,6 +1520,23 @@ mod tests {
         );
     }
 
+    /// Exiting the selection restores the cursor to its pre-nudge position
+    /// (clamped), so a nudge recovery never drops the user's place in the
+    /// list.
+    #[test]
+    fn nudge_picker_exit_restores_cursor_position() {
+        let mut app = build_app("First\nSecond\nThird\n");
+        app.nav.cursor = 2;
+        app.recompute_visible();
+        app.enter_nudge_picker(NudgePickAction::StartTimer);
+        // Navigate somewhere else during the selection.
+        app.nav.cursor = 0;
+
+        app.nudge_picker_cancel();
+
+        assert_eq!(app.nav.cursor, 2, "pre-nudge cursor must come back");
+    }
+
     /// A completed task under the cursor must never receive time: Enter
     /// refuses, stays in selection mode, and the reminder survives.
     #[test]
@@ -1532,6 +1570,34 @@ mod tests {
         let mut app = build_app("");
         app.enter_nudge_picker(NudgePickAction::StartTimer);
         assert_eq!(app.nav.mode, Mode::IdleNudge);
+    }
+
+    /// Abandoning the selection (a delegated key replaced the mode, e.g.
+    /// `n`) restores the pre-selection filter and drops the stale picker
+    /// state without changing the mode the user is now in.
+    #[test]
+    fn nudge_picker_abandon_restores_filter_keeps_mode() {
+        let mut app = build_app("First\n");
+        app.set_project_filter(Some("A".into()));
+        app.enter_nudge_picker(NudgePickAction::StartTimer);
+        assert!(app.filter().project.is_none());
+        // The user presses `n` (new task): the Insert dialog opens.
+        crate::interactive::dispatch(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE),
+            &crate::keybinds::KeyBindings::default(),
+        );
+
+        assert_eq!(app.nav.mode, Mode::Insert, "Insert stays open");
+        assert!(
+            app.session.nudge_picker.is_none(),
+            "stale picker state must be dropped"
+        );
+        assert_eq!(
+            app.filter().project.as_deref(),
+            Some("A"),
+            "pre-selection filter must be restored on abandon"
+        );
     }
 
     // ---- subtract time (negative durations in the add-time prompt) ----
