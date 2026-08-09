@@ -1964,7 +1964,8 @@ fn nudge_select_v_exit_restores_pre_nudge_filter() {
 
 /// `a` (archive view) is the same deliberate dismissal as `V`: the
 /// selection ends cleanly instead of lingering inert over the archive
-/// (where Enter would otherwise commit against the live list, a footgun).
+/// (where Enter would otherwise commit against the live list, a footgun),
+/// and the nudge clock resets so it doesn't re-fire over the archive.
 #[test]
 fn nudge_select_a_abandons_to_archive_cleanly() {
     let mut app = crate::app::test_support::build_app("a\nb\nc\n");
@@ -1977,6 +1978,12 @@ fn nudge_select_a_abandons_to_archive_cleanly() {
     assert_eq!(app.nav.mode, Mode::Normal);
     assert_eq!(app.nav.view, View::Archive);
     assert!(app.session.nudge_picker.is_none());
+    app.session.idle_backdated = true;
+    assert!(
+        !app.check_nudges(),
+        "no immediate nudge re-fire over the archive"
+    );
+    assert_eq!(app.nav.mode, Mode::Normal);
 }
 
 /// A palette action (e.g. OpenTimesheet) can leave the selection open in
@@ -1987,12 +1994,13 @@ fn nudge_select_stale_view_exits_before_key() {
     let mut app = crate::app::test_support::build_app("a\nb\nc\n");
     app.nav.mode = Mode::IdleNudge;
     handle_idle_nudge(&mut app, key('s'));
-    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
-    // Model the palette's OpenTimesheet: mode unchanged, view switched.
+    assert_eq!(app.nav.mode, Mode::PickNudgeTask); // Model the palette's OpenTimesheet: mode unchanged, view switched.
     app.set_view(View::Timesheet);
     assert!(app.session.nudge_picker.is_some());
 
-    handle_pick_nudge_task(&mut app, key('j'), &KeyBindings::default());
+    // `l` in the timesheet = next day. After the stale selection exits,
+    // the key must be re-dispatched in Normal mode and take effect.
+    handle_pick_nudge_task(&mut app, key('l'), &KeyBindings::default());
 
     assert_eq!(app.nav.mode, Mode::Normal, "stale selection ends");
     assert_eq!(
@@ -2001,6 +2009,10 @@ fn nudge_select_stale_view_exits_before_key() {
         "stays in the view the user chose"
     );
     assert!(app.session.nudge_picker.is_none());
+    assert_eq!(
+        app.timesheet.date, "2026-05-07",
+        "re-dispatched key acts in Normal mode (timesheet next day)"
+    );
 }
 
 /// `M` from the start-timer selection deliberately switches recovery
