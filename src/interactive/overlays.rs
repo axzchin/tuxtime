@@ -246,6 +246,20 @@ pub(crate) fn handle_autocomplete_keys(app: &mut App, key: KeyEvent) -> bool {
 // nudge thresholds, rename project)
 // ---------------------------------------------------------------------------
 
+/// After an add-time attempt, return to the idle-nudge popup when the
+/// capture failed. The save functions clear `from_nudge` the moment time
+/// actually lands, so the flag still being set here means nothing was
+/// recorded (invalid duration, write error); `mode == Mode::Normal`
+/// distinguishes a completed failure from a flow that deferred to the
+/// day-boundary prompt, which is still open (mode != Normal) and will
+/// resolve — or fail — on its own.
+fn resolve_nudge_add_outcome(app: &mut App) {
+    if app.session.from_nudge && app.nav.mode() == Mode::Normal {
+        app.session.from_nudge = false;
+        app.nav.set_mode(Mode::IdleNudge);
+    }
+}
+
 pub(crate) fn handle_prompt(app: &mut App, key: KeyEvent) {
     if app.autocomplete_visible() {
         match key.code {
@@ -309,16 +323,8 @@ pub(crate) fn handle_prompt(app: &mut App, key: KeyEvent) {
                 Mode::PromptAddTime => {
                     app.add_time_to_current_from_input(&value);
                     // A failed add (invalid duration, write error) from the
-                    // nudge's recovery flow must not drop the reminder: if
-                    // nothing was recorded and the flow didn't defer to the
-                    // day-boundary prompt, return to the popup instead of
-                    // Normal. A real save cleared the flag inside
-                    // `add_time_to_current_at`, so the flag still being set
-                    // here means the capture did not land.
-                    if app.session.from_nudge && app.nav.mode() == Mode::Normal {
-                        app.session.from_nudge = false;
-                        app.nav.set_mode(Mode::IdleNudge);
-                    }
+                    // nudge's recovery flow must not drop the reminder.
+                    resolve_nudge_add_outcome(app);
                 }
                 Mode::PromptIdleNudge => {
                     if let Ok(mins) = value.parse::<u64>() {
@@ -582,13 +588,9 @@ pub(crate) fn handle_day_boundary(app: &mut App, key: KeyEvent) {
                     DayBoundaryAction::StartTimer => app.toggle_timer_at(abs),
                     DayBoundaryAction::AddTime { input } => {
                         app.add_time_to_current_at(abs, &input);
-                        // Same guarantee as the prompt: a failed resolution
-                        // (invalid duration, write error) of a nudge-born add
-                        // keeps the reminder alive.
-                        if app.session.from_nudge && app.nav.mode() == Mode::Normal {
-                            app.session.from_nudge = false;
-                            app.nav.set_mode(Mode::IdleNudge);
-                        }
+                        // A failed resolution of a nudge-born add keeps the
+                        // reminder alive, exactly like the prompt.
+                        resolve_nudge_add_outcome(app);
                     }
                 }
             }
@@ -603,12 +605,9 @@ pub(crate) fn handle_day_boundary(app: &mut App, key: KeyEvent) {
                     DayBoundaryAction::StartTimer => app.day_boundary_new_entry(abs),
                     DayBoundaryAction::AddTime { input } => {
                         app.day_boundary_new_entry_add_time(abs, &input);
-                        // Same guarantee as the prompt: a failed resolution
-                        // of a nudge-born add keeps the reminder alive.
-                        if app.session.from_nudge && app.nav.mode() == Mode::Normal {
-                            app.session.from_nudge = false;
-                            app.nav.set_mode(Mode::IdleNudge);
-                        }
+                        // A failed resolution of a nudge-born add keeps the
+                        // reminder alive, exactly like the prompt.
+                        resolve_nudge_add_outcome(app);
                     }
                 }
             }

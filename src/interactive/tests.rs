@@ -1811,6 +1811,42 @@ fn idle_nudge_m_add_time_day_boundary_invalid_returns_to_nudge() {
     );
 }
 
+/// The day-boundary "new entry" resolution ('n') of a nudge-born add can
+/// fail the same way: an invalid duration must keep the reminder AND must
+/// not consume the carried task (no stale "new entry" line is left behind).
+#[test]
+fn idle_nudge_m_add_time_day_boundary_new_entry_invalid_returns_to_nudge() {
+    let mut app = build_app_with_archive("Draft +Smith dur:7200 log:2026-05-05\n", None);
+    app.nav.mode = Mode::IdleNudge;
+
+    handle_idle_nudge(&mut app, key('M'));
+    handle_pick_nudge_task(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    app.draft_set("oops".into());
+    handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(app.nav.mode, Mode::PromptDayBoundary);
+
+    handle_day_boundary(&mut app, key('n'));
+
+    assert_eq!(
+        app.nav.mode,
+        Mode::IdleNudge,
+        "a failed 'new entry' resolution must keep the reminder"
+    );
+    assert!(!app.session.from_nudge);
+    assert_eq!(
+        app.tasks().len(),
+        1,
+        "an invalid duration must not consume the task via carry-forward"
+    );
+    assert!(!app.tasks()[0].done);
+    assert!(
+        app.tasks()[0].raw.contains("dur:7200"),
+        "no time may be added: {}",
+        app.tasks()[0].raw
+    );
+}
+
 /// Esc from the day-boundary prompt reached during a nudge recovery returns
 /// to the popup and never leaks the flag into Normal.
 #[test]
