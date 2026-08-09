@@ -531,8 +531,9 @@ mod tests {
     fn workday_coverage_computes_unaccounted() {
         let app = app_with_workday("09:00", "18:00");
         // 9h span, 1h tracked → 8h unaccounted; past anchor → not in progress.
-        let (span, unaccounted, in_progress) =
-            app.workday_coverage("2026-05-05", 3600, 17 * 60, "2026-05-06").unwrap();
+        let (span, unaccounted, in_progress) = app
+            .workday_coverage("2026-05-05", 3600, 17 * 60, "2026-05-06")
+            .unwrap();
         assert_eq!(span, 9 * 3600);
         assert_eq!(unaccounted, 8 * 3600);
         assert!(!in_progress, "past days are never 'in progress'");
@@ -541,24 +542,27 @@ mod tests {
     #[test]
     fn workday_coverage_in_progress_when_today_before_end() {
         let app = app_with_workday("09:00", "18:00");
-        let (_, _, in_progress) =
-            app.workday_coverage("2026-05-06", 3600, 10 * 60, "2026-05-06").unwrap();
+        let (_, _, in_progress) = app
+            .workday_coverage("2026-05-06", 3600, 10 * 60, "2026-05-06")
+            .unwrap();
         assert!(in_progress);
     }
 
     #[test]
     fn workday_coverage_in_progress_false_after_end() {
         let app = app_with_workday("09:00", "18:00");
-        let (_, _, in_progress) =
-            app.workday_coverage("2026-05-06", 3600, 19 * 60, "2026-05-06").unwrap();
+        let (_, _, in_progress) = app
+            .workday_coverage("2026-05-06", 3600, 19 * 60, "2026-05-06")
+            .unwrap();
         assert!(!in_progress);
     }
 
     #[test]
     fn workday_coverage_clamps_at_zero() {
         let app = app_with_workday("09:00", "18:00");
-        let (_, unaccounted, _) =
-            app.workday_coverage("2026-05-06", 12 * 3600, 19 * 60, "2026-05-06").unwrap();
+        let (_, unaccounted, _) = app
+            .workday_coverage("2026-05-06", 12 * 3600, 19 * 60, "2026-05-06")
+            .unwrap();
         assert_eq!(unaccounted, 0);
     }
 
@@ -571,9 +575,6 @@ mod tests {
     #[test]
     fn workday_coverage_none_when_end_before_start() {
         let app = app_with_workday("18:00", "09:00");
-        assert_eq!(
-            app.workday_coverage("2026-05-06", 0, 0, "2026-05-06"),
-            None
-        );
+        assert_eq!(app.workday_coverage("2026-05-06", 0, 0, "2026-05-06"), None);
     }
 }

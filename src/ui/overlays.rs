@@ -149,10 +149,8 @@ pub(crate) fn draw_overlays(
             let r = overlay::message_rect(area);
             frame.render_widget(Clear, r);
             let theme = app.theme();
-            let tracked = crate::app::format_duration(
-                app.today_tracked_secs(),
-                app.prefs.rounding_increment,
-            );
+            let tracked =
+                crate::app::format_duration(app.today_tracked_secs(), app.prefs.rounding_increment);
             let message = format!("You've tracked {tracked} today — anything missing?");
             msgbox::render_message_box(
                 frame,

@@ -7,8 +7,8 @@
 
 use super::session::DayBoundaryAction;
 use super::{
-    App, IdleReason, Mode, NudgePickAction, NudgePickerState, View, format_duration,
-    parse_clock, parse_duration_input,
+    App, IdleReason, Mode, NudgePickAction, NudgePickerState, View, format_duration, parse_clock,
+    parse_duration_input,
 };
 use crate::core::outcome::{CarryForwardOutcome, EditOutcome, TimerOutcome, TimerQuitOutcome};
 use crate::core::rebuild_token_line;
@@ -1079,7 +1079,10 @@ mod tests {
 
         assert!(!app.check_nudges());
 
-        assert!(app.session.idle_backdated, "flag set (one-shot) but no nudge");
+        assert!(
+            app.session.idle_backdated,
+            "flag set (one-shot) but no nudge"
+        );
         assert_eq!(
             app.session.idle_reason,
             IdleReason::TimerStopped,

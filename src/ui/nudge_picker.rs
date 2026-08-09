@@ -59,7 +59,11 @@ pub(crate) fn render(frame: &mut Frame, area: Rect, app: &App) {
         frame.render_widget(Paragraph::new(line).style(bg), list_area);
     } else {
         // Window the list so the highlight stays on-screen.
-        let start = if cursor < list_h { 0 } else { cursor + 1 - list_h };
+        let start = if cursor < list_h {
+            0
+        } else {
+            cursor + 1 - list_h
+        };
         let end = (start + list_h).min(list.len());
         let row_w = usize::from(list_area.width).saturating_sub(1);
         let lines: Vec<Line> = list[start..end]
@@ -119,12 +123,23 @@ pub(crate) fn render(frame: &mut Frame, area: Rect, app: &App) {
 
     let footer = Line::from(vec![
         Span::raw("  "),
-        Span::styled(header, Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            header,
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::styled("  j/k ", Style::default().fg(theme.dim)),
         Span::styled("navigate · ", Style::default().fg(theme.dim)),
-        Span::styled("Enter", Style::default().fg(theme.dim).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "Enter",
+            Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
+        ),
         Span::styled(" select · ", Style::default().fg(theme.dim)),
-        Span::styled("Esc", Style::default().fg(theme.dim).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "Esc",
+            Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
+        ),
         Span::styled(" back", Style::default().fg(theme.dim)),
     ])
     .style(bg);

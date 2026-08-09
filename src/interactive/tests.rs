@@ -1562,10 +1562,7 @@ fn pick_nudge_task_enter_starts_timer_on_chosen() {
     assert_eq!(app.nav.mode, Mode::PickNudgeTask);
     app.nudge_picker_step(true);
     app.nudge_picker_step(true); // highlight task c
-    handle_pick_nudge_task(
-        &mut app,
-        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
-    );
+    handle_pick_nudge_task(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     assert!(app.timer_running());
     assert!(app.is_timer_running_on(2), "timer must run on task c");

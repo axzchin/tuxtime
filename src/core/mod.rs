@@ -198,9 +198,8 @@ impl Store {
     /// should fire immediately instead of granting a fresh grace period.
     #[must_use]
     pub fn has_time_logged_today(&self) -> bool {
-        let check = |t: &Task| {
-            t.log.as_deref() == Some(self.today.as_str()) && t.dur.unwrap_or(0) > 0
-        };
+        let check =
+            |t: &Task| t.log.as_deref() == Some(self.today.as_str()) && t.dur.unwrap_or(0) > 0;
         self.tasks.iter().any(check) || self.archive.tasks().iter().any(check)
     }
 

@@ -262,14 +262,15 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
         if !app.timesheet.weekly {
             let now = chrono::Local::now();
             let now_min = now.hour() * 60 + now.minute();
-            if let Some((span_secs, unaccounted, in_progress)) = app.workday_coverage(
-                &app.timesheet.date,
-                grand_total,
-                now_min,
-                app.today(),
-            ) {
+            if let Some((span_secs, unaccounted, in_progress)) =
+                app.workday_coverage(&app.timesheet.date, grand_total, now_min, app.today())
+            {
                 let fmt = |s: u64| format!("{}h {}m", s / 3600, (s % 3600) / 60);
-                let suffix = if in_progress { " — day in progress" } else { "" };
+                let suffix = if in_progress {
+                    " — day in progress"
+                } else {
+                    ""
+                };
                 lines.push(Line::from(Span::styled(
                     format!(
                         "  Unaccounted: {} of {}{suffix}",

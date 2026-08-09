@@ -324,6 +324,51 @@
 
 ---
 
+### 38. Never-Forget Audit: Capture-Gap Fixes
+
+A batch of changes so no time is lost between the app's awareness and the
+lawyer's day:
+
+- **Idle-nudge clock resets on manual time entries** — logging time
+  (`M → N`, `M → A`, day-boundary add-time) resets the nudge clock, so the
+  "No timer running!" popup no longer fires moments after the user just did
+  the right thing. Plain task creation doesn't reset it (creating a task
+  isn't tracking time).
+- **Stale-timer startup prompt** (`Mode::StaleTimer`) — when a timer was
+  left running at last close (or the terminal was killed) and has exceeded
+  the long-timer threshold, launch asks `[K]eep counting / [S]top & log /
+  [D]iscard gap`. `D` strips `start:` without crediting the away time, so a
+  zombie session (closed terminal overnight) can never silently bill hours.
+- **Launch-time idle backdate** — on a fresh launch with nothing tracked
+  today and no running timer, the idle clock starts already past the
+  threshold, so the first tick nudges instead of granting a fresh 15-minute
+  grace period after hours spent outside the app. The popup says "Nothing
+  tracked yet today" (vs. the ordinary "No timer running!").
+- **Idle nudge recovery actions** — the popup now offers `[S]tart timer` and
+  `[M] add time`; both open a **task picker** (`Mode::PickNudgeTask`) so the
+  timer never blind-starts whatever task the cursor happens to be on. The
+  user consciously picks a task; `Enter` commits, `Esc` returns to the nudge.
+- **Nudge alert in the terminal title + BEL** — when a nudge is active, the
+  window title becomes `… ⏰ — timer check` and the bell rings once, so the
+  reminder reaches the user when the terminal is unfocused (in another app).
+- **End-of-day review nudge** (`Mode::ReviewNudge`, config `review_time =
+  "17:00"`) — once per day after the configured time (when something is
+  tracked today), asks `[V]iew timesheet / [M] add time / [s]kip`. Fires
+  from Normal mode only, at most once per day.
+- **Workday coverage line** — with `workday_start`/`workday_end` configured
+  (`"09:00"`/`"18:00"`), the daily timesheet shows
+  `Unaccounted: 6h 0m of 9h 0m` (with `— day in progress` while today's
+  workday is still open), turning the timesheet into an audit surface.
+
+**Files**: `src/app/timer.rs`, `src/app/session.rs`, `src/app/mutations.rs`,
+`src/core/mod.rs`, `src/main.rs`, `src/interactive/overlays.rs`,
+`src/interactive/dispatch.rs`, `src/ui/overlays.rs`, `src/ui/status.rs`,
+`src/ui/nudge_picker.rs` (new), `src/ui/timesheet_render.rs`,
+`src/app/timesheet.rs`, `src/config.rs`, `src/app/prefs.rs`,
+`src/app/duration.rs`
+
+---
+
 ## Keybinding Reference
 
 | Key | Action | Context |
@@ -356,8 +401,17 @@
 | `/` | Search/filter narratives | Timesheet |
 | `j`/`k` | Navigate groups | Timesheet |
 | `Esc`/`V`/`q` | Dismiss Timesheet (V toggles back to List) | Timesheet |
-| `S` (in nudge) | Start timer | IdleNudge |
+| `S` (in nudge) | Task picker → start timer on chosen task | IdleNudge |
+| `M` (in nudge) | Task picker → add time to chosen task | IdleNudge |
+| `N` (in nudge) | New blank entry | IdleNudge |
 | `D`/`Esc` (in nudge) | Dismiss nudge | IdleNudge |
+| `j`/`k` | Navigate task picker | PickNudgeTask |
+| `Enter` | Commit picked task | PickNudgeTask |
+| `Esc` | Back to idle nudge | PickNudgeTask |
+| `K`/`S`/`D` | Keep counting / stop & log / discard gap | StaleTimer |
+| `V` | Open timesheet (today) | ReviewNudge |
+| `M` | Manual entry choice | ReviewNudge |
+| `s`/`Esc` | Skip for today | ReviewNudge |
 
 ---
 
@@ -371,6 +425,14 @@ idle_nudge_seconds = 900
 
 # Nudge when timer runs too long (seconds, default 7200 = 2h)
 long_timer_nudge_seconds = 7200
+
+# End-of-day review prompt (once per day after this time). Omit to disable.
+# review_time = "17:00"
+
+# Workday bounds for the unaccounted-time coverage line in the daily
+# timesheet. Omit either (or both) to hide the line.
+# workday_start = "09:00"
+# workday_end = "18:00"
 
 # Week start day
 week_start = "sunday"  # or "monday"
