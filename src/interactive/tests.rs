@@ -1913,6 +1913,96 @@ fn nudge_select_nudge_prompt_pushed_over_selection_pops_back() {
     );
 }
 
+/// `V` from the selection ends it cleanly and opens the timesheet: the
+/// picker and pre-nudge view are dropped, the mode returns to Normal, and
+/// the idle-nudge clock resets so the reminder doesn't re-fire over the
+/// review the user deliberately opened.
+#[test]
+fn nudge_select_v_abandons_to_timesheet_cleanly() {
+    let mut app = crate::app::test_support::build_app("a\nb\nc\n");
+    app.nav.mode = Mode::IdleNudge;
+    app.session.pre_nudge_view = Some(View::Timesheet);
+    handle_idle_nudge(&mut app, key('s'));
+    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+
+    handle_pick_nudge_task(&mut app, key('V'), &KeyBindings::default());
+
+    assert_eq!(app.nav.mode, Mode::Normal, "selection ends on V");
+    assert_eq!(app.nav.view, View::Timesheet, "V opens the timesheet");
+    assert!(app.session.nudge_picker.is_none());
+    assert!(
+        app.session.pre_nudge_view.is_none(),
+        "pre-nudge view forgotten — the user chose where to go"
+    );
+    // The clock was just reset: the idle nudge must not re-fire on the
+    // next tick (backdate disabled so only the fresh clock is tested).
+    app.session.idle_backdated = true;
+    assert!(!app.check_nudges(), "no immediate nudge re-fire");
+    assert_eq!(app.nav.mode, Mode::Normal);
+}
+
+/// The V exit restores the search/filter that was active before the nudge.
+#[test]
+fn nudge_select_v_exit_restores_pre_nudge_filter() {
+    let mut app = crate::app::test_support::build_app("First +A\nSecond +B\n");
+    app.set_project_filter(Some("A".into()));
+    app.nav.mode = Mode::IdleNudge;
+    handle_idle_nudge(&mut app, key('s'));
+    assert!(
+        app.filter().project.is_none(),
+        "precondition: filter cleared during the selection"
+    );
+
+    handle_pick_nudge_task(&mut app, key('V'), &KeyBindings::default());
+
+    assert_eq!(
+        app.filter().project.as_deref(),
+        Some("A"),
+        "pre-nudge filter restored on V exit"
+    );
+}
+
+/// `a` (archive view) is the same deliberate dismissal as `V`: the
+/// selection ends cleanly instead of lingering inert over the archive
+/// (where Enter would otherwise commit against the live list, a footgun).
+#[test]
+fn nudge_select_a_abandons_to_archive_cleanly() {
+    let mut app = crate::app::test_support::build_app("a\nb\nc\n");
+    app.nav.mode = Mode::IdleNudge;
+    handle_idle_nudge(&mut app, key('s'));
+    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+
+    handle_pick_nudge_task(&mut app, key('a'), &KeyBindings::default());
+
+    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.view, View::Archive);
+    assert!(app.session.nudge_picker.is_none());
+}
+
+/// A palette action (e.g. OpenTimesheet) can leave the selection open in
+/// another view; the next key ends it before acting, then acts in Normal
+/// mode — no inert selection, no zombie banner.
+#[test]
+fn nudge_select_stale_view_exits_before_key() {
+    let mut app = crate::app::test_support::build_app("a\nb\nc\n");
+    app.nav.mode = Mode::IdleNudge;
+    handle_idle_nudge(&mut app, key('s'));
+    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    // Model the palette's OpenTimesheet: mode unchanged, view switched.
+    app.set_view(View::Timesheet);
+    assert!(app.session.nudge_picker.is_some());
+
+    handle_pick_nudge_task(&mut app, key('j'), &KeyBindings::default());
+
+    assert_eq!(app.nav.mode, Mode::Normal, "stale selection ends");
+    assert_eq!(
+        app.nav.view,
+        View::Timesheet,
+        "stays in the view the user chose"
+    );
+    assert!(app.session.nudge_picker.is_none());
+}
+
 /// `M` from the start-timer selection deliberately switches recovery
 /// action — manual entry — so the selection ends (unlike `+`/`c`/`fs`,
 /// which are detours on the way to the same choice).

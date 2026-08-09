@@ -362,8 +362,12 @@ lawyer's day:
   The selection survives every detour that stays on the same choice
   (search, filters, tags, saving a filter) and ends only on a commit, an
   `Esc`, a timer start, or a deliberate switch to a different recovery
-  action (`M` manual entry, `n`/`e`/`i` edits, `,` settings, `?` help,
-  `P` projects).
+  action or view (`M` manual entry, `n`/`e`/`i` edits, `,` settings, `?`
+  help, `P` projects, `V` timesheet, `a` archive). A view switch is a
+  clean dismissal: the pre-nudge filter is restored and the idle-nudge
+  clock resets, so the reminder doesn't re-fire over the timesheet or
+  archive the user deliberately opened (it will nag again once the clock
+  lapses if nothing has been tracked).
 - **Nudge alert in the terminal title + BEL** — when a nudge is active, the
   window title becomes `… ⏰ — timer check` and the bell rings once, so the
   reminder reaches the user when the terminal is unfocused (in another app).

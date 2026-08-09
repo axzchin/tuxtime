@@ -495,6 +495,16 @@ pub(crate) fn handle_review_nudge(app: &mut App, key: KeyEvent) {
 /// commits the highlighted task (start timer or add time per the action),
 /// `Esc` returns to the idle nudge popup.
 pub(crate) fn handle_pick_nudge_task(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
+    // A previous action can leave the selection open in another view — e.g.
+    // the command palette's OpenTimesheet/ToggleArchiveView pops back into
+    // PickNudgeTask after switching the view. The selection only makes sense
+    // on the list, so end it before processing the key, then let the key act
+    // in Normal mode.
+    if app.nav.view != View::List {
+        app.nudge_picker_exit_to_view();
+        handle_normal(app, key, keybinds);
+        return;
+    }
     match key.code {
         KeyCode::Enter => app.nudge_picker_accept(),
         KeyCode::Esc => app.nudge_picker_cancel(),
@@ -518,6 +528,12 @@ pub(crate) fn handle_pick_nudge_task(app: &mut App, key: KeyEvent, keybinds: &Ke
 /// selection: restore the pre-selection filter and drop the stale picker
 /// state so the cleared filter never leaks into Normal.
 fn maybe_abandon_nudge_selection(app: &mut App) {
+    // The selection is already over (e.g. `t` started a timer and finished
+    // it, restoring a pre-nudge non-List view) — nothing to abandon, and the
+    // view check below must not reset the nudge clock on that path.
+    if app.session.nudge_picker.is_none() {
+        return;
+    }
     if matches!(
         app.nav.mode(),
         // The filter pickers preview their filter directly on the list and
@@ -530,6 +546,14 @@ fn maybe_abandon_nudge_selection(app: &mut App) {
         | Mode::PromptContext
         | Mode::PromptSaveFilter
     ) {
+        return;
+    }
+    // A delegated key that switched to another view (`V` timesheet, `a`
+    // archive) ends the selection cleanly — the selection only makes sense
+    // on the list, and reviewing another view is a deliberate dismissal. The
+    // nudge clock resets so it doesn't re-fire over the view just opened.
+    if app.nav.view != View::List {
+        app.nudge_picker_exit_to_view();
         return;
     }
     if app.nav.mode() != Mode::PickNudgeTask && app.nav.peek_under() != Some(Mode::PickNudgeTask) {

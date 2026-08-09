@@ -383,6 +383,20 @@ impl App {
         }
     }
 
+    /// A view switch ended the selection (`V` timesheet, `a` archive — a
+    /// deliberate dismissal, like pressing D on the popup): restore the
+    /// pre-selection filter, drop the picker, exit to Normal, forget the
+    /// pre-nudge view (the user chose where to go), and reset the idle-nudge
+    /// clock so the reminder doesn't re-fire over the view just opened. The
+    /// user is still untracked, so the nudge will nag again once the clock
+    /// lapses — only the instant re-fire is suppressed.
+    pub fn nudge_picker_exit_to_view(&mut self) {
+        self.nudge_picker_abandon();
+        self.nav.enter_normal();
+        self.session.pre_nudge_view = None;
+        self.session.last_timer_activity = std::time::Instant::now();
+    }
+
     /// Put the user's search/project/context filter state back the way it
     /// was before the picker opened and restore the cursor to its pre-nudge
     /// position (clamped to the rebuilt list). One visible-cache rebuild.
