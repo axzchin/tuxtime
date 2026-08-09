@@ -243,10 +243,16 @@ impl App {
         // resets the activity clock so a later stop keeps the cadence sane.
         //
         // Keeping also acknowledges the timer is long-running: set the
-        // status-bar ⏰ flag so the long-timer popup doesn't instantly
-        // re-fire over the same timer the moment this prompt closes (the
-        // flag semantics match pressing D on the long-timer nudge itself).
-        self.session.long_timer_nudge_active = true;
+        // status-bar ⏰ flag (when it actually is long) so the long-timer
+        // popup doesn't instantly re-fire over the same timer the moment
+        // this prompt closes — the flag semantics match pressing D on the
+        // long-timer nudge itself. A stale timer that merely crossed a day
+        // (still under the threshold) leaves the flag off, so the indicator
+        // and popup stay accurate.
+        let over_threshold = self
+            .timer_elapsed_secs()
+            .is_some_and(|e| e >= self.prefs.long_timer_nudge_seconds);
+        self.session.long_timer_nudge_active = over_threshold;
         self.dismiss_nudge();
     }
 
