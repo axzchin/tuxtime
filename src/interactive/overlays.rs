@@ -292,6 +292,11 @@ pub(crate) fn handle_prompt(app: &mut App, key: KeyEvent) {
                 // nudge popup — the reminder survives a cancelled attempt.
                 app.session.from_nudge = false;
                 Mode::IdleNudge
+            } else if app.session.nudge_picker.is_some() {
+                // A quick-tag / save-filter prompt opened from the nudge
+                // selection (+, c, fs) returns to the selection — the user
+                // is still choosing a task, not abandoning the choice.
+                Mode::PickNudgeTask
             } else {
                 Mode::Normal
             };
@@ -313,6 +318,11 @@ pub(crate) fn handle_prompt(app: &mut App, key: KeyEvent) {
                 app.nav.pop_mode()
             } else if is_rename {
                 Mode::ManageProjects
+            } else if app.session.nudge_picker.is_some() {
+                // A quick-tag / save-filter prompt opened from the nudge
+                // selection (+, c, fs) returns to the selection — the user
+                // is still choosing a task, not abandoning the choice.
+                Mode::PickNudgeTask
             } else {
                 Mode::Normal
             };
@@ -506,7 +516,15 @@ pub(crate) fn handle_pick_nudge_task(app: &mut App, key: KeyEvent, keybinds: &Ke
 fn maybe_abandon_nudge_selection(app: &mut App) {
     if matches!(
         app.nav.mode(),
+        // The filter pickers preview their filter directly on the list and
+        // return to the selection on accept or cancel.
         Mode::PickProject | Mode::PickContext | Mode::PickSavedFilter
+        // The quick-tag prompts (+, c) and the save-filter prompt (fs) are
+        // selection-compatible detours: they mutate the highlighted task or
+        // persist the mid-selection search, then return to the selection.
+        | Mode::PromptProject
+        | Mode::PromptContext
+        | Mode::PromptSaveFilter
     ) {
         return;
     }

@@ -352,11 +352,18 @@ lawyer's day:
   `[M] add time`; both open a **task picker** (`Mode::PickNudgeTask`) that
   runs on the real list view, so the timer never blind-starts whatever task
   the cursor happened to be on. All list functionality stays live while
-  choosing — `j`/`k` navigation, `/` search, `+`/`@` filters, `t` to start
-  directly — with a banner strip + status hints announcing the selection
-  mode. `Enter` commits the highlighted task, `Esc` returns to the nudge.
-  The active search/filter is cleared on entry (so no task is hidden) and
-  restored on exit.
+  choosing — `j`/`k` navigation, `/` search, `fp`/`fc`/`ff` filter pickers,
+  `+`/`c` quick tags, `fs` save-filter, `t` to start directly — with a
+  banner strip + status hints announcing the selection mode. `Enter`
+  commits the highlighted task, `Esc` returns to the nudge. The active
+  search/filter is cleared on entry (so no task is hidden) and restored on
+  exit. Starting a timer on a task carrying time from a previous day asks
+  the day-boundary question (`continue` vs `new entry`), exactly like `t`.
+  The selection survives every detour that stays on the same choice
+  (search, filters, tags, saving a filter) and ends only on a commit, an
+  `Esc`, a timer start, or a deliberate switch to a different recovery
+  action (`M` manual entry, `n`/`e`/`i` edits, `,` settings, `?` help,
+  `P` projects).
 - **Nudge alert in the terminal title + BEL** — when a nudge is active, the
   window title becomes `… ⏰ — timer check` and the bell rings once, so the
   reminder reaches the user when the terminal is unfocused (in another app).

@@ -1731,6 +1731,179 @@ fn nudge_select_fp_esc_returns_to_selection() {
     assert_eq!(app.nav.mode, Mode::IdleNudge);
 }
 
+/// `+` (add project) from the selection keeps it alive: committing the tag
+/// returns to the selection on the same task, and Enter can still start its
+/// timer. (Sibling of the `f p` filter fix — a quick tag is a detour, not
+/// an abandonment of the choice.)
+#[test]
+fn nudge_select_plus_adds_project_and_keeps_selection() {
+    let mut app = crate::app::test_support::build_app("Brief\ncall +Globex\n");
+    app.nav.mode = Mode::IdleNudge;
+    app.session.pre_nudge_view = Some(View::Timesheet);
+
+    handle_idle_nudge(&mut app, key('s'));
+    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+
+    handle_pick_nudge_task(&mut app, key('+'), &KeyBindings::default());
+    assert_eq!(app.nav.mode, Mode::PromptProject);
+    assert!(
+        app.session.nudge_picker.is_some(),
+        "selection must survive opening the + prompt"
+    );
+    for c in ['a', 'c', 'm', 'e'] {
+        handle_prompt(&mut app, key(c));
+    }
+    handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(
+        app.nav.mode,
+        Mode::PickNudgeTask,
+        "committing the tag returns to the selection"
+    );
+    assert!(
+        app.store.tasks()[0].raw.contains("+acme"),
+        "tag must land on the highlighted task"
+    );
+    // Enter still starts the timer on it.
+    handle_pick_nudge_task(
+        &mut app,
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        &KeyBindings::default(),
+    );
+    assert!(app.timer_running());
+    assert!(app.is_timer_running_on(0));
+    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.view, View::Timesheet, "pre-nudge view restored");
+}
+
+/// Esc from the `+` prompt returns to the selection too — a cancelled tag
+/// is not a reason to abandon the task choice. (The first Esc closes the
+/// project-suggestion popup, which is visible even with an empty draft;
+/// the second exits the prompt — the app's standard two-stage prompt Esc.)
+#[test]
+fn nudge_select_plus_esc_returns_to_selection() {
+    let mut app = crate::app::test_support::build_app("Brief\ncall +Globex\n");
+    app.nav.mode = Mode::IdleNudge;
+    handle_idle_nudge(&mut app, key('s'));
+
+    handle_pick_nudge_task(&mut app, key('+'), &KeyBindings::default());
+    assert_eq!(app.nav.mode, Mode::PromptProject);
+    let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+    handle_prompt(&mut app, esc); // close the suggestion popup
+    handle_prompt(&mut app, esc); // exit the prompt
+
+    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert!(app.session.nudge_picker.is_some());
+    // And the selection itself still Escs back to the nudge.
+    handle_pick_nudge_task(
+        &mut app,
+        KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+        &KeyBindings::default(),
+    );
+    assert_eq!(app.nav.mode, Mode::IdleNudge);
+}
+
+/// `c` (toggle context) behaves like `+`: the selection survives the tag
+/// edit and Enter can still start the timer on the task.
+#[test]
+fn nudge_select_c_toggles_context_and_keeps_selection() {
+    let mut app = crate::app::test_support::build_app("Brief\ncall +Globex\n");
+    app.nav.mode = Mode::IdleNudge;
+    handle_idle_nudge(&mut app, key('s'));
+    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+
+    handle_pick_nudge_task(&mut app, key('c'), &KeyBindings::default());
+    assert_eq!(app.nav.mode, Mode::PromptContext);
+    for c in ['c', 'o', 'u', 'r', 't'] {
+        handle_prompt(&mut app, key(c));
+    }
+    handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert!(app.session.nudge_picker.is_some());
+    assert!(
+        app.store.tasks()[0].raw.contains("@court"),
+        "context must land on the highlighted task"
+    );
+}
+
+/// `f s` (save the mid-selection search as a named filter) keeps the
+/// selection: Esc from the prompt returns to it with the search intact.
+#[test]
+fn nudge_select_fs_esc_returns_to_selection() {
+    let mut app = crate::app::test_support::build_app("a\nb\nc\n");
+    app.nav.mode = Mode::IdleNudge;
+    handle_idle_nudge(&mut app, key('s'));
+
+    // Search mid-selection, then save it.
+    handle_pick_nudge_task(&mut app, key('/'), &KeyBindings::default());
+    handle_search(&mut app, key('b'));
+    handle_search(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert_eq!(app.filter().search, "b");
+
+    handle_pick_nudge_task(&mut app, key('f'), &KeyBindings::default());
+    handle_pick_nudge_task(&mut app, key('s'), &KeyBindings::default());
+    assert_eq!(app.nav.mode, Mode::PromptSaveFilter);
+    assert!(
+        app.session.nudge_picker.is_some(),
+        "selection must survive opening the save-filter prompt"
+    );
+
+    handle_prompt(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+
+    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert!(app.session.nudge_picker.is_some());
+    assert_eq!(app.filter().search, "b", "search stays applied");
+}
+
+/// Enter on the save-filter prompt also returns to the selection. The
+/// empty draft is rejected by `upsert` before any config write, so the
+/// test never touches the real config file.
+#[test]
+fn nudge_select_fs_enter_returns_to_selection() {
+    let mut app = crate::app::test_support::build_app("a\nb\nc\n");
+    app.nav.mode = Mode::IdleNudge;
+    handle_idle_nudge(&mut app, key('s'));
+
+    handle_pick_nudge_task(&mut app, key('/'), &KeyBindings::default());
+    handle_search(&mut app, key('b'));
+    handle_search(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    handle_pick_nudge_task(&mut app, key('f'), &KeyBindings::default());
+    handle_pick_nudge_task(&mut app, key('s'), &KeyBindings::default());
+    assert_eq!(app.nav.mode, Mode::PromptSaveFilter);
+
+    // Empty draft: upsert fails with "filter name required" — the mode
+    // return happens first, and no config write occurs.
+    handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(
+        app.nav.mode,
+        Mode::PickNudgeTask,
+        "Enter on the save-filter prompt returns to the selection"
+    );
+    assert!(app.session.nudge_picker.is_some());
+}
+
+/// `M` from the start-timer selection deliberately switches recovery
+/// action — manual entry — so the selection ends (unlike `+`/`c`/`fs`,
+/// which are detours on the way to the same choice).
+#[test]
+fn nudge_select_m_still_abandons_to_manual_entry() {
+    let mut app = crate::app::test_support::build_app("a\nb\nc\n");
+    app.nav.mode = Mode::IdleNudge;
+    handle_idle_nudge(&mut app, key('s'));
+    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+
+    handle_pick_nudge_task(&mut app, key('M'), &KeyBindings::default());
+
+    assert_eq!(app.nav.mode, Mode::ManualEntryChoice);
+    assert!(
+        app.session.nudge_picker.is_none(),
+        "M ends the selection: it is a different recovery action"
+    );
+}
+
 // ---- sidebar toggles in every view ----
 
 /// `[`/`]` are view-independent chrome: they must toggle the sidebars in
