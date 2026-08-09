@@ -1518,6 +1518,73 @@ fn stale_timer_k_keeps_counting() {
     assert_eq!(app.nav.mode, Mode::Normal);
 }
 
+// ---- idle nudge recovery actions (S / M task picker) ----
+
+/// `S` from the idle nudge opens the task picker in start-timer mode; the
+/// picker is a deliberate choice, never a blind hit on the cursor's task.
+#[test]
+fn idle_nudge_s_opens_start_timer_picker() {
+    let mut app = build_app();
+    app.nav.mode = Mode::IdleNudge;
+
+    handle_idle_nudge(&mut app, key('S'));
+
+    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert_eq!(
+        app.session.nudge_picker.as_ref().map(|p| p.action),
+        Some(crate::app::NudgePickAction::StartTimer)
+    );
+}
+
+/// `M` from the idle nudge opens the task picker in add-time mode.
+#[test]
+fn idle_nudge_m_opens_add_time_picker() {
+    let mut app = build_app();
+    app.nav.mode = Mode::IdleNudge;
+
+    handle_idle_nudge(&mut app, key('M'));
+
+    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert_eq!(
+        app.session.nudge_picker.as_ref().map(|p| p.action),
+        Some(crate::app::NudgePickAction::AddTime)
+    );
+}
+
+/// End-to-end through the key handlers: `s` → pick the last of 3 tasks →
+/// Enter starts the timer on it.
+#[test]
+fn pick_nudge_task_enter_starts_timer_on_chosen() {
+    let mut app = build_app(); // tasks a, b, c
+    app.nav.mode = Mode::IdleNudge;
+
+    handle_idle_nudge(&mut app, key('s'));
+    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    app.nudge_picker_step(true);
+    app.nudge_picker_step(true); // highlight task c
+    handle_pick_nudge_task(
+        &mut app,
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+    );
+
+    assert!(app.timer_running());
+    assert!(app.is_timer_running_on(2), "timer must run on task c");
+    assert_eq!(app.nav.mode, Mode::Normal);
+}
+
+/// Esc in the picker returns to the idle nudge popup.
+#[test]
+fn pick_nudge_task_esc_returns_to_idle_nudge() {
+    let mut app = build_app();
+    app.nav.mode = Mode::IdleNudge;
+    handle_idle_nudge(&mut app, key('s'));
+    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+
+    handle_pick_nudge_task(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+
+    assert_eq!(app.nav.mode, Mode::IdleNudge);
+}
+
 // ---- idle nudge safety ----
 
 /// The idle nudge must not fire while the user is in a mode with transient

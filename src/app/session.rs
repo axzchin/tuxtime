@@ -6,6 +6,27 @@ use std::time::Instant;
 
 use super::types::View;
 
+/// What the nudge task picker commits on Enter. The picker exists so a nudge
+/// never blindly starts a timer (or adds time) to whatever task happens to be
+/// under the cursor — the user consciously chooses the task first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NudgePickAction {
+    /// Start the timer on the chosen task.
+    StartTimer,
+    /// Open the add-time prompt targeting the chosen task.
+    AddTime,
+}
+
+/// Transient state for the nudge task picker (`Mode::PickNudgeTask`): the
+/// list of open tasks offered and the highlight position.
+#[derive(Debug, Clone)]
+pub struct NudgePickerState {
+    /// Absolute indices of the open (not done) tasks offered for selection.
+    pub abs_list: Vec<usize>,
+    pub cursor: usize,
+    pub action: NudgePickAction,
+}
+
 /// Why the idle nudge is (or would be) showing. Drives the popup message so
 /// it speaks to the actual failure mode instead of always saying the same
 /// thing.
@@ -60,6 +81,9 @@ pub struct Session {
     pub idle_backdated: bool,
     /// Why the idle nudge is (or would be) showing; drives the popup text.
     pub idle_reason: IdleReason,
+    /// Transient state for the nudge task picker (`Mode::PickNudgeTask`).
+    /// `None` when the picker isn't open.
+    pub nudge_picker: Option<NudgePickerState>,
 }
 
 impl Session {
@@ -75,6 +99,7 @@ impl Session {
             carry_forward_from: None,
             idle_backdated: false,
             idle_reason: IdleReason::TimerStopped,
+            nudge_picker: None,
         }
     }
 }

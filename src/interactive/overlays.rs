@@ -383,8 +383,13 @@ pub(crate) fn handle_manage_projects(app: &mut App, key: KeyEvent) {
 // Idle nudge (popup when no timer and idle too long)
 // ---------------------------------------------------------------------------
 
+/// Idle-nudge popup. The recovery actions (`S` start timer, `M` add time)
+/// route through the task picker so they never hit a random task the cursor
+/// happens to be on; `N` opens a blank new entry; `D`/`Esc` dismisses.
 pub(crate) fn handle_idle_nudge(app: &mut App, key: KeyEvent) {
     match key.code {
+        KeyCode::Char('s' | 'S') => app.enter_nudge_picker(crate::app::NudgePickAction::StartTimer),
+        KeyCode::Char('m' | 'M') => app.enter_nudge_picker(crate::app::NudgePickAction::AddTime),
         KeyCode::Char('N' | 'n') => {
             app.set_view(View::List);
             app.draft_clear();
@@ -400,6 +405,19 @@ pub(crate) fn handle_idle_nudge(app: &mut App, key: KeyEvent) {
             }
             app.session.last_timer_activity = std::time::Instant::now();
         }
+        _ => {}
+    }
+}
+
+/// Nudge task picker: `j`/`k` move the highlight, `Enter` commits the chosen
+/// task (start timer or add time per the action), `Esc` returns to the idle
+/// nudge popup.
+pub(crate) fn handle_pick_nudge_task(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Char('j') | KeyCode::Down => app.nudge_picker_step(true),
+        KeyCode::Char('k') | KeyCode::Up => app.nudge_picker_step(false),
+        KeyCode::Enter => app.nudge_picker_accept(),
+        KeyCode::Esc => app.nudge_picker_cancel(),
         _ => {}
     }
 }

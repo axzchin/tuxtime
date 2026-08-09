@@ -68,7 +68,9 @@ pub use prefs::{Layout, Prefs};
 pub use project_manager::ProjectManager;
 pub use saved_filter_picker::SavedFilterPicker;
 pub use selection::Selection;
-pub use session::{DayBoundaryAction, IdleReason, Session};
+pub use session::{
+    DayBoundaryAction, IdleReason, NudgePickAction, NudgePickerState, Session,
+};
 pub use share_state::ShareState;
 pub use theme_picker_state::ThemePicker;
 pub use timesheet::TimesheetState;

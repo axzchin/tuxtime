@@ -6,7 +6,10 @@
 //! nudge thresholds.
 
 use super::session::DayBoundaryAction;
-use super::{App, IdleReason, Mode, format_duration, parse_duration_input};
+use super::{
+    App, IdleReason, Mode, NudgePickAction, NudgePickerState, View, format_duration,
+    parse_duration_input,
+};
 use crate::core::outcome::{CarryForwardOutcome, EditOutcome, TimerOutcome, TimerQuitOutcome};
 use crate::core::rebuild_token_line;
 use crate::todo::Task;
@@ -182,6 +185,98 @@ impl App {
         // Timer is running, so the idle nudge can't fire; reset the activity
         // clock anyway so a later stop keeps the nudge cadence sane.
         self.note_timer_activity();
+    }
+
+    // ---- nudge task picker (S / M from the idle nudge) ----
+
+    /// Open the nudge task picker for the given action. Lists all open tasks
+    /// (unfiltered — the user is choosing deliberately, filters would hide
+    /// the very task they mean), seeding the cursor on the currently selected
+    /// task when it's among them. The whole point: a nudge must never start a
+    /// timer (or add time) to a random task just because it happens to be
+    /// under the cursor.
+    pub fn enter_nudge_picker(&mut self, action: NudgePickAction) {
+        let abs_list: Vec<usize> = self
+            .store
+            .tasks()
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| !t.done)
+            .map(|(i, _)| i)
+            .collect();
+        if abs_list.is_empty() {
+            self.flash("no open tasks — press n to create one");
+            self.nav.mode = Mode::IdleNudge;
+            return;
+        }
+        let cursor = self
+            .cur_abs()
+            .and_then(|a| abs_list.iter().position(|x| *x == a))
+            .unwrap_or(0);
+        self.session.nudge_picker = Some(NudgePickerState {
+            abs_list,
+            cursor,
+            action,
+        });
+        self.nav.mode = Mode::PickNudgeTask;
+    }
+
+    /// Move the picker highlight (clamped to the list).
+    pub fn nudge_picker_step(&mut self, forward: bool) {
+        if let Some(p) = self.session.nudge_picker.as_mut() {
+            p.cursor = if forward {
+                (p.cursor + 1).min(p.abs_list.len().saturating_sub(1))
+            } else {
+                p.cursor.saturating_sub(1)
+            };
+        }
+    }
+
+    /// Commit the picker: start the timer (or open add-time) on the chosen
+    /// task, then leave the nudge flow back to Normal (restoring the
+    /// pre-nudge view).
+    pub fn nudge_picker_accept(&mut self) {
+        let Some(picker) = self.session.nudge_picker.take() else {
+            return;
+        };
+        let Some(&abs) = picker.abs_list.get(picker.cursor) else {
+            self.nav.mode = Mode::IdleNudge;
+            return;
+        };
+        match picker.action {
+            NudgePickAction::StartTimer => {
+                self.toggle_timer_at(abs);
+                self.nav.enter_normal();
+                if let Some(v) = self.session.pre_nudge_view.take() {
+                    self.set_view(v);
+                }
+            }
+            NudgePickAction::AddTime => {
+                // Point the list cursor at the chosen task so the add-time
+                // prompt targets it, then open the prompt.
+                self.set_view(View::List);
+                if let Some(pos) = self.visible_indices().iter().position(|&a| a == abs) {
+                    self.nav.cursor = pos;
+                }
+                self.recompute_visible();
+                let body = self
+                    .store
+                    .tasks()
+                    .get(abs)
+                    .map(|t| crate::todo::body_only_from_clean(&t.clean_raw))
+                    .unwrap_or_default();
+                self.draft_clear();
+                self.flash(format!("add time to: {body}"));
+                self.nav.mode = Mode::PromptAddTime;
+            }
+        }
+    }
+
+    /// Esc from the picker returns to the idle-nudge popup so the user can
+    /// pick a different action (or dismiss).
+    pub fn nudge_picker_cancel(&mut self) {
+        self.session.nudge_picker = None;
+        self.nav.mode = Mode::IdleNudge;
     }
 
     /// `[d]iscard gap` on the stale-timer prompt: stop the timer WITHOUT
@@ -966,6 +1061,91 @@ mod tests {
 
         assert_eq!(app.session.idle_reason, IdleReason::TimerStopped);
         assert!(app.session.last_timer_activity.elapsed().as_secs() < 5);
+    }
+
+    // ---- nudge task picker (S / M from the idle nudge) ----
+
+    /// The picker must list open tasks (done excluded) and seed the cursor
+    /// on the currently selected task when it's among them.
+    #[test]
+    fn nudge_picker_lists_open_tasks_and_seeds_cursor() {
+        let mut app = build_app("First +A\nSecond +B\nx 2026-05-05 Done +C\n");
+        app.nav.cursor = 1;
+        app.recompute_visible();
+
+        app.enter_nudge_picker(NudgePickAction::StartTimer);
+
+        assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+        let picker = app.session.nudge_picker.as_ref().unwrap();
+        assert_eq!(picker.abs_list, vec![0, 1], "done tasks must be excluded");
+        assert_eq!(picker.cursor, 1, "seed on the selected task");
+        assert_eq!(picker.action, NudgePickAction::StartTimer);
+    }
+
+    /// Enter on the picker starts the timer on the CHOSEN task — not the
+    /// cursor's task — and returns to the pre-nudge view.
+    #[test]
+    fn nudge_picker_start_timer_targets_chosen_task() {
+        let mut app = build_app("First +A\nSecond +B\n");
+        // Cursor sits on task 0; the picker will choose task 1 instead.
+        app.nav.cursor = 0;
+        app.recompute_visible();
+        app.session.pre_nudge_view = Some(View::Timesheet);
+
+        app.enter_nudge_picker(NudgePickAction::StartTimer);
+        app.nudge_picker_step(true); // move to task 1
+        app.nudge_picker_accept();
+
+        assert!(
+            app.is_timer_running_on(1),
+            "timer must run on the CHOSEN task, not the cursor's"
+        );
+        assert!(!app.is_timer_running_on(0));
+        assert_eq!(app.nav.mode, Mode::Normal);
+        assert_eq!(app.nav.view, View::Timesheet, "pre-nudge view restored");
+        assert!(app.session.nudge_picker.is_none());
+    }
+
+    /// Enter on the add-time picker opens the add-time prompt targeting the
+    /// chosen task, with the confirmation flash naming it.
+    #[test]
+    fn nudge_picker_add_time_targets_chosen_task() {
+        let mut app = build_app("First +A\nSecond +B\n");
+        app.nav.cursor = 1;
+        app.recompute_visible();
+
+        app.enter_nudge_picker(NudgePickAction::AddTime);
+        app.nudge_picker_step(false); // move up to task 0
+        app.nudge_picker_accept();
+
+        assert_eq!(app.nav.mode, Mode::PromptAddTime);
+        assert_eq!(app.nav.view, View::List, "add-time needs the list view");
+        assert_eq!(app.nav.cursor, 0, "cursor must point at the chosen task");
+        assert!(
+            app.flash_active()
+                .is_some_and(|m| m.contains("First") && m.contains("add time to")),
+            "flash must name the chosen task"
+        );
+    }
+
+    /// Esc from the picker returns to the idle-nudge popup.
+    #[test]
+    fn nudge_picker_esc_returns_to_idle_nudge() {
+        let mut app = build_app("First\n");
+        app.enter_nudge_picker(NudgePickAction::StartTimer);
+
+        app.nudge_picker_cancel();
+
+        assert_eq!(app.nav.mode, Mode::IdleNudge);
+        assert!(app.session.nudge_picker.is_none());
+    }
+
+    /// No open tasks: the picker can't open; stay on the idle nudge.
+    #[test]
+    fn nudge_picker_empty_stays_on_idle_nudge() {
+        let mut app = build_app("");
+        app.enter_nudge_picker(NudgePickAction::StartTimer);
+        assert_eq!(app.nav.mode, Mode::IdleNudge);
     }
 
     // ---- manual entries reset the idle-nudge clock ----

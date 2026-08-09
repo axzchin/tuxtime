@@ -35,6 +35,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         Mode::PickTheme => "PICK THEME".into(),
         Mode::Welcome => "WELCOME".into(),
         Mode::IdleNudge => "IDLE NUDGE".into(),
+        Mode::PickNudgeTask => "PICK TASK".into(),
         Mode::LongTimerNudge => "LONG TIMER".into(),
         Mode::StaleTimer => "STALE TIMER".into(),
         Mode::ManualEntryChoice => "MANUAL ENTRY".into(),
@@ -115,6 +116,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             Mode::PromptIdleNudge => "type minutes · Enter save · Esc cancel".to_string(),
             Mode::PromptLongTimerNudge => "type minutes · Enter save · Esc cancel".to_string(),
             Mode::LongTimerNudge => "S stop timer · D dismiss".to_string(),
+            Mode::IdleNudge => "S start timer · M add time · N new entry · D dismiss".to_string(),
+            Mode::PickNudgeTask => "j/k navigate · Enter select · Esc back".to_string(),
             Mode::PickTimesheetDate => {
                 "hjkl/arrows navigate  ·  type date  ·  Enter select  ·  Esc cancel  ·  t today"
                     .to_string()

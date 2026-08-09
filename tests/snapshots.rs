@@ -532,6 +532,21 @@ fn idle_nudge_popup() {
 }
 
 #[test]
+fn nudge_task_picker() {
+    // The idle-nudge recovery picker (`S` start timer / `M` add time): a
+    // centered list of open tasks so the user consciously chooses which task
+    // to time, instead of blindly hitting whatever the cursor is on.
+    let mut app = make_app();
+    app.nav.mode = Mode::PickNudgeTask;
+    app.session.nudge_picker = Some(tuxtime::app::NudgePickerState {
+        abs_list: vec![0, 1, 2, 3],
+        cursor: 1,
+        action: tuxtime::app::NudgePickAction::StartTimer,
+    });
+    snapshot_app("nudge_task_picker", &app);
+}
+
+#[test]
 fn manual_entry_choice_popup() {
     let mut app = make_app();
     app.nav.mode = Mode::ManualEntryChoice;

@@ -1,0 +1,37 @@
+---
+source: tests/snapshots.rs
+assertion_line: 226
+expression: buffer_to_text(&buf)
+---
+ FILTERS                   ▶▮◀ /tmp/tuxtime-snapshot.txt  •  15 ta DETAIL                           
+                                                                                                    
+ PROJECTS                  (2)  PRIORITY A  ────────────────────── priority  (A)                    
+   +work             4      1 ▸ (A) Finish Q2 board deck +work @la created   2026-05-01             
+   +health           3      2   (A) Call dentist to reschedule cle due       2026-05-06  today      
+   +finance          2     (3)  PRIORITY B  ────────────────────── projects  +work                  
+   +home            ┌ ▶ START TIMER ───────────────────────────────────────────┐ptop                
+   +learning        │  Call dentist to reschedule cleaning +health @phone      │                    
+   +personal        │ ▶Finish Q2 board deck +work @laptop                      │                    
+   +travel          │  Review pull requests for auth refactor +work @laptop    │                    
+                    │  Renew passport before summer trip +travel @errands      │1 Finish Q2 board   
+ CONTEXTS           │                                                          │aptop               
+   @errands         │                                                          │6                   
+   @home            │                                                          │                    
+   @laptop          │                                                          │                    
+   @phone           │                                                          │                    
+                    │                                                          │                    
+                    │                                                          │                    
+                    │                                                          │                    
+                    │                                                          │                    
+                    │                                                          │                    
+                    │                                                          │                    
+                    │                                                          │                    
+                    │                                                          │                    
+                    │  start timer on:  j/k navigate · Enter select · Esc back │                    
+                    └──────────────────────────────────────────────────────────┘                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+ PICK TASK   j/k navigate · Enter select · Esc back         15 open · 2026-05-06 · tuxtime 2026.7.1

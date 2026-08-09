@@ -34,7 +34,8 @@ use ratatui::widgets::{Clear, Paragraph};
 use crate::app::{App, Mode};
 use crate::ui::timesheet_render::render_timesheet_calendar;
 use crate::ui::{
-    command_palette, dialog, help, msgbox, overlay, settings, share, theme_picker, welcome,
+    command_palette, dialog, help, msgbox, nudge_picker, overlay, settings, share, theme_picker,
+    welcome,
 };
 
 /// Draw whatever the current mode wants on top of the base view (panes,
@@ -138,8 +139,11 @@ pub(crate) fn draw_overlays(
                 theme,
                 " ⏰ Idle Nudge ",
                 message,
-                "[N]ew entry  [D]ismiss",
+                "[S]tart timer  [M] add time  [N] new entry  [D]ismiss",
             );
+        }
+        Mode::PickNudgeTask => {
+            nudge_picker::render(frame, area, app);
         }
         Mode::LongTimerNudge => {
             let r = overlay::message_rect(area);

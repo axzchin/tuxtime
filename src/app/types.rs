@@ -70,6 +70,11 @@ pub enum Mode {
     /// zombie session (e.g. closed terminal overnight) never silently bills
     /// the away time. Shown once at launch, before any long-timer nudge.
     StaleTimer,
+    /// Nudge task picker — reached via `S`/`M` from the idle nudge. Lists
+    /// open tasks so the user consciously chooses which task to start timing
+    /// (or add time to), instead of blindly hitting whatever the cursor is
+    /// on. `j/k` navigate, `Enter` commits, `Esc` returns to the nudge.
+    PickNudgeTask,
     /// Manual entry choice popup — [C]urrent task description or [N]ew blank entry.
     ManualEntryChoice,
     /// Project management view (`<P>`) — archive/unarchive/rename projects.

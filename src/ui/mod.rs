@@ -18,6 +18,7 @@ pub mod hyperlinks;
 pub mod list;
 pub mod logo;
 pub mod msgbox;
+pub(crate) mod nudge_picker;
 pub(crate) mod overlay;
 pub(crate) mod overlays;
 pub mod settings;
