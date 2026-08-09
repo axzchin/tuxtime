@@ -1,0 +1,36 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_styled(&buf)
+---
+{fg=#6b7280 bg=#1f232b mod=bold} FILTERS{/}{fg=#c8ccd4 bg=#1f232b}                  {/}{bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}▶{/}{fg=#e07a7a bg=#1f232b}▮{/}{fg=#8aa9c9 bg=#1f232b}◀{/}{bg=#1f232b} {/}{fg=#c8ccd4 bg=#1f232b mod=bold}/tmp/tuxtime-snapshot.txt{/}{fg=#6b7280 bg=#1f232b}  •  1 tasks  •  {/}{fg=#8aa9c9 bg=#1f232b}sort:priority{/}{bg=#1f232b}              {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{bg=#1a1d23}                                                                          {/}
+{fg=#7fb3a8 bg=#1f232b mod=bold} PROJECTS{/}{fg=#c8ccd4 bg=#1f232b}                 {/}{fg=#c8ccd4 bg=#1a1d23} {/}{fg=#6b7280 bg=#1a1d23}(1){/}{fg=#c8ccd4 bg=#1a1d23}  {/}{fg=#6b7280 bg=#1a1d23 mod=bold}NO PRIORITY{/}{fg=#c8ccd4 bg=#1a1d23}  {/}{fg=#2a2f38 bg=#1a1d23}───────────────────────────────────────────────────────{/}
+{fg=#c8ccd4 bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}  {/}{fg=#7fb3a8 bg=#1f232b}+Smith          {/}{fg=#6b7280 bg=#1f232b}  1{/}{fg=#c8ccd4 bg=#1f232b}    {/}{fg=#6b7280 bg=#3a4150}  1 {/}{fg=#8aa9c9 bg=#3a4150 mod=bold}▶ {/}{fg=#c8ccd4 bg=#3a4150}    Draft motion {/}{fg=#7fb3a8 bg=#3a4150}+Smith{/}{fg=#c8ccd4 bg=#3a4150} {/}{fg=#c89a6e bg=#3a4150}@drafting{/}{fg=#c8ccd4 bg=#3a4150} {/}{fg=#6b7280 bg=#3a4150}dur:3600{/}{fg=#8aa9c9 bg=#3a4150} [02:01:40]{/}{fg=#c8ccd4 bg=#1a1d23}               {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                                                          {/}
+{fg=#c89a6e bg=#1f232b mod=bold} CONTEXTS{/}{fg=#c8ccd4 bg=#1f232b}                 {/}{fg=#c8ccd4 bg=#1a1d23}                                                                          {/}
+{fg=#c8ccd4 bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}  {/}{fg=#c89a6e bg=#1f232b}@drafting       {/}{fg=#6b7280 bg=#1f232b}  1{/}{fg=#c8ccd4 bg=#1f232b}    {/}{fg=#c8ccd4 bg=#1a1d23}                                                                          {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                                                          {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                                                          {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                                                          {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                                                          {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                                                          {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                                                          {/}
+{fg=#c8ccd4 bg=#1f232b}                    {/}{fg=#8aa9c9 bg=#1f232b}┌ ⏰{/} {fg=#8aa9c9 bg=#1f232b} Stale Timer ──────────────────────────────────────────┐{/}{fg=#c8ccd4 bg=#1a1d23}                    {/}
+{fg=#c8ccd4 bg=#1f232b}                    {/}{fg=#8aa9c9 bg=#1f232b}│{/}{bg=#1f232b} {/}{fg=#c8ccd4 bg=#1f232b mod=bold}Timer was running when tuxtime last closed — 2h 1m (2.1h){/}{fg=#8aa9c9 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1a1d23}                    {/}
+{fg=#c8ccd4 bg=#1f232b}                    {/}{fg=#8aa9c9 bg=#1f232b}│{/}{bg=#1f232b}    {/}{fg=#c8ccd4 bg=#1f232b mod=bold}elapsed. Log it, keep counting, or discard the gap?{/}{bg=#1f232b}   {/}{fg=#8aa9c9 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1a1d23}                    {/}
+{fg=#c8ccd4 bg=#1f232b}                    {/}{fg=#8aa9c9 bg=#1f232b}│{/}{bg=#1f232b}                                                          {/}{fg=#8aa9c9 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1a1d23}                    {/}
+{fg=#c8ccd4 bg=#1f232b}                    {/}{fg=#8aa9c9 bg=#1f232b}│{/}{bg=#1f232b}       {/}{fg=#6b7280 bg=#1f232b}[K]eep counting  [S]top & log  [D]iscard gap{/}{bg=#1f232b}       {/}{fg=#8aa9c9 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1a1d23}                    {/}
+{fg=#c8ccd4 bg=#1f232b}                    {/}{fg=#8aa9c9 bg=#1f232b}└──────────────────────────────────────────────────────────┘{/}{fg=#c8ccd4 bg=#1a1d23}                    {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                                                          {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                                                          {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                                                          {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                                                          {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                                                          {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                                                          {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                                                          {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                                                          {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                                                          {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                                                          {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                                                          {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                                                          {/}
+{fg=#1a1d23 bg=#8aa9c9 mod=bold} STALE TIMER {/}{bg=#252a33}  {/}{fg=#a8b0bc bg=#252a33}▶ +Smith @drafting  02:01:40  Draft motion{/}{bg=#252a33}    {/}{fg=#6b7280 bg=#252a33}1 open · 2026-05-06 · tuxtime 2026.7.1 {/}

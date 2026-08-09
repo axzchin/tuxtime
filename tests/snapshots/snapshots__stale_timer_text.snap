@@ -1,0 +1,36 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(&buf)
+---
+ FILTERS                   ▶▮◀ /tmp/tuxtime-snapshot.txt  •  1 tasks  •  sort:priority              
+                                                                                                    
+ PROJECTS                  (1)  NO PRIORITY  ───────────────────────────────────────────────────────
+   +Smith            1      1 ▶     Draft motion +Smith @drafting dur:3600 [02:01:40]               
+                                                                                                    
+ CONTEXTS                                                                                           
+   @drafting         1                                                                              
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                    ┌ ⏰  Stale Timer ──────────────────────────────────────────┐                    
+                    │ Timer was running when tuxtime last closed — 2h 1m (2.1h)│                    
+                    │    elapsed. Log it, keep counting, or discard the gap?   │                    
+                    │                                                          │                    
+                    │       [K]eep counting  [S]top & log  [D]iscard gap       │                    
+                    └──────────────────────────────────────────────────────────┘                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+ STALE TIMER   ▶ +Smith @drafting  02:01:40  Draft motion    1 open · 2026-05-06 · tuxtime 2026.7.1

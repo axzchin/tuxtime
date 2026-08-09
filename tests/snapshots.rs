@@ -547,6 +547,32 @@ fn nudge_task_picker() {
 }
 
 #[test]
+fn stale_timer_popup() {
+    // A timer left running past the threshold when the app last closed: the
+    // launch popup offers keep / stop & log / discard gap. The elapsed shown
+    // is 2h+ regardless of the exact test moment (7300s), so the snapshot is
+    // deterministic.
+    let start = (chrono::Local::now() - chrono::Duration::seconds(7300))
+        .format("%Y-%m-%dT%H:%M:%S")
+        .to_string();
+    let body = format!("2026-05-01 Draft motion +Smith @drafting dur:3600 start:{start}\n");
+    std::fs::write(FIXTURE_PATH, &body).expect("seed fixture file");
+    let mut app = App::new(
+        PathBuf::from(FIXTURE_PATH),
+        body,
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.env.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.prefs.density = Density::Compact;
+    // Hide the detail pane: its RAW view echoes the live `start:` timestamp,
+    // which is wall-clock dependent and would make the snapshot flaky.
+    app.prefs.layout.right = false;
+    app.nav.mode = Mode::StaleTimer;
+    snapshot_app("stale_timer", &app);
+}
+
+#[test]
 fn review_nudge_popup() {
     // End-of-day review: shows today's tracked total and offers the
     // reconciliation actions.

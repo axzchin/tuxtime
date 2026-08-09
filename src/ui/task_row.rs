@@ -236,16 +236,18 @@ fn push_token_spans<'a>(
     }
 }
 
+/// The live-timer tag is never shown in a task row: it's a wall-clock
+/// timestamp (noise on a task line — the status bar already shows the
+/// running timer and its elapsed time). Hidden regardless of config.
+const ALWAYS_HIDDEN_KEYS: [&str; 1] = ["start"];
+
 /// True when `token` is a `key:value` pair whose key (case-insensitively)
-/// appears in `hidden_keys`. Empty list short-circuits so the common path
-/// stays allocation- and comparison-free.
+/// appears in `hidden_keys` or is always hidden (`start:`).
 fn is_hidden_kv(token: &str, hidden_keys: &[String]) -> bool {
-    if hidden_keys.is_empty() {
-        return false;
-    }
     match token.split_once(':') {
         Some((k, v)) if !k.is_empty() && !v.is_empty() => {
-            hidden_keys.iter().any(|h| h.eq_ignore_ascii_case(k))
+            ALWAYS_HIDDEN_KEYS.iter().any(|h| h.eq_ignore_ascii_case(k))
+                || hidden_keys.iter().any(|h| h.eq_ignore_ascii_case(k))
         }
         _ => false,
     }
@@ -499,6 +501,23 @@ mod tests {
         assert_eq!(
             body_text("Call dentist uid:abc @phone +health", &[]),
             "Call dentist uid:abc @phone +health",
+        );
+    }
+
+    #[test]
+    fn start_token_always_hidden_from_rows() {
+        // The live `start:` timestamp must never leak into a task row (it's
+        // wall-clock noise; the status bar shows the running timer instead).
+        assert_eq!(
+            body_text(
+                "Draft motion +Smith start:2026-05-06T09:00:00 dur:3600",
+                &[],
+            ),
+            "Draft motion +Smith dur:3600",
+        );
+        assert_eq!(
+            body_text("Call dentist start:2026-05-06T09:00:00 @phone", &[]),
+            "Call dentist @phone",
         );
     }
 
