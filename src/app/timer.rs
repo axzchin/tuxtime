@@ -70,7 +70,10 @@ impl App {
     ///   Returns true when the UI should redraw.
     pub fn check_nudges(&mut self) -> bool {
         // If a nudge popup is already showing, don't re-trigger.
-        if matches!(self.nav.mode, Mode::IdleNudge | Mode::LongTimerNudge) {
+        if matches!(
+            self.nav.mode,
+            Mode::IdleNudge | Mode::LongTimerNudge | Mode::StaleTimer
+        ) {
             return false;
         }
         let idle_secs = self.session.last_timer_activity.elapsed().as_secs();
@@ -128,6 +131,63 @@ impl App {
             return;
         };
         self.toggle_timer_at(abs);
+    }
+
+    /// True when the restored timer looks like a *zombie*: the app was closed
+    /// or killed while it was running and the elapsed time has since blown
+    /// past the long-timer threshold. Such a session would silently bill all
+    /// the away time (e.g. an overnight gap), so startup should ask the user
+    /// how to handle it instead of just keeping it running.
+    pub fn stale_timer_at_startup(&self) -> bool {
+        if !self.timer_running() {
+            return false;
+        }
+        self.timer_elapsed_secs()
+            .is_some_and(|e| e >= self.prefs.long_timer_nudge_seconds)
+    }
+
+    /// `[k]eep counting` on the stale-timer prompt: dismiss the popup and
+    /// leave the timer running (the user is asserting the time is real).
+    pub fn keep_stale_timer(&mut self) {
+        self.nav.enter_normal();
+        if let Some(v) = self.session.pre_nudge_view.take() {
+            self.set_view(v);
+        }
+        // Timer is running, so the idle nudge can't fire; reset the activity
+        // clock anyway so a later stop keeps the nudge cadence sane.
+        self.session.last_timer_activity = Instant::now();
+    }
+
+    /// `[d]iscard gap` on the stale-timer prompt: stop the timer WITHOUT
+    /// crediting the elapsed time — the away period was not billable work.
+    /// Strips the `start:` tag and leaves `dur:` untouched.
+    pub fn discard_stale_timer(&mut self) {
+        let Some(abs) = self.store.active_timer_abs() else {
+            return;
+        };
+        let raw = self.store.task_raw(abs).unwrap_or_default();
+        let body = crate::todo::body_after_priority(&raw);
+        let prefix = &raw[..raw.len() - body.len()];
+        let cleaned = body
+            .split_whitespace()
+            .filter(|tok| !tok.starts_with("start:"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let updated = if prefix.is_empty() {
+            cleaned
+        } else {
+            format!("{prefix}{cleaned}")
+        };
+        match self.store.edit_line(abs, &updated) {
+            EditOutcome::Saved { abs } => {
+                self.flash("discarded unrecorded gap — no time added");
+                self.session.last_timer_activity = Instant::now();
+                self.after_mutation(abs);
+            }
+            EditOutcome::Aborted(r) => self.handle_reconcile_abort(r),
+            EditOutcome::Error(e) => self.flash(format!("edit failed: {e}")),
+            EditOutcome::Empty | EditOutcome::OutOfRange | EditOutcome::TermNotFound => {}
+        }
     }
 
     /// True when the active timer is running on the task at `abs`.
@@ -729,6 +789,86 @@ mod tests {
             "(A) 2026-05-06 Draft motion revised +Smith @drafting"
         );
         assert_eq!(app.session.carry_forward_from, None, "cleared on save");
+    }
+
+    // ---- stale-timer startup prompt ----
+
+    fn stale_start(secs: i64) -> String {
+        (chrono::Local::now() - chrono::Duration::seconds(secs))
+            .format("%Y-%m-%dT%H:%M:%S")
+            .to_string()
+    }
+
+    /// A restored timer whose elapsed time has blown past the long-timer
+    /// threshold (the app was closed/killed while it ran) must be flagged as
+    /// stale at startup.
+    #[test]
+    fn stale_timer_detected_when_elapsed_past_threshold() {
+        let app = build_app(&format!("Draft +Smith start:{}\n", stale_start(7300)));
+        assert!(app.timer_running());
+        assert!(
+            app.stale_timer_at_startup(),
+            "2h+ elapsed at launch must be treated as a zombie session"
+        );
+    }
+
+    #[test]
+    fn stale_timer_not_detected_under_threshold() {
+        let app = build_app(&format!("Draft +Smith start:{}\n", stale_start(60)));
+        assert!(app.stale_timer_at_startup() == false);
+    }
+
+    #[test]
+    fn stale_timer_not_detected_when_no_timer() {
+        let app = build_app("Draft +Smith\n");
+        assert!(!app.stale_timer_at_startup());
+    }
+
+    /// `[d]iscard gap` must strip `start:` without crediting the elapsed
+    /// time — the away period was not billable work. Pre-existing time tags
+    /// (`dur:`, `log:`) must survive untouched.
+    #[test]
+    fn discard_stale_timer_strips_start_keeps_dur() {
+        let raw = format!(
+            "Draft +Smith dur:3600 log:2026-05-05 start:{}\n",
+            stale_start(7300)
+        );
+        let mut app = build_app(&raw);
+        assert!(app.timer_running());
+
+        app.discard_stale_timer();
+
+        assert!(!app.timer_running(), "discard must stop the timer");
+        let raw = app.task_raw(0).unwrap_or_default();
+        assert!(!raw.contains("start:"), "start: must be stripped: {raw}");
+        assert!(
+            raw.contains("dur:3600"),
+            "existing dur must be untouched: {raw}"
+        );
+        assert!(
+            raw.contains("log:2026-05-05"),
+            "existing log date must survive: {raw}"
+        );
+        assert!(
+            !raw.contains("dur:10900"),
+            "the gap must not be credited (3600 + ~7300): {raw}"
+        );
+    }
+
+    /// `[k]eep counting` must leave the timer running and restore the
+    /// pre-nudge view.
+    #[test]
+    fn keep_stale_timer_leaves_timer_running_and_restores_view() {
+        let mut app = build_app(&format!("Draft +Smith start:{}\n", stale_start(7300)));
+        app.session.pre_nudge_view = Some(View::Timesheet);
+        app.nav.mode = Mode::StaleTimer;
+
+        app.keep_stale_timer();
+
+        assert!(app.timer_running(), "keep must leave the timer running");
+        assert_eq!(app.nav.mode, Mode::Normal);
+        assert_eq!(app.nav.view, View::Timesheet, "pre-nudge view restored");
+        assert!(app.session.pre_nudge_view.is_none());
     }
 
     // ---- manual entries reset the idle-nudge clock ----

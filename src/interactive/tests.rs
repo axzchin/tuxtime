@@ -1456,6 +1456,68 @@ fn settings_advertised_keys_apply_in_settings_mode() {
     assert_eq!(app.nav.mode, Mode::PickTheme);
 }
 
+// ---- stale-timer startup prompt ----
+
+/// Helper: build an App with a single task whose timer started `secs` ago
+/// (seeding the file on disk so the store's reconcile sees a stable state).
+fn stale_timer_app(secs: i64, name: &str) -> App {
+    let start = (chrono::Local::now() - chrono::Duration::seconds(secs))
+        .format("%Y-%m-%dT%H:%M:%S")
+        .to_string();
+    let path = std::env::temp_dir().join(format!(
+        "tuxtime-stale-{name}-{}-{:?}.txt",
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    let raw = format!("Draft +Smith start:{start}\n");
+    let _ = std::fs::write(&path, &raw);
+    let mut app = App::new(path, raw, "2026-05-07".into(), Config::default());
+    app.nav.mode = Mode::StaleTimer;
+    app
+}
+
+/// `S` on the stale-timer prompt stops the timer and logs the elapsed time
+/// (the user asserts the whole session was real work).
+#[test]
+fn stale_timer_s_stops_and_logs_elapsed() {
+    let mut app = stale_timer_app(7300, "s");
+
+    handle_stale_timer(&mut app, key('S'));
+
+    assert!(!app.timer_running(), "S must stop the timer");
+    assert_eq!(app.nav.mode, Mode::Normal);
+    assert!(
+        app.tasks()[0].dur.unwrap_or(0) > 7200,
+        "S must log the elapsed time"
+    );
+}
+
+/// `d` on the stale-timer prompt discards the unrecorded gap: the timer
+/// stops but no elapsed time is credited.
+#[test]
+fn stale_timer_d_discards_gap() {
+    let mut app = stale_timer_app(7300, "d");
+
+    handle_stale_timer(&mut app, key('d'));
+
+    assert!(!app.timer_running(), "d must stop the timer");
+    assert_eq!(app.nav.mode, Mode::Normal);
+    let raw = app.task_raw(0).unwrap_or_default();
+    assert!(!raw.contains("start:"), "start: must be stripped: {raw}");
+    assert_eq!(app.tasks()[0].dur, None, "no time may be credited");
+}
+
+/// `k` (and Esc) on the stale-timer prompt keep the timer running.
+#[test]
+fn stale_timer_k_keeps_counting() {
+    let mut app = stale_timer_app(7300, "k");
+
+    handle_stale_timer(&mut app, key('k'));
+
+    assert!(app.timer_running(), "k must keep the timer running");
+    assert_eq!(app.nav.mode, Mode::Normal);
+}
+
 // ---- idle nudge safety ----
 
 /// The idle nudge must not fire while the user is in a mode with transient

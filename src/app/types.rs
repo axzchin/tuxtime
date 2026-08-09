@@ -64,6 +64,12 @@ pub enum Mode {
     /// configured threshold (from Normal mode only, so it never destroys
     /// in-progress composition). `[S]top timer / [D]ismiss`.
     LongTimerNudge,
+    /// Stale-timer startup prompt — a timer was left running when the app
+    /// last closed (or was killed) and has since exceeded the long-timer
+    /// threshold. `[k]eep counting / [s]top & log / [d]iscard gap`, so a
+    /// zombie session (e.g. closed terminal overnight) never silently bills
+    /// the away time. Shown once at launch, before any long-timer nudge.
+    StaleTimer,
     /// Manual entry choice popup — [C]urrent task description or [N]ew blank entry.
     ManualEntryChoice,
     /// Project management view (`<P>`) — archive/unarchive/rename projects.

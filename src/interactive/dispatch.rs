@@ -26,7 +26,7 @@ use super::overlays::{
     handle_command_palette, handle_day_boundary, handle_help, handle_idle_nudge,
     handle_long_timer_nudge, handle_manage_projects, handle_manual_entry_choice, handle_pick,
     handle_pick_theme, handle_pick_timesheet_date, handle_prompt, handle_search, handle_settings,
-    handle_share, handle_welcome,
+    handle_share, handle_stale_timer, handle_welcome,
 };
 
 /// Route one keypress to the handler for `app.nav.mode()`. The caller is
@@ -63,6 +63,7 @@ pub fn dispatch(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
         Mode::Normal | Mode::Visual => handle_normal(app, key, keybinds),
         Mode::IdleNudge => handle_idle_nudge(app, key),
         Mode::LongTimerNudge => handle_long_timer_nudge(app, key),
+        Mode::StaleTimer => handle_stale_timer(app, key),
         Mode::ManualEntryChoice => handle_manual_entry_choice(app, key),
         Mode::ManageProjects => handle_manage_projects(app, key),
     }

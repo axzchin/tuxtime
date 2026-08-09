@@ -145,6 +145,29 @@ pub(crate) fn draw_overlays(
                 "[S]top timer  [D]ismiss",
             );
         }
+        Mode::StaleTimer => {
+            let r = overlay::message_rect(area);
+            frame.render_widget(Clear, r);
+            let theme = app.theme();
+            let started = app
+                .active_timer_task()
+                .and_then(|t| t.start.as_deref().map(str::to_string))
+                .unwrap_or_default();
+            let elapsed = app.timer_elapsed_secs().unwrap_or(0);
+            let elapsed_str = crate::app::format_duration(elapsed, app.prefs.rounding_increment);
+            let message = format!(
+                "Timer was running when tuxtime last closed — {elapsed_str} since {started}. \
+                 Log it, keep counting, or discard the gap?"
+            );
+            msgbox::render_message_box(
+                frame,
+                r,
+                theme,
+                " ⏰ Stale Timer ",
+                &message,
+                "[K]eep counting  [S]top & log  [D]iscard gap",
+            );
+        }
         Mode::ManualEntryChoice => {
             let r = overlay::message_rect(area);
             frame.render_widget(Clear, r);

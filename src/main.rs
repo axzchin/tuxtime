@@ -86,6 +86,14 @@ fn main() -> Result<()> {
     let mut app_state = App::new_with_done(path.clone(), done, body, today, cfg);
     app_state.env.config_path = Config::path();
     app_state.nav.mode = start_mode;
+    // A timer left running when the app last closed (or was killed) can have
+    // accrued hours of away time — ask how to handle it before anything else
+    // (keep counting / stop & log / discard the gap). The long-timer nudge
+    // alone would silently present "log all of it" as the only real option.
+    if app_state.nav.mode == Mode::Normal && app_state.stale_timer_at_startup() {
+        app_state.session.pre_nudge_view = Some(app_state.nav.view);
+        app_state.nav.mode = Mode::StaleTimer;
+    }
     // Start the config hot-reload watcher.
     let config_rx = app_state
         .env

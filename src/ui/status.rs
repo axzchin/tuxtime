@@ -36,6 +36,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         Mode::Welcome => "WELCOME".into(),
         Mode::IdleNudge => "IDLE NUDGE".into(),
         Mode::LongTimerNudge => "LONG TIMER".into(),
+        Mode::StaleTimer => "STALE TIMER".into(),
         Mode::ManualEntryChoice => "MANUAL ENTRY".into(),
         Mode::ManageProjects => "PROJECTS".into(),
         Mode::PromptRenameProject => "RENAME PROJECT".into(),

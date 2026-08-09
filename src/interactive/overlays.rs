@@ -404,6 +404,35 @@ pub(crate) fn handle_idle_nudge(app: &mut App, key: KeyEvent) {
     }
 }
 
+/// Stale-timer startup prompt: a timer was running when the app last closed
+/// (or was killed) and has since exceeded the long-timer threshold. `S` stops
+/// and logs everything, `D` discards the unrecorded gap (no time credited),
+/// `K`/`Esc` keep it counting — the safe default that never destroys time
+/// without an explicit choice.
+pub(crate) fn handle_stale_timer(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Char('s' | 'S') => {
+            app.stop_running_timer();
+            app.nav.enter_normal();
+            if let Some(v) = app.session.pre_nudge_view.take() {
+                app.set_view(v);
+            }
+            app.session.last_timer_activity = std::time::Instant::now();
+        }
+        KeyCode::Char('d' | 'D') => {
+            app.discard_stale_timer();
+            app.nav.enter_normal();
+            if let Some(v) = app.session.pre_nudge_view.take() {
+                app.set_view(v);
+            }
+        }
+        KeyCode::Char('k' | 'K') | KeyCode::Esc => {
+            app.keep_stale_timer();
+        }
+        _ => {}
+    }
+}
+
 /// Long-timer nudge popup: the running timer has exceeded the configured
 /// threshold. `S` stops it (capturing the elapsed time), `D`/`Esc` dismisses
 /// and keeps the timer running. Both return to the pre-nudge view.
