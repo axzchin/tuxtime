@@ -231,9 +231,7 @@ fn collect_tokens(s: &str, sigil: char) -> Vec<String> {
 /// later duplicates are ignored.
 fn find_kv(s: &str, key: &str) -> Option<String> {
     for tok in s.split_whitespace() {
-        if let Some((k, v)) = tok.split_once(':')
-            && is_valid_key(k)
-            && !v.is_empty()
+        if let Some((k, v)) = kv_pair(tok)
             && !v.starts_with('"')
             && k == key
         {
@@ -276,6 +274,37 @@ fn is_valid_key(k: &str) -> bool {
         return false;
     }
     chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+/// Which tag a body token is: `+name` (project) or `@name` (context). `None`
+/// for plain text, a bare `+`/`@` with no name, or a `key:value` token.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TagKind {
+    Project,
+    Context,
+}
+
+/// `Some(kind)` when `tok` is a `+name` / `@name` tag with a non-empty name.
+fn tag_kind(tok: &str) -> Option<TagKind> {
+    if let Some(name) = tok.strip_prefix('+')
+        && !name.is_empty()
+    {
+        return Some(TagKind::Project);
+    }
+    if let Some(name) = tok.strip_prefix('@')
+        && !name.is_empty()
+    {
+        return Some(TagKind::Context);
+    }
+    None
+}
+
+/// `Some((key, value))` when `tok` is a well-formed `key:value` token — a
+/// valid key and a non-empty value. Quoted values still qualify here; callers
+/// that reject quoted values add their own check.
+fn kv_pair(tok: &str) -> Option<(&str, &str)> {
+    let (k, v) = tok.split_once(':')?;
+    (is_valid_key(k) && !v.is_empty()).then_some((k, v))
 }
 
 #[must_use]
@@ -595,23 +624,7 @@ pub fn body_only(raw: &str) -> String {
 }
 
 fn is_meta_token(tok: &str) -> bool {
-    if let Some(rest) = tok.strip_prefix('+')
-        && !rest.is_empty()
-    {
-        return true;
-    }
-    if let Some(rest) = tok.strip_prefix('@')
-        && !rest.is_empty()
-    {
-        return true;
-    }
-    if let Some((k, v)) = tok.split_once(':')
-        && is_valid_key(k)
-        && !v.is_empty()
-    {
-        return true;
-    }
-    false
+    tag_kind(tok).is_some() || kv_pair(tok).is_some()
 }
 
 // ---------------------------------------------------------------------------
@@ -725,16 +738,12 @@ fn match_date(bytes: &[u8], i: usize) -> Option<usize> {
 }
 
 fn classify_word(w: &str) -> SegmentKind {
-    if w.starts_with('+') && w.len() > 1 {
-        return SegmentKind::Project;
+    match tag_kind(w) {
+        Some(TagKind::Project) => return SegmentKind::Project,
+        Some(TagKind::Context) => return SegmentKind::Context,
+        None => {}
     }
-    if w.starts_with('@') && w.len() > 1 {
-        return SegmentKind::Context;
-    }
-    if let Some((k, v)) = w.split_once(':')
-        && !v.is_empty()
-        && is_valid_key(k)
-    {
+    if let Some((k, _)) = kv_pair(w) {
         if k == "due" {
             return SegmentKind::Due;
         }
