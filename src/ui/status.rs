@@ -9,6 +9,28 @@ use crate::app::{
 };
 use crate::ui::dialog::draft_cursor_spans;
 
+/// Minimum columns the middle hint is guaranteed before the right block is
+/// elided. Keeps the keybinding hint readable on narrow terminals instead of
+/// clipping it to a handful of chars.
+const MIN_HINT_W: u16 = 24;
+
+/// Truncate `s` from the left to at most `max` chars, prefixing `…`. Used to
+/// elide the status bar's dim right block (counts/date/version) so the least
+/// useful leading tokens drop first and the date/version tail survives.
+fn elide_left(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    if max <= 1 {
+        return "…".chars().take(max).collect();
+    }
+    let keep = max - 1;
+    let mut out = String::with_capacity(max);
+    out.push('…');
+    out.extend(s.chars().skip(s.chars().count() - keep));
+    out
+}
+
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
     let mut mode_label: std::borrow::Cow<'static, str> = match app.nav.mode {
@@ -204,13 +226,26 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         .map(|c| format!(" {c}…"))
         .unwrap_or_default();
     // Layout: mode chip on left, hint in middle, right text right-aligned.
+    // The hint gets a guaranteed minimum width — when the right block would
+    // squeeze it below that, the right block is elided (from its left, so the
+    // date/version tail survives) instead of clipping the keybindings.
     let chip_text = format!(" {mode_label}{chord_suffix} ");
     let chip_w = chip_text.chars().count() as u16;
     let update_w = update_suffix
         .as_deref()
         .map_or(0, |s| s.chars().count() as u16);
-    let right_w = right_text.chars().count() as u16 + update_w + 1;
-    let middle_w = area.width.saturating_sub(chip_w).saturating_sub(right_w);
+    let right_desired = right_text.chars().count() as u16 + update_w + 1;
+    let avail = area.width.saturating_sub(chip_w);
+    let middle_w = if avail.saturating_sub(right_desired) >= MIN_HINT_W {
+        avail.saturating_sub(right_desired)
+    } else {
+        avail.saturating_sub(MIN_HINT_W.min(avail))
+    };
+    let right_w = avail.saturating_sub(middle_w);
+    // Shrink the dim text to whatever width the right block actually got,
+    // keeping the update suffix and its trailing space intact.
+    let right_budget = right_w.saturating_sub(update_w).saturating_sub(1);
+    let right_text = elide_left(&right_text, right_budget as usize);
 
     let [chip_area, mid_area, right_area] = Layout::horizontal([
         Constraint::Length(chip_w),
@@ -336,4 +371,30 @@ pub fn render_command_line(frame: &mut Frame, area: Rect, app: &App) {
         Paragraph::new(line).style(Style::default().bg(theme.bg)),
         area,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::elide_left;
+
+    #[test]
+    fn elide_left_keeps_string_that_fits() {
+        assert_eq!(elide_left("1 open · 2026-05-06", 30), "1 open · 2026-05-06");
+    }
+
+    #[test]
+    fn elide_left_drops_leading_tokens_and_keeps_tail() {
+        // The dim block is "N open · date · name version"; eliding from the
+        // left must drop the count first and preserve the date/version tail.
+        let out = elide_left("12 open · 2026-05-06 · tuxtime 2026.7.1", 24);
+        assert_eq!(out, "…5-06 · tuxtime 2026.7.1");
+        assert_eq!(out.chars().count(), 24);
+    }
+
+    #[test]
+    fn elide_left_handles_tiny_budget() {
+        assert_eq!(elide_left("abc", 0), "");
+        assert_eq!(elide_left("abc", 1), "…");
+        assert_eq!(elide_left("abc", 2), "…c");
+    }
 }
