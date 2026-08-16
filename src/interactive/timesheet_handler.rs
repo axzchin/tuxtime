@@ -3,10 +3,26 @@
 //! toggle, and clipboard operations.
 
 use crate::app::{App, Mode, Picker, Screen, TimesheetTaskRef, View, format_billable};
-use ratatui::crossterm::event::{KeyCode, KeyEvent};
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn handle_timesheet_keys(app: &mut App, key: KeyEvent) {
+    // Ctrl-d / Ctrl-u scroll the detail sidebar's narrative. Checked before the
+    // plain-key match so the CONTROL modifier distinguishes them from `d`
+    // (daily view) — `u` is otherwise unbound in this view.
+    if key.modifiers.contains(KeyModifiers::CONTROL) {
+        match key.code {
+            KeyCode::Char('d') => {
+                scroll_detail(app, 5);
+                return;
+            }
+            KeyCode::Char('u') => {
+                scroll_detail(app, -5);
+                return;
+            }
+            _ => {}
+        }
+    }
     match key.code {
         KeyCode::Char('q') => {
             app.set_view(View::List);
@@ -218,4 +234,18 @@ pub(crate) fn handle_timesheet_keys(app: &mut App, key: KeyEvent) {
         }
         _ => {}
     }
+}
+
+/// Adjust the detail sidebar's scroll offset by `delta` rows (positive scrolls
+/// down). The offset is keyed to the current timesheet cursor so the renderer
+/// resets it when the highlighted narrative changes; the renderer also clamps
+/// it to the visible body, so the stored value never drifts past the fold.
+fn scroll_detail(app: &mut App, delta: i32) {
+    let (cursor, scroll) = app.nav.detail_scroll.get();
+    let next = if delta >= 0 {
+        scroll.saturating_add(delta as u16)
+    } else {
+        scroll.saturating_sub((-delta) as u16)
+    };
+    app.nav.detail_scroll.set((cursor, next));
 }

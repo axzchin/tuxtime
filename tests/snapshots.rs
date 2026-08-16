@@ -594,6 +594,41 @@ fn timesheet_sidebar_billable_stays_pinned_on_short_terminal() {
 }
 
 #[test]
+fn timesheet_detail_narrative_scrolls_into_view() {
+    // A narrative longer than the detail sidebar's body must be scrollable: the
+    // tail is clipped at the top offset and appears once the offset advances.
+    let narrative = format!("{} TAILMARKER", "word ".repeat(80));
+    let body = format!("2026-05-05 {narrative} +Smith @drafting dur:7200 log:2026-05-05\n");
+    std::fs::write(FIXTURE_PATH, &body).expect("seed fixture file");
+    let mut app = App::new(
+        PathBuf::from(FIXTURE_PATH),
+        body,
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.env.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.prefs.density = Density::Compact;
+    app.prefs.layout.left = false;
+    app.set_view(View::Timesheet);
+    app.timesheet.date = "2026-05-05".into();
+
+    // At the top the wrapped tail is below the fold, so it can't appear.
+    let top = render_text(&app, 80, 12);
+    assert!(
+        !top.contains("TAILMARKER"),
+        "tail must be clipped before scrolling:\n{top}"
+    );
+
+    // Advance the detail scroll past the fold (the renderer clamps it).
+    app.nav.detail_scroll.set((app.timesheet.cursor, 50));
+    let scrolled = render_text(&app, 80, 12);
+    assert!(
+        scrolled.contains("TAILMARKER"),
+        "tail must scroll into view:\n{scrolled}"
+    );
+}
+
+#[test]
 fn idle_nudge_popup() {
     let mut app = make_app();
     app.nav.mode = Mode::Nudge(Nudge::Idle);

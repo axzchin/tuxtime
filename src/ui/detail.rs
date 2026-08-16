@@ -21,13 +21,28 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     if matches!(app.view(), View::Timesheet) {
         // The period totals (billable / non-billable / total) are pinned at
         // the top so the billable figure can never be clipped by a short
-        // terminal; the entry + narrative below is what gets truncated.
+        // terminal; the entry + narrative below scrolls independently.
         let (totals, body) = build_timesheet_content(theme, app, wrap_w);
         let totals_h = totals.len() as u16;
         let [totals_area, body_area] =
             Layout::vertical([Constraint::Length(totals_h), Constraint::Min(0)]).areas(area);
         frame.render_widget(Paragraph::new(totals).style(style), totals_area);
-        frame.render_widget(Paragraph::new(body).style(style), body_area);
+        // Scroll the narrative. The offset is keyed to the timesheet cursor so
+        // moving to a different entry resets to the top; it's clamped here (and
+        // written back) so Ctrl-d/Ctrl-u in the handler read a sane value.
+        let (for_cursor, raw_scroll) = app.nav.detail_scroll.get();
+        let scroll = if for_cursor == app.timesheet.cursor {
+            raw_scroll
+        } else {
+            0
+        };
+        let max_scroll = body.len().saturating_sub(body_area.height as usize) as u16;
+        let scroll = scroll.min(max_scroll);
+        app.nav.detail_scroll.set((app.timesheet.cursor, scroll));
+        frame.render_widget(
+            Paragraph::new(body).style(style).scroll((scroll, 0)),
+            body_area,
+        );
     } else {
         let lines = build_lines(theme, app.cur_task(), app.today(), wrap_w);
         frame.render_widget(Paragraph::new(lines).style(style), area);

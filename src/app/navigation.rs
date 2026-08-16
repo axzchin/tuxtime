@@ -24,6 +24,11 @@ pub struct Navigation {
     /// view, keyed by `View`. Updated at render time via `Cell` so the
     /// renderer can keep the cursor row visible without taking `&mut self`.
     pub view_scroll: ViewMap<Cell<u16>>,
+    /// Scroll offset for the detail sidebar's narrative (timesheet view),
+    /// stored as `(cursor_it_was_set_for, offset)` so advancing the timesheet
+    /// cursor automatically drops back to the top of the new narrative. The
+    /// renderer clamps and rewrites it via `Cell`, mirroring `view_scroll`.
+    pub detail_scroll: Cell<(usize, u16)>,
     pub should_quit: bool,
     /// Return-path stack for modal overlays. [`push_mode`](Self::push_mode)
     /// saves the current mode and enters a new one; [`pop_mode`](Self::pop_mode)
@@ -43,6 +48,7 @@ impl Navigation {
             cursor: 0,
             view_cursor: ViewMap::default(),
             view_scroll: ViewMap::default(),
+            detail_scroll: Cell::new((0, 0)),
             should_quit: false,
             mode_stack: Vec::new(),
         }

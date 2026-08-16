@@ -265,6 +265,30 @@ fn timesheet_sort_cycles_modes() {
 }
 
 #[test]
+fn timesheet_ctrl_d_and_u_scroll_detail_narrative() {
+    let mut app = build_timesheet_app();
+    app.set_view(View::Timesheet);
+
+    // Ctrl-d scrolls the detail sidebar's narrative down; Ctrl-u back up.
+    handle_timesheet_keys(&mut app, ctrl('d'));
+    assert_eq!(app.nav.detail_scroll.get(), (0, 5));
+    handle_timesheet_keys(&mut app, ctrl('d'));
+    assert_eq!(app.nav.detail_scroll.get(), (0, 10));
+    handle_timesheet_keys(&mut app, ctrl('u'));
+    assert_eq!(app.nav.detail_scroll.get(), (0, 5));
+    // Saturates at zero rather than going negative.
+    handle_timesheet_keys(&mut app, ctrl('u'));
+    handle_timesheet_keys(&mut app, ctrl('u'));
+    assert_eq!(app.nav.detail_scroll.get(), (0, 0));
+
+    // Plain `d` (no modifier) still means daily view, not a scroll.
+    app.timesheet.weekly = true;
+    handle_timesheet_keys(&mut app, key('d'));
+    assert!(!app.timesheet.weekly, "plain d still sets daily view");
+    assert_eq!(app.nav.detail_scroll.get(), (0, 0));
+}
+
+#[test]
 fn build_timesheet_groups_sorts_by_project() {
     let mut app = build_timesheet_app();
     app.set_view(View::Timesheet);
