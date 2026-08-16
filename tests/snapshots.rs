@@ -561,6 +561,39 @@ fn timesheet_totals_stay_pinned_when_list_overflows() {
 }
 
 #[test]
+fn timesheet_sidebar_billable_stays_pinned_on_short_terminal() {
+    // The right detail pane's period totals (billable / non-billable / total)
+    // must stay visible even when the entry narrative below would overflow the
+    // viewport — the billable figure is what a lawyer checks first, so it
+    // can't depend on terminal height or how long the narrative wraps.
+    let narrative = concat!(
+        "draft the opposition brief for the Smith versus Jones summary judgment ",
+        "hearing with a very long narrative body that wraps over many lines in ",
+        "the detail sidebar so the entry section overflows a short viewport"
+    );
+    let body = format!("2026-05-05 {narrative} +Smith @drafting dur:7200 log:2026-05-05\n");
+    std::fs::write(FIXTURE_PATH, &body).expect("seed fixture file");
+    let mut app = App::new(
+        PathBuf::from(FIXTURE_PATH),
+        body,
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.env.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.prefs.density = Density::Compact;
+    app.prefs.layout.left = false; // give the right pane its full width
+    app.set_view(View::Timesheet);
+    app.timesheet.date = "2026-05-05".into();
+
+    // 80x10 viewport: the wrapped narrative can't fit below the totals.
+    let text = render_text(&app, 80, 10);
+    assert!(
+        text.contains("PERIOD") && text.contains("billable"),
+        "sidebar billable total must stay pinned on a short terminal:\n{text}"
+    );
+}
+
+#[test]
 fn idle_nudge_popup() {
     let mut app = make_app();
     app.nav.mode = Mode::Nudge(Nudge::Idle);

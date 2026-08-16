@@ -1,5 +1,5 @@
 use ratatui::Frame;
-use ratatui::layout::Rect;
+use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
@@ -17,23 +17,44 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     // Wrap to the actual pane width minus 1-char left padding and 1-char
     // safety margin on the right. Floor at 16 so a tiny pane still wraps.
     let wrap_w = (area.width as usize).saturating_sub(2).max(16);
-    let lines = if matches!(app.view(), View::Timesheet) {
-        build_timesheet_lines(theme, app, wrap_w)
+    let style = Style::default().bg(theme.panel).fg(theme.fg);
+    if matches!(app.view(), View::Timesheet) {
+        // The period totals (billable / non-billable / total) are pinned at
+        // the top so the billable figure can never be clipped by a short
+        // terminal; the entry + narrative below is what gets truncated.
+        let (totals, body) = build_timesheet_content(theme, app, wrap_w);
+        let totals_h = totals.len() as u16;
+        let [totals_area, body_area] =
+            Layout::vertical([Constraint::Length(totals_h), Constraint::Min(0)]).areas(area);
+        frame.render_widget(Paragraph::new(totals).style(style), totals_area);
+        frame.render_widget(Paragraph::new(body).style(style), body_area);
     } else {
-        build_lines(theme, app.cur_task(), app.today(), wrap_w)
-    };
-    let para = Paragraph::new(lines).style(Style::default().bg(theme.panel).fg(theme.fg));
-    frame.render_widget(para, area);
+        let lines = build_lines(theme, app.cur_task(), app.today(), wrap_w);
+        frame.render_widget(Paragraph::new(lines).style(style), area);
+    }
 }
 
-/// Detail sidebar content for the timesheet view: the period's totals are
-/// pinned at the top (total / billable / non-billable), then the entry under
-/// the timesheet cursor — its date, project+activity key, duration and
-/// billable status — followed by the wrapped narrative text.
-fn build_timesheet_lines<'a>(theme: &Theme, app: &'a App, wrap_w: usize) -> Vec<Line<'a>> {
+/// Split the timesheet sidebar into its pinned totals block and the
+/// (clippable) entry + narrative body, mirroring how the centre list pins its
+/// grand-total footer. Keeping the two apart means the billable figure is
+/// structurally guaranteed to render first regardless of how short the pane
+/// is or how long the narrative wraps.
+fn build_timesheet_content<'a>(
+    theme: &Theme,
+    app: &'a App,
+    wrap_w: usize,
+) -> (Vec<Line<'a>>, Vec<Line<'a>>) {
+    (
+        build_timesheet_totals(theme, app),
+        build_timesheet_body(theme, app, wrap_w),
+    )
+}
+
+/// Pinned header: the period's billable / non-billable / total figures.
+fn build_timesheet_totals<'a>(theme: &Theme, app: &'a App) -> Vec<Line<'a>> {
     let increment = app.prefs.rounding_increment;
     let (total, billable, non_billable) = app.timesheet_period_totals();
-    let mut rows: Vec<Line> = vec![
+    vec![
         line_panel(
             theme,
             vec![Span::styled(
@@ -46,39 +67,34 @@ fn build_timesheet_lines<'a>(theme: &Theme, app: &'a App, wrap_w: usize) -> Vec<
             theme,
             vec![Span::styled(" PERIOD", Style::default().fg(theme.accent))],
         ),
-    ];
-    rows.push(label_value_row(
-        theme,
-        "billable",
-        format_billable(billable, increment),
-    ));
-    rows.push(label_value_row(
-        theme,
-        "non-billable",
-        format_billable(non_billable, increment),
-    ));
-    rows.push(label_value_row(
-        theme,
-        "total",
-        format_billable(total, increment),
-    ));
-    rows.push(line_panel(theme, vec![Span::raw(" ")]));
+        label_value_row(theme, "billable", format_billable(billable, increment)),
+        label_value_row(
+            theme,
+            "non-billable",
+            format_billable(non_billable, increment),
+        ),
+        label_value_row(theme, "total", format_billable(total, increment)),
+        line_panel(theme, vec![Span::raw(" ")]),
+    ]
+}
 
-    // The entry under the timesheet cursor. All rendered strings are owned
-    // so `rows` (borrowed from `app`) never references the local `groups`.
+/// Body: the entry under the timesheet cursor — its date, project+activity
+/// key, duration and billable status — followed by the wrapped narrative.
+fn build_timesheet_body<'a>(theme: &Theme, app: &'a App, wrap_w: usize) -> Vec<Line<'a>> {
+    // All rendered strings are owned so `rows` never references the local
+    // `groups` (which is built from `app` and dropped at the end).
     let Some((gi, ni, _)) = app.timesheet_narrative_at(app.timesheet.cursor) else {
-        rows.push(line_panel(
+        return vec![line_panel(
             theme,
             vec![Span::styled(
                 " (no entries)",
                 Style::default().fg(theme.dim),
             )],
-        ));
-        return rows;
+        )];
     };
     let groups = app.build_timesheet_groups();
     let Some(entry) = groups.get(gi) else {
-        return rows;
+        return vec![];
     };
     let (date, key, total_secs, billable, narrative, entry_narrative_count) = (
         entry.date.clone(),
@@ -88,18 +104,21 @@ fn build_timesheet_lines<'a>(theme: &Theme, app: &'a App, wrap_w: usize) -> Vec<
         entry.narratives.get(ni).cloned(),
         entry.narratives.len(),
     );
-    rows.push(line_panel(
-        theme,
-        vec![Span::styled(" ENTRY", Style::default().fg(theme.accent))],
-    ));
-    rows.push(line_panel(
-        theme,
-        vec![Span::styled(date, Style::default().fg(theme.fg))],
-    ));
-    rows.push(line_panel(
-        theme,
-        vec![Span::styled(key, Style::default().fg(theme.project))],
-    ));
+    let mut rows: Vec<Line<'a>> = vec![
+        line_panel(
+            theme,
+            vec![Span::styled(" ENTRY", Style::default().fg(theme.accent))],
+        ),
+        line_panel(
+            theme,
+            vec![Span::styled(date, Style::default().fg(theme.fg))],
+        ),
+        line_panel(
+            theme,
+            vec![Span::styled(key, Style::default().fg(theme.project))],
+        ),
+    ];
+    let increment = app.prefs.rounding_increment;
     let dur = format_billable(total_secs, increment);
     let status = if billable { "billable" } else { "non-billable" };
     // The duration is the *group* total (all narratives sharing this
