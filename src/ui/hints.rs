@@ -113,3 +113,79 @@ fn nudge_task_hint(app: &App) -> String {
     };
     format!("{commit} · j/k navigate · / search · +/@ filter · t start · Esc back")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+
+    fn hint_app() -> App {
+        let path = std::env::temp_dir().join(format!(
+            "tuxtime-hints-{}-{:?}.txt",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        App::new(path, String::new(), "2026-05-06".into(), Config::default())
+    }
+
+    /// Every mode must produce a non-empty hint — a blank status-bar middle
+    /// segment is the "you're on your own" failure mode for discoverability.
+    #[test]
+    fn every_mode_has_a_nonempty_hint() {
+        let mut app = hint_app();
+        let screens = [
+            Screen::Normal,
+            Screen::Insert,
+            Screen::Search,
+            Screen::Visual,
+            Screen::Help,
+            Screen::Settings,
+            Screen::CommandPalette,
+            Screen::Share,
+            Screen::Welcome,
+            Screen::ManageProjects,
+        ];
+        let prompts = [
+            Prompt::Project,
+            Prompt::Context,
+            Prompt::SaveFilter,
+            Prompt::AddTime,
+            Prompt::IdleNudge,
+            Prompt::LongTimerNudge,
+            Prompt::RenameProject,
+            Prompt::DayBoundary,
+        ];
+        let pickers = [
+            Picker::Project,
+            Picker::Context,
+            Picker::SavedFilter,
+            Picker::Theme,
+            Picker::TimesheetDate,
+            Picker::NudgeTask,
+        ];
+        let nudges = [
+            Nudge::Idle,
+            Nudge::LongTimer,
+            Nudge::StaleTimer,
+            Nudge::Review,
+            Nudge::ManualEntryChoice,
+        ];
+
+        let modes = screens
+            .into_iter()
+            .map(Mode::Screen)
+            .chain(prompts.into_iter().map(Mode::Prompt))
+            .chain(pickers.into_iter().map(Mode::Picker))
+            .chain(nudges.into_iter().map(Mode::Nudge));
+
+        for mode in modes {
+            app.nav.mode = mode;
+            let hint = mode_hint(&app);
+            assert!(
+                !hint.trim().is_empty(),
+                "{mode:?} must have a non-empty hint"
+            );
+        }
+    }
+}
