@@ -78,122 +78,100 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         "j/k · n new · t timer · T interrupt · x done · / search · ? help · u undo · q quit"
     };
 
-    let hint = if app.timer_running() {
-        if let Some(task) = app.active_timer_task() {
-            let elapsed = crate::app::format_clock(app.timer_elapsed_secs().unwrap_or(0));
-            let proj = task
-                .projects
-                .first()
-                .map(|p| format!("+{p} "))
-                .unwrap_or_default();
-            let act = task
-                .contexts
-                .first()
-                .map(|a| format!("@{a} "))
-                .unwrap_or_default();
-            let body = crate::todo::body_only_from_clean(&task.clean_raw);
-            let mut time_str = format!("▶ {proj}{act} {elapsed}  {body}");
-            if app.session.long_timer_nudge_active {
-                time_str = format!("⏰ {time_str}  —  timer running long!");
-            }
-            time_str
-        } else {
-            "▶ timer running".to_string()
-        }
-    } else {
-        match app.nav.mode {
-            Mode::Screen(screen) => match screen {
-                Screen::Insert => match app.draft.input_mode() {
-                    DialogInputMode::Normal => {
-                        if app.session.manual_time_entry {
-                            "h/l navigate · w/b/e word · i/a insert · dur:90 (min) dur:1.5h dur:14:30 dur:9am → Enter save · C-Enter save+start".to_string()
-                        } else {
-                            "h/l navigate · w/b/e word · i/a insert · Enter save · C-Enter save+start · Esc cancel".to_string()
-                        }
-                    }
-                    DialogInputMode::Insert => {
-                        if app.session.manual_time_entry {
-                            "Enter save · C-Enter save+start · Esc normal — type a duration after dur:"
-                                .to_string()
-                        } else {
-                            "Enter save · C-Enter save+start · Esc normal".to_string()
-                        }
-                    }
-                },
-                Screen::Visual => "space toggle · x complete · dd delete · Esc cancel".to_string(),
-                Screen::Help => "? close help".to_string(),
-                Screen::Settings => {
-                    "Esc/ ,/ q dismiss  ·  i idle nudge  ·  l long timer nudge".to_string()
-                }
-                Screen::CommandPalette => "type to filter · Enter run · Esc cancel".to_string(),
-                Screen::Share => "scan the QR · any key dismisses".to_string(),
-                Screen::Welcome => "c create ./todo.txt · s open sample · q quit".to_string(),
-                Screen::ManageProjects => {
-                    let all = app.all_projects();
-                    let archived_count = all.iter().filter(|n| app.is_project_archived(n)).count();
-                    let total = all.len();
-                    let needle = app.filter().search.to_lowercase();
-                    let matched = app.filtered_projects().len();
-                    let sort = app.project_manager.project_sort.label();
-                    let base = format!(
-                        "j/k nav · x archive · r rename · s sort ({sort}) · / search · Esc/P back"
-                    );
-                    if needle.is_empty() {
-                        format!(
-                            "{base}  —  {total} projects{archived}",
-                            archived = if archived_count > 0 {
-                                format!(", {archived_count} archived")
-                            } else {
-                                String::new()
-                            }
-                        )
+    // The running-timer status is its own accent segment rendered ahead of
+    // the hint, so the mode keybindings stay visible while a timer runs
+    // (previously the timer string replaced the hint entirely).
+    let timer_status = timer_status(app);
+    let hint = match app.nav.mode {
+        Mode::Screen(screen) => match screen {
+            Screen::Insert => match app.draft.input_mode() {
+                DialogInputMode::Normal => {
+                    if app.session.manual_time_entry {
+                        "h/l navigate · w/b/e word · i/a insert · dur:90 (min) dur:1.5h dur:14:30 dur:9am → Enter save · C-Enter save+start".to_string()
                     } else {
-                        format!("{base}  —  /{needle} ({matched}/{total})")
+                        "h/l navigate · w/b/e word · i/a insert · Enter save · C-Enter save+start · Esc cancel".to_string()
                     }
                 }
-                Screen::Normal | Screen::Search => default_hint.to_string(),
-            },
-            Mode::Prompt(prompt) => match prompt {
-                Prompt::Project => "type +project name · Enter save · Esc cancel".to_string(),
-                Prompt::Context => "type @context name · Enter toggle · Esc cancel".to_string(),
-                Prompt::SaveFilter => "type a filter name · Enter save · Esc cancel".to_string(),
-                Prompt::AddTime => {
-                    "type duration (e.g. 30, 1.5, 14:30; -30 removes) · Enter add · Esc cancel"
-                        .to_string()
+                DialogInputMode::Insert => {
+                    if app.session.manual_time_entry {
+                        "Enter save · C-Enter save+start · Esc normal — type a duration after dur:"
+                            .to_string()
+                    } else {
+                        "Enter save · C-Enter save+start · Esc normal".to_string()
+                    }
                 }
-                Prompt::IdleNudge => "type minutes · Enter save · Esc cancel".to_string(),
-                Prompt::LongTimerNudge => "type minutes · Enter save · Esc cancel".to_string(),
-                Prompt::RenameProject => "type new name · Enter rename · Esc cancel".to_string(),
-                Prompt::DayBoundary => default_hint.to_string(),
             },
-            Mode::Picker(picker) => match picker {
-                Picker::Project => "j/k or ↑↓ cycle projects · Enter keep · Esc clear".to_string(),
-                Picker::Context => "j/k or ↑↓ cycle contexts · Enter keep · Esc clear".to_string(),
-                Picker::SavedFilter => {
-                    "j/k or ↑↓ cycle filters · Enter keep · Esc revert".to_string()
+            Screen::Visual => "space toggle · x complete · dd delete · Esc cancel".to_string(),
+            Screen::Help => "? close help".to_string(),
+            Screen::Settings => {
+                "Esc/ ,/ q dismiss  ·  i idle nudge  ·  l long timer nudge".to_string()
+            }
+            Screen::CommandPalette => "type to filter · Enter run · Esc cancel".to_string(),
+            Screen::Share => "scan the QR · any key dismisses".to_string(),
+            Screen::Welcome => "c create ./todo.txt · s open sample · q quit".to_string(),
+            Screen::ManageProjects => {
+                let all = app.all_projects();
+                let archived_count = all.iter().filter(|n| app.is_project_archived(n)).count();
+                let total = all.len();
+                let needle = app.filter().search.to_lowercase();
+                let matched = app.filtered_projects().len();
+                let sort = app.project_manager.project_sort.label();
+                let base = format!(
+                    "j/k nav · x archive · r rename · s sort ({sort}) · / search · Esc/P back"
+                );
+                if needle.is_empty() {
+                    format!(
+                        "{base}  —  {total} projects{archived}",
+                        archived = if archived_count > 0 {
+                            format!(", {archived_count} archived")
+                        } else {
+                            String::new()
+                        }
+                    )
+                } else {
+                    format!("{base}  —  /{needle} ({matched}/{total})")
                 }
-                Picker::TimesheetDate => {
-                    "hjkl/arrows navigate  ·  type date  ·  Enter select  ·  Esc cancel  ·  t today"
-                        .to_string()
-                }
-                Picker::NudgeTask => {
-                    let commit = match app.session.nudge_picker.as_ref().map(|p| p.action) {
-                        Some(NudgePickAction::StartTimer) => "Enter start timer on highlighted",
-                        Some(NudgePickAction::AddTime) => "Enter add time on highlighted",
-                        None => "Enter select",
-                    };
-                    format!("{commit} · j/k navigate · / search · +/@ filter · t start · Esc back")
-                }
-                Picker::Theme => default_hint.to_string(),
-            },
-            Mode::Nudge(nudge) => match nudge {
-                Nudge::Idle => "S start timer · M add time · N new entry · D dismiss".to_string(),
-                Nudge::LongTimer => "S stop timer · D dismiss".to_string(),
-                Nudge::StaleTimer => default_hint.to_string(),
-                Nudge::Review => "V view timesheet · M add time · S skip".to_string(),
-                Nudge::ManualEntryChoice => default_hint.to_string(),
-            },
-        }
+            }
+            Screen::Normal | Screen::Search => default_hint.to_string(),
+        },
+        Mode::Prompt(prompt) => match prompt {
+            Prompt::Project => "type +project name · Enter save · Esc cancel".to_string(),
+            Prompt::Context => "type @context name · Enter toggle · Esc cancel".to_string(),
+            Prompt::SaveFilter => "type a filter name · Enter save · Esc cancel".to_string(),
+            Prompt::AddTime => {
+                "type duration (e.g. 30, 1.5, 14:30; -30 removes) · Enter add · Esc cancel"
+                    .to_string()
+            }
+            Prompt::IdleNudge => "type minutes · Enter save · Esc cancel".to_string(),
+            Prompt::LongTimerNudge => "type minutes · Enter save · Esc cancel".to_string(),
+            Prompt::RenameProject => "type new name · Enter rename · Esc cancel".to_string(),
+            Prompt::DayBoundary => default_hint.to_string(),
+        },
+        Mode::Picker(picker) => match picker {
+            Picker::Project => "j/k or ↑↓ cycle projects · Enter keep · Esc clear".to_string(),
+            Picker::Context => "j/k or ↑↓ cycle contexts · Enter keep · Esc clear".to_string(),
+            Picker::SavedFilter => "j/k or ↑↓ cycle filters · Enter keep · Esc revert".to_string(),
+            Picker::TimesheetDate => {
+                "hjkl/arrows navigate  ·  type date  ·  Enter select  ·  Esc cancel  ·  t today"
+                    .to_string()
+            }
+            Picker::NudgeTask => {
+                let commit = match app.session.nudge_picker.as_ref().map(|p| p.action) {
+                    Some(NudgePickAction::StartTimer) => "Enter start timer on highlighted",
+                    Some(NudgePickAction::AddTime) => "Enter add time on highlighted",
+                    None => "Enter select",
+                };
+                format!("{commit} · j/k navigate · / search · +/@ filter · t start · Esc back")
+            }
+            Picker::Theme => default_hint.to_string(),
+        },
+        Mode::Nudge(nudge) => match nudge {
+            Nudge::Idle => "S start timer · M add time · N new entry · D dismiss".to_string(),
+            Nudge::LongTimer => "S stop timer · D dismiss".to_string(),
+            Nudge::StaleTimer => default_hint.to_string(),
+            Nudge::Review => "V view timesheet · M add time · S skip".to_string(),
+            Nudge::ManualEntryChoice => default_hint.to_string(),
+        },
     };
 
     let mut right_parts = Vec::new();
@@ -251,11 +229,21 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     .style(Style::default().bg(theme.statusbar));
     frame.render_widget(chip, chip_area);
 
-    let mid_line = Line::from(vec![
-        Span::raw("  "),
-        Span::styled(hint, Style::default().fg(theme.status_fg)),
-    ])
-    .style(Style::default().bg(theme.statusbar));
+    let mut mid_spans: Vec<Span> = Vec::with_capacity(3);
+    if let Some(status) = &timer_status {
+        mid_spans.push(Span::raw("  "));
+        mid_spans.push(Span::styled(
+            status.clone(),
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD),
+        ));
+        mid_spans.push(Span::raw("  ·  "));
+    } else {
+        mid_spans.push(Span::raw("  "));
+    }
+    mid_spans.push(Span::styled(hint, Style::default().fg(theme.status_fg)));
+    let mid_line = Line::from(mid_spans).style(Style::default().bg(theme.statusbar));
     frame.render_widget(
         Paragraph::new(mid_line).style(Style::default().bg(theme.statusbar)),
         mid_area,
@@ -286,6 +274,40 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             .right_aligned(),
         right_area,
     );
+}
+
+/// Compact running-timer indicator for the status bar: `▶ +proj @ctx 01:23:45`
+/// (or `⏰ … — timer running long!` once the long-timer flag is set). The task
+/// body is deliberately omitted — it's already on the task row and in the
+/// detail pane — so the segment stays short enough to leave the mode hint
+/// visible. Returns `None` when no timer is running.
+fn timer_status(app: &App) -> Option<String> {
+    if !app.timer_running() {
+        return None;
+    }
+    let elapsed = crate::app::format_clock(app.timer_elapsed_secs().unwrap_or(0));
+    let task = app.active_timer_task();
+    let proj = task
+        .and_then(|t| t.projects.first())
+        .map(|p| format!("+{p}"))
+        .unwrap_or_default();
+    let act = task
+        .and_then(|t| t.contexts.first())
+        .map(|a| format!("@{a}"))
+        .unwrap_or_default();
+    let mut parts: Vec<String> = Vec::with_capacity(3);
+    if !proj.is_empty() {
+        parts.push(proj);
+    }
+    if !act.is_empty() {
+        parts.push(act);
+    }
+    parts.push(elapsed);
+    let mut s = format!("▶ {}", parts.join(" "));
+    if app.session.long_timer_nudge_active {
+        s = format!("⏰ {s}  —  timer running long!");
+    }
+    Some(s)
 }
 
 pub fn render_command_line(frame: &mut Frame, area: Rect, app: &App) {
