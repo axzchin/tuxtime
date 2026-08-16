@@ -18,7 +18,7 @@ expression: buffer_to_text(&buf)
                     ┌ ⏰  End-of-Day Review ────────────────────────────────────┐                    
                     │  You've tracked 2h 30m (2.5h) today — anything missing?  │                    
                     │                                                          │                    
-                    │     [V]iew timesheet  [M] add time  [s]kip for today     │                    
+                    │     [V]iew timesheet  [M] add time  [S]kip for today     │                    
                     │                                                          │                    
                     └──────────────────────────────────────────────────────────┘                    
                                                                                                     

@@ -215,7 +215,7 @@ pub(crate) fn draw_overlays(
                     theme,
                     " ⏰ End-of-Day Review ",
                     &message,
-                    "[V]iew timesheet  [M] add time  [s]kip for today",
+                    "[V]iew timesheet  [M] add time  [S]kip for today",
                 );
             }
             Nudge::LongTimer => {

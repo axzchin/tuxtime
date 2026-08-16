@@ -115,11 +115,35 @@ pub(crate) fn render_message_box(
         )));
     }
     lines.push(Line::raw(""));
-    lines.push(Line::from(Span::styled(
-        footer,
-        Style::default().fg(theme.dim).bg(theme.panel),
-    )));
+    lines.push(footer_line(theme, footer));
     frame.render_widget(Paragraph::new(lines).centered(), inner);
+}
+
+/// Render a footer string with every `[Key]` token bolded and the rest dim.
+/// This is the single place message-box key legends get their styling, so the
+/// `[S]tart timer` / `[M] add time` / `[Esc] cancel` family renders
+/// consistently across every prompt instead of drifting per call site.
+fn footer_line<'a>(theme: &Theme, footer: &'a str) -> Line<'a> {
+    let dim = Style::default().fg(theme.dim).bg(theme.panel);
+    let key = Style::default()
+        .fg(theme.dim)
+        .bg(theme.panel)
+        .add_modifier(Modifier::BOLD);
+    let mut spans: Vec<Span<'a>> = Vec::new();
+    let mut rest = footer;
+    while let Some(idx) = rest.find('[') {
+        if idx > 0 {
+            spans.push(Span::styled(&rest[..idx], dim));
+        }
+        let after = &rest[idx..];
+        let end = after.find(']').map_or(after.len(), |i| idx + i + 1);
+        spans.push(Span::styled(&rest[idx..end], key));
+        rest = &rest[end..];
+    }
+    if !rest.is_empty() {
+        spans.push(Span::styled(rest, dim));
+    }
+    Line::from(spans).style(Style::default().bg(theme.panel))
 }
 
 #[cfg(test)]
@@ -165,5 +189,40 @@ mod tests {
         assert_eq!(pad_right("", 2), "  ");
         // Grapheme-aware: multibyte characters count once.
         assert_eq!(pad_right("→", 3), "→  ");
+    }
+
+    #[test]
+    fn footer_line_bolds_keys_and_dims_the_rest() {
+        let theme = &crate::theme::MUTED;
+        let line = footer_line(theme, "[S]tart timer  [M] add time  [Esc] cancel");
+        // Key tokens are bolded; the action words and separators are not.
+        let bold: Vec<&str> = line
+            .spans
+            .iter()
+            .filter(|s| s.style.add_modifier.contains(Modifier::BOLD))
+            .map(|s| s.content.as_ref())
+            .collect();
+        assert_eq!(bold, vec!["[S]", "[M]", "[Esc]"]);
+        let plain: String = line
+            .spans
+            .iter()
+            .filter(|s| !s.style.add_modifier.contains(Modifier::BOLD))
+            .map(|s| s.content.as_ref())
+            .collect();
+        assert_eq!(
+            plain, "tart timer   add time   cancel",
+            "action words stay unbolded"
+        );
+    }
+
+    #[test]
+    fn footer_line_handles_string_without_keys() {
+        let theme = &crate::theme::MUTED;
+        let line = footer_line(theme, "no keys here");
+        assert!(
+            line.spans
+                .iter()
+                .all(|s| !s.style.add_modifier.contains(Modifier::BOLD))
+        );
     }
 }
