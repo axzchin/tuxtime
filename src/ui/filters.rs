@@ -165,7 +165,7 @@ fn render_timesheet_side(frame: &mut Frame, area: Rect, app: &App, theme: &Theme
         )],
     ));
     lines.push(total_row(theme, "billable", billable));
-    lines.push(total_row(theme, "non-bill", non_billable));
+    lines.push(total_row(theme, "non-billable", non_billable));
     lines.push(total_row(theme, "total", total));
     let para = Paragraph::new(lines).style(Style::default().bg(theme.panel).fg(theme.fg));
     frame.render_widget(para, area);

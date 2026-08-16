@@ -54,7 +54,7 @@ fn build_timesheet_lines<'a>(theme: &Theme, app: &'a App, wrap_w: usize) -> Vec<
     ));
     rows.push(label_value_row(
         theme,
-        "non-bill",
+        "non-billable",
         format_billable(non_billable, increment),
     ));
     rows.push(label_value_row(
@@ -135,8 +135,8 @@ fn build_timesheet_lines<'a>(theme: &Theme, app: &'a App, wrap_w: usize) -> Vec<
 
 fn label_value_row<'a>(theme: &Theme, label: &'a str, value: String) -> Line<'a> {
     let mut padded = format!(" {label}");
-    if padded.chars().count() < 11 {
-        padded.push_str(&" ".repeat(11 - padded.chars().count()));
+    if padded.chars().count() < 14 {
+        padded.push_str(&" ".repeat(14 - padded.chars().count()));
     }
     line_panel(
         theme,

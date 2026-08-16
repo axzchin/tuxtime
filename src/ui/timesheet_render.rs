@@ -134,7 +134,11 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                     .bg(theme.panel)
                     .add_modifier(Modifier::BOLD)
             };
-            let dnb_suffix = if entry.billable { "" } else { " (DNB)" };
+            let dnb_suffix = if entry.billable {
+                ""
+            } else {
+                " (non-billable)"
+            };
             lines.push(Line::from(Span::styled(
                 format!(
                     "  {}  —  {} ({billable_str}){dnb_suffix}",
@@ -212,7 +216,7 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
         let billable_str = crate::app::format_billable_units(totals.billable_units, increment);
         footer.push(Line::from(Span::styled(
             format!(
-                "  Billable: {} ({billable_str})",
+                "  Billable:     {} ({billable_str})",
                 crate::app::format_duration(totals.billable_secs, increment),
             ),
             Style::default()
@@ -224,7 +228,7 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
             let dnb_str = crate::app::format_billable_units(totals.non_billable_units, increment);
             footer.push(Line::from(Span::styled(
                 format!(
-                    "  DNB:      {} ({dnb_str})",
+                    "  Non-billable: {} ({dnb_str})",
                     crate::app::format_duration(totals.non_billable_secs, increment)
                 ),
                 Style::default()
@@ -236,7 +240,7 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
         let total_str = crate::app::format_billable_units(totals.total_units, increment);
         footer.push(Line::from(Span::styled(
             format!(
-                "  Total:    {} ({total_str}){search_note}",
+                "  Total:        {} ({total_str}){search_note}",
                 crate::app::format_duration(totals.total_secs, increment)
             ),
             Style::default()
