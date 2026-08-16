@@ -525,6 +525,42 @@ fn timesheet_weekly_with_daily_subtotals() {
 }
 
 #[test]
+fn timesheet_totals_stay_pinned_when_list_overflows() {
+    // Many duration entries overflow any reasonable viewport. The billable /
+    // total footer must stay pinned at the bottom of the body instead of
+    // scrolling off with the entry list — that's the number a lawyer checks
+    // first, so it can't depend on terminal height.
+    let mut s = String::new();
+    for i in 0..30 {
+        s.push_str(&format!(
+            "2026-05-05 Draft motion {i:02} +Smith @drafting dur:1800\n",
+        ));
+    }
+    std::fs::write(FIXTURE_PATH, &s).expect("seed fixture file");
+    let mut app = App::new(
+        PathBuf::from(FIXTURE_PATH),
+        s,
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.env.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.prefs.density = Density::Compact;
+    app.prefs.layout.left = false;
+    app.prefs.layout.right = false;
+    app.set_view(View::Timesheet);
+    app.timesheet.sort = tuxtime::app::TimesheetSort::Date;
+    // Anchor on the day the entries were logged so they land in this period.
+    app.timesheet.date = "2026-05-05".into();
+
+    // 80x12 viewport: the 30 entries can't fit, so the list scrolls.
+    let text = render_text(&app, 80, 12);
+    assert!(
+        text.contains("Billable:") && text.contains("Total:"),
+        "totals must stay pinned while the entry list scrolls:\n{text}"
+    );
+}
+
+#[test]
 fn idle_nudge_popup() {
     let mut app = make_app();
     app.nav.mode = Mode::Nudge(Nudge::Idle);

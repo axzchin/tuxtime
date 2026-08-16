@@ -47,6 +47,9 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
     let increment = app.prefs.rounding_increment;
 
     let mut lines: Vec<Line> = Vec::new();
+    // The grand-total block is kept out of `lines` so it can be pinned below
+    // the scrollable entry list instead of scrolling off short terminals.
+    let mut footer: Vec<Line> = Vec::new();
     if groups.is_empty() {
         let msg = if app.filter().search.is_empty() {
             "  No time entries for this period."
@@ -198,15 +201,16 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
             )));
             lines.push(Line::raw(""));
         }
-        // Grand total with billable / DNB split.
-        lines.push(Line::raw(""));
+        // Grand total with billable / DNB split. Built into `footer` so the
+        // billable figure stays pinned while the entry list above scrolls.
+        footer.push(Line::raw(""));
         let search_note = if app.filter().search.is_empty() {
             ""
         } else {
             " (filtered)"
         };
         let billable_str = crate::app::format_billable_units(totals.billable_units, increment);
-        lines.push(Line::from(Span::styled(
+        footer.push(Line::from(Span::styled(
             format!(
                 "  Billable: {} ({billable_str})",
                 crate::app::format_duration(totals.billable_secs, increment),
@@ -218,7 +222,7 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
         )));
         if totals.non_billable_secs > 0 {
             let dnb_str = crate::app::format_billable_units(totals.non_billable_units, increment);
-            lines.push(Line::from(Span::styled(
+            footer.push(Line::from(Span::styled(
                 format!(
                     "  DNB:      {} ({dnb_str})",
                     crate::app::format_duration(totals.non_billable_secs, increment)
@@ -230,7 +234,7 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
             )));
         }
         let total_str = crate::app::format_billable_units(totals.total_units, increment);
-        lines.push(Line::from(Span::styled(
+        footer.push(Line::from(Span::styled(
             format!(
                 "  Total:    {} ({total_str}){search_note}",
                 crate::app::format_duration(totals.total_secs, increment)
@@ -256,7 +260,7 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                 } else {
                     ""
                 };
-                lines.push(Line::from(Span::styled(
+                footer.push(Line::from(Span::styled(
                     format!(
                         "  Unaccounted: {} of {}{suffix}",
                         fmt(unaccounted),
@@ -271,12 +275,20 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
         }
     }
 
-    // Scroll if content exceeds space
+    // Scroll if content exceeds space. The footer stays pinned: the entry list
+    // gets whatever height remains after the footer's own rows are reserved,
+    // so the billable/total figures can never be clipped away.
     let [_pad_top, body_rect] =
         Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(inner);
-    let max_lines = body_rect.height as usize;
+    let footer_h = footer.len() as u16;
+    let [list_rect, footer_rect] =
+        Layout::vertical([Constraint::Min(0), Constraint::Length(footer_h)]).areas(body_rect);
+    let max_lines = list_rect.height as usize;
     let visible: Vec<Line> = lines.into_iter().take(max_lines).collect();
-    frame.render_widget(Paragraph::new(visible), body_rect);
+    frame.render_widget(Paragraph::new(visible), list_rect);
+    if !footer.is_empty() {
+        frame.render_widget(Paragraph::new(footer), footer_rect);
+    }
 }
 
 /// Render a centered calendar overlay for the timesheet date picker.
