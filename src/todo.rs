@@ -149,12 +149,50 @@ fn strip_prefix_x(s: &str) -> Option<&str> {
     None
 }
 
+/// True when `bytes[i..]` starts with ten ASCII bytes shaped like a date —
+/// four digits, a dash, two digits, a dash, two digits. Shape only: the parser
+/// additionally validates the calendar date, while the draft highlighter uses
+/// the shape alone so a partially-typed or not-yet-valid date still colors.
+fn is_iso_date_shape(bytes: &[u8], i: usize) -> bool {
+    if bytes.len() < i + 10 {
+        return false;
+    }
+    let d = |k: usize| bytes[i + k].is_ascii_digit();
+    d(0) && d(1)
+        && d(2)
+        && d(3)
+        && bytes[i + 4] == b'-'
+        && d(5)
+        && d(6)
+        && bytes[i + 7] == b'-'
+        && d(8)
+        && d(9)
+}
+
+/// Priority character when `bytes[i..]` starts with the `(A)`..`(Z)` shape.
+/// Shape only — the parser additionally requires a trailing space, while the
+/// highlighter accepts a priority still being typed at end-of-input.
+fn priority_shape(bytes: &[u8], i: usize) -> Option<char> {
+    if bytes.len() >= i + 3
+        && bytes[i] == b'('
+        && bytes[i + 1].is_ascii_uppercase()
+        && bytes[i + 2] == b')'
+    {
+        Some(bytes[i + 1] as char)
+    } else {
+        None
+    }
+}
+
 /// Strip a leading `YYYY-MM-DD` token. Returns `(date_string, rest)` only if
 /// the prefix is a *real* calendar date — `9999-99-99` and other invalid
 /// month/day combos are rejected so they don't poison sort/grouping code that
 /// later trusts the value.
 fn take_iso_date_prefix(s: &str) -> Option<(String, &str)> {
-    let candidate = s.get(..10)?;
+    if !is_iso_date_shape(s.as_bytes(), 0) {
+        return None;
+    }
+    let candidate = &s[..10];
     if chrono::NaiveDate::parse_from_str(candidate, "%Y-%m-%d").is_err() {
         return None;
     }
@@ -170,13 +208,9 @@ fn take_iso_date_prefix(s: &str) -> Option<(String, &str)> {
 
 fn take_priority_prefix(s: &str) -> Option<(char, &str)> {
     let bytes = s.as_bytes();
-    if bytes.len() >= 4
-        && bytes[0] == b'('
-        && bytes[1].is_ascii_uppercase()
-        && bytes[2] == b')'
-        && (bytes[3] == b' ' || bytes[3] == b'\t')
-    {
-        return Some((bytes[1] as char, s[4..].trim_start()));
+    let c = priority_shape(bytes, 0)?;
+    if bytes.len() >= 4 && (bytes[3] == b' ' || bytes[3] == b'\t') {
+        return Some((c, s[4..].trim_start()));
     }
     None
 }
@@ -676,38 +710,18 @@ pub(crate) fn classify_draft(s: &str) -> Vec<(std::ops::Range<usize>, SegmentKin
     out
 }
 
+/// Byte range of a leading `(A)`..`(Z)` priority. Shares the shape predicate
+/// with the parser (`take_priority_prefix`) but returns the range so the
+/// highlighter can color the exact three bytes without consuming whitespace.
 fn match_priority(bytes: &[u8], i: usize) -> Option<usize> {
-    if bytes.len() >= i + 3
-        && bytes[i] == b'('
-        && bytes[i + 1].is_ascii_uppercase()
-        && bytes[i + 2] == b')'
-    {
-        Some(i + 3)
-    } else {
-        None
-    }
+    priority_shape(bytes, i).map(|_| i + 3)
 }
 
+/// Byte range of a leading date-shaped token. Shares the shape predicate with
+/// the parser but stops at the shape — no calendar validation, so a date the
+/// user is still typing (or has mistyped) still highlights as a date.
 fn match_date(bytes: &[u8], i: usize) -> Option<usize> {
-    if bytes.len() < i + 10 {
-        return None;
-    }
-    let d = |k: usize| bytes[i + k].is_ascii_digit();
-    if d(0)
-        && d(1)
-        && d(2)
-        && d(3)
-        && bytes[i + 4] == b'-'
-        && d(5)
-        && d(6)
-        && bytes[i + 7] == b'-'
-        && d(8)
-        && d(9)
-    {
-        Some(i + 10)
-    } else {
-        None
-    }
+    is_iso_date_shape(bytes, i).then_some(i + 10)
 }
 
 fn classify_word(w: &str) -> SegmentKind {
@@ -1179,5 +1193,20 @@ mod tests {
             .find(|(range, _)| &s[range.clone()] == "+")
             .expect("lone + should appear as its own segment");
         assert!(matches!(plus.1, SegmentKind::Plain));
+    }
+
+    #[test]
+    fn classifier_and_parser_share_shape_but_diverge_on_validation() {
+        // The parser rejects a lexically-shaped-but-invalid calendar date
+        // (`9999-99-99`) so it never poisons grouping; the highlighter must
+        // still colour it as a date so the user sees what they're typing even
+        // before it's a valid day. Both now share `is_iso_date_shape`, so the
+        // divergence is the single validation step, not two date matchers.
+        let t = parse_line("9999-99-99 not a date").unwrap();
+        assert_eq!(t.created_date, None);
+
+        let r = classify_draft("9999-99-99 Hello");
+        assert!(matches!(r[0].1, SegmentKind::Date));
+        assert_eq!(r[0].0, 0..10);
     }
 }
