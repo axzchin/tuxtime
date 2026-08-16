@@ -580,6 +580,155 @@ fn is_meta_token(tok: &str) -> bool {
     false
 }
 
+// ---------------------------------------------------------------------------
+// Draft syntax classification (syntax highlighting for the add/edit dialog)
+// ---------------------------------------------------------------------------
+
+/// Classifier output: byte range + what kind of token lives there. Segments
+/// cover the input contiguously and don't overlap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SegmentKind {
+    Plain,
+    Priority(char),
+    Date,
+    Project,
+    Context,
+    Due,
+    KeyValue,
+}
+
+/// Walk a draft and tag each byte range with what it represents in the
+/// todo.txt format. Used by the dialog to syntax-highlight what the user is
+/// typing. Mirrors [`parse_line`]'s grammar at the token level but doesn't
+/// share code — the highlighter must keep up character-by-character even on
+/// partially-typed input that the parser would reject.
+pub(crate) fn classify_draft(s: &str) -> Vec<(std::ops::Range<usize>, SegmentKind)> {
+    let mut out: Vec<(std::ops::Range<usize>, SegmentKind)> = Vec::new();
+    let bytes = s.as_bytes();
+    let mut i = 0;
+
+    // Optional leading "x " marker (done) followed by an optional done-date.
+    if bytes.len() >= 2 && bytes[0] == b'x' && bytes[1].is_ascii_whitespace() {
+        out.push((0..1, SegmentKind::Plain));
+        out.push((1..2, SegmentKind::Plain));
+        i = 2;
+        if let Some(end) = match_date(bytes, i) {
+            out.push((i..end, SegmentKind::Date));
+            i = end;
+            if i < bytes.len() && bytes[i].is_ascii_whitespace() {
+                out.push((i..i + 1, SegmentKind::Plain));
+                i += 1;
+            }
+        }
+    }
+
+    // Leading priority "(A)" through "(Z)".
+    if let Some(end) = match_priority(bytes, i) {
+        let pri_char = bytes[i + 1] as char;
+        out.push((i..end, SegmentKind::Priority(pri_char)));
+        i = end;
+        if i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            out.push((i..i + 1, SegmentKind::Plain));
+            i += 1;
+        }
+    }
+
+    // Optional creation date.
+    if let Some(end) = match_date(bytes, i) {
+        out.push((i..end, SegmentKind::Date));
+        i = end;
+        if i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            out.push((i..i + 1, SegmentKind::Plain));
+            i += 1;
+        }
+    }
+
+    // Walk the rest as alternating whitespace runs and word tokens.
+    while i < bytes.len() {
+        if bytes[i].is_ascii_whitespace() {
+            let start = i;
+            while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+                i += 1;
+            }
+            out.push((start..i, SegmentKind::Plain));
+            continue;
+        }
+        let start = i;
+        while i < bytes.len() && !bytes[i].is_ascii_whitespace() {
+            // Detect a key-value pair with a quoted value, e.g. `note:"this is a note"`.
+            if i + 1 < bytes.len() && bytes[i] == b':' && bytes[i + 1] == b'"' {
+                let init_i = i + 2;
+                let mut j = init_i;
+                while j < bytes.len() && bytes[j] != b'"' {
+                    j += 1;
+                }
+                if j < bytes.len() {
+                    i = j + 1;
+                    break;
+                }
+            }
+            i += 1;
+        }
+        let word = &s[start..i];
+        out.push((start..i, classify_word(word)));
+    }
+
+    out
+}
+
+fn match_priority(bytes: &[u8], i: usize) -> Option<usize> {
+    if bytes.len() >= i + 3
+        && bytes[i] == b'('
+        && bytes[i + 1].is_ascii_uppercase()
+        && bytes[i + 2] == b')'
+    {
+        Some(i + 3)
+    } else {
+        None
+    }
+}
+
+fn match_date(bytes: &[u8], i: usize) -> Option<usize> {
+    if bytes.len() < i + 10 {
+        return None;
+    }
+    let d = |k: usize| bytes[i + k].is_ascii_digit();
+    if d(0)
+        && d(1)
+        && d(2)
+        && d(3)
+        && bytes[i + 4] == b'-'
+        && d(5)
+        && d(6)
+        && bytes[i + 7] == b'-'
+        && d(8)
+        && d(9)
+    {
+        Some(i + 10)
+    } else {
+        None
+    }
+}
+
+fn classify_word(w: &str) -> SegmentKind {
+    if w.starts_with('+') && w.len() > 1 {
+        return SegmentKind::Project;
+    }
+    if w.starts_with('@') && w.len() > 1 {
+        return SegmentKind::Context;
+    }
+    if let Some((k, v)) = w.split_once(':')
+        && !v.is_empty()
+        && is_valid_key(k)
+    {
+        if k == "due" {
+            return SegmentKind::Due;
+        }
+        return SegmentKind::KeyValue;
+    }
+    SegmentKind::Plain
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -921,5 +1070,114 @@ mod tests {
         );
         assert_eq!(std::fs::read_to_string(&target).unwrap(), "new");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── classify_draft (draft syntax highlighting) ──────────────────────
+
+    #[test]
+    fn classify_plain_text_is_all_plain() {
+        let r = classify_draft("Hello world");
+        assert!(r.iter().all(|(_, k)| matches!(k, SegmentKind::Plain)));
+        let mut prev = 0;
+        for (range, _) in &r {
+            assert_eq!(range.start, prev);
+            prev = range.end;
+        }
+        assert_eq!(prev, "Hello world".len());
+    }
+
+    #[test]
+    fn classify_priority_at_start() {
+        let r = classify_draft("(A) Hello");
+        assert!(matches!(r[0].1, SegmentKind::Priority('A')));
+        assert_eq!(r[0].0, 0..3);
+    }
+
+    #[test]
+    fn classify_creation_date() {
+        let r = classify_draft("2026-05-01 Hello");
+        assert!(matches!(r[0].1, SegmentKind::Date));
+        assert_eq!(r[0].0, 0..10);
+    }
+
+    #[test]
+    fn classify_project_token() {
+        let s = "Hello +work";
+        let r = classify_draft(s);
+        let proj = r
+            .iter()
+            .find(|(_, k)| matches!(k, SegmentKind::Project))
+            .unwrap();
+        assert_eq!(&s[proj.0.clone()], "+work");
+    }
+
+    #[test]
+    fn classify_context_token() {
+        let s = "Hello @home";
+        let r = classify_draft(s);
+        let ctx = r
+            .iter()
+            .find(|(_, k)| matches!(k, SegmentKind::Context))
+            .unwrap();
+        assert_eq!(&s[ctx.0.clone()], "@home");
+    }
+
+    #[test]
+    fn classify_due_keyvalue() {
+        let s = "Hello due:2026-05-15";
+        let r = classify_draft(s);
+        let due = r
+            .iter()
+            .find(|(_, k)| matches!(k, SegmentKind::Due))
+            .unwrap();
+        assert_eq!(&s[due.0.clone()], "due:2026-05-15");
+    }
+
+    #[test]
+    fn classify_other_keyvalue() {
+        let s = "Hello rec:1w";
+        let r = classify_draft(s);
+        let kv = r
+            .iter()
+            .find(|(_, k)| matches!(k, SegmentKind::KeyValue))
+            .unwrap();
+        assert_eq!(&s[kv.0.clone()], "rec:1w");
+    }
+
+    #[test]
+    fn classify_full_line_covers_all_bytes() {
+        let s = "(A) 2026-05-01 Buy milk +shop @home due:2026-05-12";
+        let r = classify_draft(s);
+        let mut prev = 0;
+        for (range, _) in &r {
+            assert_eq!(range.start, prev);
+            prev = range.end;
+        }
+        assert_eq!(prev, s.len());
+        assert!(matches!(r[0].1, SegmentKind::Priority('A')));
+    }
+
+    #[test]
+    fn classify_done_marker_then_date() {
+        let s = "x 2026-05-05 thing";
+        let r = classify_draft(s);
+        let date_seg = r
+            .iter()
+            .find(|(_, k)| matches!(k, SegmentKind::Date))
+            .unwrap();
+        assert_eq!(&s[date_seg.0.clone()], "2026-05-05");
+    }
+
+    #[test]
+    fn classify_lone_sigil_stays_plain() {
+        // A bare "+" or "@" with no following text shouldn't get a sigil
+        // colour — it's just a character the user is mid-typing.
+        let s = "Foo + bar";
+        let r = classify_draft(s);
+        let plus = r
+            .iter()
+            .find(|(range, _)| &s[range.clone()] == "+")
+            .expect("lone + should appear as its own segment");
+        assert!(matches!(plus.1, SegmentKind::Plain));
     }
 }
