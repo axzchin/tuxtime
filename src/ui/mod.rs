@@ -14,6 +14,7 @@ pub mod empty;
 pub mod filters;
 pub mod header;
 pub mod help;
+pub(crate) mod hints;
 pub mod hyperlinks;
 pub mod list;
 pub mod logo;

@@ -90,111 +90,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         mode_label = format!("{mode_label} · {f}").into();
     }
 
-    // The hint shown for modes without a dedicated line: the timesheet's long
-    // key list when the timesheet view is active, the ordinary list hint
-    // otherwise. Several modes (Normal, day-boundary, theme picker, stale
-    // timer, manual-entry choice) deliberately fall back to this.
-    let default_hint: &'static str = if matches!(app.nav.view, View::Timesheet) {
-        "j/k navigate  ·  Enter edit  ·  b billable  ·  a archive toggle  ·  c copy text  ·  y copy time  ·  C copy both  ·  h/l ±day  ·  H/L ±week  ·  w/d view  ·  s sort  ·  f/F filter project/context  ·  / search  ·  g date  ·  t today  ·  Esc/V/q back"
-    } else {
-        "j/k · n new · t timer · T interrupt · x done · / search · ? help · u undo · q quit"
-    };
-
     // The running-timer status is its own accent segment rendered ahead of
     // the hint, so the mode keybindings stay visible while a timer runs
     // (previously the timer string replaced the hint entirely).
     let timer_status = timer_status(app);
-    let hint = match app.nav.mode {
-        Mode::Screen(screen) => match screen {
-            Screen::Insert => match app.draft.input_mode() {
-                DialogInputMode::Normal => {
-                    if app.session.manual_time_entry {
-                        "h/l navigate · w/b/e word · i/a insert · dur:90 (min) dur:1.5h dur:14:30 dur:9am → Enter save · C-Enter save+start".to_string()
-                    } else {
-                        "h/l navigate · w/b/e word · i/a insert · Enter save · C-Enter save+start · Esc cancel".to_string()
-                    }
-                }
-                DialogInputMode::Insert => {
-                    if app.session.manual_time_entry {
-                        "Enter save · C-Enter save+start · Esc normal — type a duration after dur:"
-                            .to_string()
-                    } else {
-                        "Enter save · C-Enter save+start · Esc normal".to_string()
-                    }
-                }
-            },
-            Screen::Visual => "space toggle · x complete · dd delete · Esc cancel".to_string(),
-            Screen::Help => "? close help".to_string(),
-            Screen::Settings => {
-                "Esc/ ,/ q dismiss  ·  i idle nudge  ·  l long timer nudge".to_string()
-            }
-            Screen::CommandPalette => "type to filter · Enter run · Esc cancel".to_string(),
-            Screen::Share => "scan the QR · any key dismisses".to_string(),
-            Screen::Welcome => "c create ./todo.txt · s open sample · q quit".to_string(),
-            Screen::ManageProjects => {
-                let all = app.all_projects();
-                let archived_count = all.iter().filter(|n| app.is_project_archived(n)).count();
-                let total = all.len();
-                let needle = app.filter().search.to_lowercase();
-                let matched = app.filtered_projects().len();
-                let sort = app.project_manager.project_sort.label();
-                let base = format!(
-                    "j/k nav · x archive · r rename · s sort ({sort}) · / search · Esc/P back"
-                );
-                if needle.is_empty() {
-                    format!(
-                        "{base}  —  {total} projects{archived}",
-                        archived = if archived_count > 0 {
-                            format!(", {archived_count} archived")
-                        } else {
-                            String::new()
-                        }
-                    )
-                } else {
-                    format!("{base}  —  /{needle} ({matched}/{total})")
-                }
-            }
-            Screen::Normal | Screen::Search => default_hint.to_string(),
-        },
-        Mode::Prompt(prompt) => match prompt {
-            Prompt::Project => "type +project name · Enter save · Esc cancel".to_string(),
-            Prompt::Context => "type @context name · Enter toggle · Esc cancel".to_string(),
-            Prompt::SaveFilter => "type a filter name · Enter save · Esc cancel".to_string(),
-            Prompt::AddTime => {
-                "type duration (e.g. 30, 1.5, 14:30; -30 removes) · Enter add · Esc cancel"
-                    .to_string()
-            }
-            Prompt::IdleNudge => "type minutes · Enter save · Esc cancel".to_string(),
-            Prompt::LongTimerNudge => "type minutes · Enter save · Esc cancel".to_string(),
-            Prompt::RenameProject => "type new name · Enter rename · Esc cancel".to_string(),
-            Prompt::DayBoundary => default_hint.to_string(),
-        },
-        Mode::Picker(picker) => match picker {
-            Picker::Project => "j/k or ↑↓ cycle projects · Enter keep · Esc clear".to_string(),
-            Picker::Context => "j/k or ↑↓ cycle contexts · Enter keep · Esc clear".to_string(),
-            Picker::SavedFilter => "j/k or ↑↓ cycle filters · Enter keep · Esc revert".to_string(),
-            Picker::TimesheetDate => {
-                "hjkl/arrows navigate  ·  type date  ·  Enter select  ·  Esc cancel  ·  t today"
-                    .to_string()
-            }
-            Picker::NudgeTask => {
-                let commit = match app.session.nudge_picker.as_ref().map(|p| p.action) {
-                    Some(NudgePickAction::StartTimer) => "Enter start timer on highlighted",
-                    Some(NudgePickAction::AddTime) => "Enter add time on highlighted",
-                    None => "Enter select",
-                };
-                format!("{commit} · j/k navigate · / search · +/@ filter · t start · Esc back")
-            }
-            Picker::Theme => default_hint.to_string(),
-        },
-        Mode::Nudge(nudge) => match nudge {
-            Nudge::Idle => "S start timer · M add time · N new entry · D dismiss".to_string(),
-            Nudge::LongTimer => "S stop timer · D dismiss".to_string(),
-            Nudge::StaleTimer => default_hint.to_string(),
-            Nudge::Review => "V view timesheet · M add time · S skip".to_string(),
-            Nudge::ManualEntryChoice => default_hint.to_string(),
-        },
-    };
+    let hint = crate::ui::hints::mode_hint(app);
 
     let mut right_parts = Vec::new();
     if app.nav.mode == Mode::Screen(Screen::ManageProjects) {
