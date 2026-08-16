@@ -18,7 +18,7 @@ expression: buffer_to_text(&buf)
    @home        │  "Call dentist to reschedule cleaning" has time from a previous  │                
    @laptop      │                               day.                               │                
    @phone       │                                                                  │                
-                │    [C]ontinue same entry  [N]ew entry for today  [Esc] cancel    │                
+                │ [Enter/N]ew entry for today  [C]ontinue same entry  [Esc] cancel │                
                 │                                                                  │                
                 └──────────────────────────────────────────────────────────────────┘                
                            14       Plan Saturday hike with K. @ph                                  

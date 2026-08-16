@@ -1,6 +1,6 @@
 use super::App;
 use super::draft::prev_char_boundary;
-use super::types::{AUTOCOMPLETE_CAP, Mode};
+use super::types::{AUTOCOMPLETE_CAP, Mode, Prompt};
 use crate::todo::{self, Task};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,8 +66,8 @@ impl App {
     /// based on the current app mode.
     pub fn autocomplete_target(&self) -> Option<AutocompleteTarget<'_>> {
         match self.nav.mode {
-            Mode::PromptProject | Mode::PromptContext => {
-                let kind = if self.nav.mode == Mode::PromptProject {
+            Mode::Prompt(Prompt::Project) | Mode::Prompt(Prompt::Context) => {
+                let kind = if self.nav.mode == Mode::Prompt(Prompt::Project) {
                     TokenKind::Project
                 } else {
                     TokenKind::Context
@@ -512,7 +512,7 @@ mod tests {
     #[test]
     fn autocomplete_prompt_project_mode() {
         let mut app = build_app("a +work\nb +health\n");
-        app.nav.mode = Mode::PromptProject;
+        app.nav.mode = Mode::Prompt(Prompt::Project);
         app.draft_set("hea".into());
         assert!(app.autocomplete_visible());
         assert_eq!(app.autocomplete_matches(), vec!["health"]);
@@ -524,7 +524,7 @@ mod tests {
     #[test]
     fn autocomplete_prompt_context_mode() {
         let mut app = build_app("a @work\nb @health\n");
-        app.nav.mode = Mode::PromptContext;
+        app.nav.mode = Mode::Prompt(Prompt::Context);
         app.draft_set("wor".into());
         assert!(app.autocomplete_visible());
         assert_eq!(app.autocomplete_matches(), vec!["work"]);

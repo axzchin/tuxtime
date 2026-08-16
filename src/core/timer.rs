@@ -536,30 +536,25 @@ pub(crate) fn rebuild_token_line(
     drop_prefix: Option<&str>,
     new_token: &str,
 ) -> String {
-    let body = crate::todo::body_after_priority(raw);
-    let prefix = &raw[..raw.len() - body.len()];
-    let mut new_tokens: Vec<String> = Vec::new();
     let mut has_token = false;
-    for tok in body.split_whitespace() {
+    let rebuilt = crate::todo::map_body_tokens(raw, |tok| {
         if let Some(dp) = drop_prefix
             && tok.starts_with(dp)
         {
-            continue;
+            return None;
         }
         if tok.starts_with(replace_prefix) {
-            new_tokens.push(new_token.to_string());
             has_token = true;
-        } else {
-            new_tokens.push(tok.to_string());
+            return Some(new_token.to_string());
         }
-    }
-    if !has_token {
-        new_tokens.push(new_token.to_string());
-    }
-    if prefix.is_empty() {
-        new_tokens.join(" ")
+        Some(tok.to_string())
+    });
+    if has_token {
+        rebuilt
+    } else if rebuilt.is_empty() {
+        new_token.to_string()
     } else {
-        format!("{prefix}{}", new_tokens.join(" "))
+        format!("{rebuilt} {new_token}")
     }
 }
 

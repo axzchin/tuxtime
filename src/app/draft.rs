@@ -1,5 +1,5 @@
 use super::App;
-use super::draft_overlay::DraftOverlay;
+use super::draft_overlay_state::DraftOverlay;
 
 /// Sub-mode for the edit/add dialog, mirroring vim's modal editing model.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

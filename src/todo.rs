@@ -381,12 +381,13 @@ impl Task {
             return Ok(false);
         }
         let needle = format!("@{name}");
-        let new_raw = self
-            .raw
-            .split_whitespace()
-            .filter(|tok| *tok != needle)
-            .collect::<Vec<_>>()
-            .join(" ");
+        let new_raw = map_body_tokens(&self.raw, |tok| {
+            if tok == needle.as_str() {
+                None
+            } else {
+                Some(tok.to_string())
+            }
+        });
         self.replace_from_raw(&new_raw).map_err(TagError::Parse)?;
         Ok(true)
     }
@@ -489,6 +490,35 @@ pub fn body_after_priority(raw: &str) -> &str {
         s = after;
     }
     s
+}
+
+/// Rewrite a raw line by mapping its body tokens — everything after the
+/// leading `x `/dates/`(P)` priority prefix — while leaving that prefix
+/// untouched. `map` is called on each whitespace-delimited body token and
+/// returns the replacement token, or `None` to drop it. Surviving tokens
+/// rejoin with single spaces.
+///
+/// This is the single home for "remove/replace a token on a todo.txt line",
+/// so the surgery can't drift between call sites. Doing it by hand with
+/// `raw.split_whitespace()` also treats the priority and creation date as
+/// removable tokens (e.g. `del 3 2026-05-06` stripping the date), and
+/// reimplementing the prefix split at each site is what let `start:` stripping
+/// diverge across `discard_stale_timer`, `complete_consumed_line`, and
+/// `rebuild_token_line`.
+#[must_use]
+pub fn map_body_tokens(raw: &str, map: impl FnMut(&str) -> Option<String>) -> String {
+    let body = body_after_priority(raw);
+    let prefix = &raw[..raw.len() - body.len()];
+    let kept = body
+        .split_whitespace()
+        .filter_map(map)
+        .collect::<Vec<_>>()
+        .join(" ");
+    if prefix.is_empty() {
+        kept
+    } else {
+        format!("{prefix}{kept}")
+    }
 }
 
 pub fn body_after_quoted_kv(raw: &str) -> String {

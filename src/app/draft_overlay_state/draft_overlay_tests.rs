@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 //! Unit tests for the draft overlays (slash menu, calendar, recurrence
 //! builder, priority chooser, duration picker) and the `apply_kv` /
-//! `apply_priority` buffer writers. Included from [`super::draft_overlay`]
+//! `apply_priority` buffer writers. Included from [`super::draft_overlay_state`]
 //! via `mod tests;`, so `super::*` resolves to that module.
 
 use super::*;
@@ -120,7 +120,7 @@ fn format_rec_value_emits_strict_prefix() {
 #[test]
 fn slash_menu_opens_at_bol() {
     let mut app = build_app("");
-    app.nav.mode = crate::app::Mode::Insert;
+    app.nav.mode = crate::app::Mode::Screen(crate::app::Screen::Insert);
     app.draft_insert_char('/');
     app.maybe_open_slash_menu();
     assert!(matches!(
@@ -544,7 +544,7 @@ fn end_to_end_flow_writes_full_task() {
     // The final task line must round-trip through `parse_line` with the
     // expected metadata fields populated.
     let mut app = build_app("");
-    app.nav.mode = crate::app::Mode::Insert;
+    app.nav.mode = crate::app::Mode::Screen(crate::app::Screen::Insert);
     for c in "Schedule team offsite".chars() {
         app.draft_insert_char(c);
     }

@@ -6,7 +6,7 @@
 //! - [`handle_autocomplete_keys`] — shared by Insert, Search, Prompt modes
 //! - All other handlers are `pub(crate)` for use by [`handle_key`].
 
-use crate::app::{App, DayBoundaryAction, Mode, View};
+use crate::app::{App, DayBoundaryAction, Mode, Nudge, Picker, Prompt, Screen, View};
 use crate::cli;
 use crate::keybinds::KeyBindings;
 use crate::todo;
@@ -90,14 +90,14 @@ pub(crate) fn handle_settings(app: &mut App, key: KeyEvent) {
             app.draft_clear();
             app.draft_set_insert(mins.to_string());
             // Open the prompt over Settings so Esc/Enter returns to Settings.
-            app.nav.push_mode(Mode::PromptIdleNudge);
+            app.nav.push_mode(Mode::Prompt(Prompt::IdleNudge));
         }
         KeyCode::Char('l') => {
             let mins = app.long_timer_nudge_seconds() / 60;
             app.draft_clear();
             app.draft_set_insert(mins.to_string());
             // Open the prompt over Settings so Esc/Enter returns to Settings.
-            app.nav.push_mode(Mode::PromptLongTimerNudge);
+            app.nav.push_mode(Mode::Prompt(Prompt::LongTimerNudge));
         }
         KeyCode::Char('r') => app.cycle_rounding_increment(),
         // The settings screen advertises these keys in its rows; route them
@@ -250,14 +250,14 @@ pub(crate) fn handle_autocomplete_keys(app: &mut App, key: KeyEvent) -> bool {
 /// After an add-time attempt, return to the idle-nudge popup when the
 /// capture failed. The save functions clear `from_nudge` the moment time
 /// actually lands, so the flag still being set here means nothing was
-/// recorded (invalid duration, write error); `mode == Mode::Normal`
+/// recorded (invalid duration, write error); `mode == Mode::Screen(Screen::Normal)`
 /// distinguishes a completed failure from a flow that deferred to the
 /// day-boundary prompt, which is still open (mode != Normal) and will
 /// resolve — or fail — on its own.
 fn resolve_nudge_add_outcome(app: &mut App) {
-    if app.session.from_nudge && app.nav.mode() == Mode::Normal {
+    if app.session.from_nudge && app.nav.mode() == Mode::Screen(Screen::Normal) {
         app.session.from_nudge = false;
-        app.nav.set_mode(Mode::IdleNudge);
+        app.nav.set_mode(Mode::Nudge(Nudge::Idle));
     }
 }
 
@@ -280,7 +280,7 @@ pub(crate) fn handle_prompt(app: &mut App, key: KeyEvent) {
         KeyCode::Esc => {
             let return_mode = if matches!(
                 app.nav.mode(),
-                Mode::PromptIdleNudge | Mode::PromptLongTimerNudge
+                Mode::Prompt(Prompt::IdleNudge) | Mode::Prompt(Prompt::LongTimerNudge)
             ) {
                 // Entered with push_mode (Settings or the mode the command
                 // palette returned to), so pop restores the caller. This can
@@ -289,20 +289,20 @@ pub(crate) fn handle_prompt(app: &mut App, key: KeyEvent) {
                 // lands back on the selection, which is exactly right, so
                 // this branch must stay ahead of the nudge_picker check.
                 app.nav.pop_mode()
-            } else if app.nav.mode() == Mode::PromptRenameProject {
-                Mode::ManageProjects
-            } else if app.nav.mode() == Mode::PromptAddTime && app.session.from_nudge {
+            } else if app.nav.mode() == Mode::Prompt(Prompt::RenameProject) {
+                Mode::Screen(Screen::ManageProjects)
+            } else if app.nav.mode() == Mode::Prompt(Prompt::AddTime) && app.session.from_nudge {
                 // Esc from the nudge's add-time recovery flow returns to the
                 // nudge popup — the reminder survives a cancelled attempt.
                 app.session.from_nudge = false;
-                Mode::IdleNudge
+                Mode::Nudge(Nudge::Idle)
             } else if app.session.nudge_picker.is_some() {
                 // A quick-tag / save-filter prompt opened from the nudge
                 // selection (+, c, fs) returns to the selection — the user
                 // is still choosing a task, not abandoning the choice.
-                Mode::PickNudgeTask
+                Mode::Picker(Picker::NudgeTask)
             } else {
-                Mode::Normal
+                Mode::Screen(Screen::Normal)
             };
             app.nav.set_mode(return_mode);
             app.draft_clear();
@@ -313,35 +313,35 @@ pub(crate) fn handle_prompt(app: &mut App, key: KeyEvent) {
             app.draft_clear();
             let is_nudge = matches!(
                 prev_mode,
-                Mode::PromptIdleNudge | Mode::PromptLongTimerNudge
+                Mode::Prompt(Prompt::IdleNudge) | Mode::Prompt(Prompt::LongTimerNudge)
             );
-            let is_rename = prev_mode == Mode::PromptRenameProject;
+            let is_rename = prev_mode == Mode::Prompt(Prompt::RenameProject);
             let return_mode = if is_nudge {
                 // Entered with push_mode (Settings or the mode the command
                 // palette returned to), so pop restores the caller.
                 app.nav.pop_mode()
             } else if is_rename {
-                Mode::ManageProjects
+                Mode::Screen(Screen::ManageProjects)
             } else if app.session.nudge_picker.is_some() {
                 // A quick-tag / save-filter prompt opened from the nudge
                 // selection (+, c, fs) returns to the selection — the user
                 // is still choosing a task, not abandoning the choice.
-                Mode::PickNudgeTask
+                Mode::Picker(Picker::NudgeTask)
             } else {
-                Mode::Normal
+                Mode::Screen(Screen::Normal)
             };
             app.nav.set_mode(return_mode);
             match prev_mode {
-                Mode::PromptProject => app.add_project_to_current(&value),
-                Mode::PromptContext => app.toggle_context_on_current(&value),
-                Mode::PromptSaveFilter => app.save_current_filter_as(&value),
-                Mode::PromptAddTime => {
+                Mode::Prompt(Prompt::Project) => app.add_project_to_current(&value),
+                Mode::Prompt(Prompt::Context) => app.toggle_context_on_current(&value),
+                Mode::Prompt(Prompt::SaveFilter) => app.save_current_filter_as(&value),
+                Mode::Prompt(Prompt::AddTime) => {
                     app.add_time_to_current_from_input(&value);
                     // A failed add (invalid duration, write error) from the
                     // nudge's recovery flow must not drop the reminder.
                     resolve_nudge_add_outcome(app);
                 }
-                Mode::PromptIdleNudge => {
+                Mode::Prompt(Prompt::IdleNudge) => {
                     if let Ok(mins) = value.parse::<u64>() {
                         if mins > 0 {
                             app.set_idle_nudge_minutes(mins);
@@ -353,7 +353,7 @@ pub(crate) fn handle_prompt(app: &mut App, key: KeyEvent) {
                         app.flash(format!("invalid minutes: {value}"));
                     }
                 }
-                Mode::PromptLongTimerNudge => {
+                Mode::Prompt(Prompt::LongTimerNudge) => {
                     if let Ok(mins) = value.parse::<u64>() {
                         if mins > 0 {
                             app.set_long_timer_nudge_minutes(mins);
@@ -365,7 +365,7 @@ pub(crate) fn handle_prompt(app: &mut App, key: KeyEvent) {
                         app.flash(format!("invalid minutes: {value}"));
                     }
                 }
-                Mode::PromptRenameProject => {
+                Mode::Prompt(Prompt::RenameProject) => {
                     if let Some(old) = app.project_manager.rename_project_old.take() {
                         app.rename_project(&old, &value);
                     }
@@ -403,7 +403,7 @@ pub(crate) fn handle_manage_projects(app: &mut App, key: KeyEvent) {
                 app.project_manager.rename_project_old = Some(name.clone());
                 app.draft_clear();
                 app.draft_set_insert(name);
-                app.nav.set_mode(Mode::PromptRenameProject);
+                app.nav.set_mode(Mode::Prompt(Prompt::RenameProject));
             }
         }
         KeyCode::Char('s') => {
@@ -421,7 +421,7 @@ pub(crate) fn handle_manage_projects(app: &mut App, key: KeyEvent) {
         KeyCode::Char('/') => {
             // Push search over ManageProjects so Esc/Enter pops straight back.
             app.draft_clear();
-            app.nav.push_mode(Mode::Search);
+            app.nav.push_mode(Mode::Screen(Screen::Search));
         }
         _ => {}
     }
@@ -446,14 +446,16 @@ pub(crate) fn handle_idle_nudge(app: &mut App, key: KeyEvent) {
             app.set_view(View::List);
             app.draft_clear();
             app.session.manual_time_entry = false;
-            app.nav.set_mode(Mode::Insert);
+            app.nav.set_mode(Mode::Screen(Screen::Insert));
             app.selection.exit_edit();
             app.session.last_timer_activity = std::time::Instant::now();
         }
         KeyCode::Char('D') | KeyCode::Esc => {
-            // Dismissing the nudge ends any recovery flow for good.
+            // Dismissing the nudge ends any recovery flow for good, and
+            // escalates the reminder (each dismissal halves the next wait)
+            // so the popup can't be snoozed indefinitely.
             app.session.from_nudge = false;
-            app.dismiss_nudge();
+            app.dismiss_idle_nudge();
         }
         _ => {}
     }
@@ -473,7 +475,7 @@ pub(crate) fn handle_review_nudge(app: &mut App, key: KeyEvent) {
         KeyCode::Char('m' | 'M') => {
             app.nav.enter_normal();
             app.session.pre_nudge_view = None;
-            app.nav.set_mode(Mode::ManualEntryChoice);
+            app.nav.set_mode(Mode::Nudge(Nudge::ManualEntryChoice));
         }
         KeyCode::Char('s' | 'S') | KeyCode::Esc => {
             app.nav.enter_normal();
@@ -534,13 +536,13 @@ fn maybe_abandon_nudge_selection(app: &mut App) {
         app.nav.mode(),
         // The filter pickers preview their filter directly on the list and
         // return to the selection on accept or cancel.
-        Mode::PickProject | Mode::PickContext | Mode::PickSavedFilter
+        Mode::Picker(Picker::Project) | Mode::Picker(Picker::Context) | Mode::Picker(Picker::SavedFilter)
         // The quick-tag prompts (+, c) and the save-filter prompt (fs) are
         // selection-compatible detours: they mutate the highlighted task or
         // persist the mid-selection search, then return to the selection.
-        | Mode::PromptProject
-        | Mode::PromptContext
-        | Mode::PromptSaveFilter
+        | Mode::Prompt(Prompt::Project)
+        | Mode::Prompt(Prompt::Context)
+        | Mode::Prompt(Prompt::SaveFilter)
     ) {
         return;
     }
@@ -552,7 +554,9 @@ fn maybe_abandon_nudge_selection(app: &mut App) {
         app.nudge_picker_exit_to_view();
         return;
     }
-    if app.nav.mode() != Mode::PickNudgeTask && app.nav.peek_under() != Some(Mode::PickNudgeTask) {
+    if app.nav.mode() != Mode::Picker(Picker::NudgeTask)
+        && app.nav.peek_under() != Some(Mode::Picker(Picker::NudgeTask))
+    {
         app.nudge_picker_abandon();
     }
 }
@@ -561,7 +565,7 @@ fn maybe_abandon_nudge_selection(app: &mut App) {
 /// day-boundary prompt reached from `t`) completes the recovery on its own:
 /// exit to Normal, restoring the pre-selection filter and pre-nudge view.
 fn maybe_finish_nudge_selection(app: &mut App) {
-    if app.nav.mode() == Mode::PickNudgeTask && app.timer_running() {
+    if app.nav.mode() == Mode::Picker(Picker::NudgeTask) && app.timer_running() {
         app.nudge_picker_finish();
     }
 }
@@ -612,14 +616,17 @@ pub(crate) fn handle_manual_entry_choice(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Char('n' | 'N') => {
             app.draft_clear();
-            app.session.manual_time_entry = false;
-            app.nav.set_mode(Mode::Insert);
+            // Manual time entry: treat a typed `dur:` as flexible input
+            // (minutes/hours/clock time) on save, so `dur:30` logs 30 minutes
+            // — not the 30 *seconds* the raw on-disk token would mean.
+            app.session.manual_time_entry = true;
+            app.nav.set_mode(Mode::Screen(Screen::Insert));
             app.selection.exit_edit();
         }
         KeyCode::Char('a' | 'A') => {
             if let Some(t) = app.cur_task() {
                 let body = todo::body_only_from_clean(&t.clean_raw);
-                app.nav.set_mode(Mode::PromptAddTime);
+                app.nav.set_mode(Mode::Prompt(Prompt::AddTime));
                 app.draft_clear();
                 app.flash(format!("add time to: {body}"));
             } else {
@@ -662,7 +669,12 @@ pub(crate) fn handle_day_boundary(app: &mut App, key: KeyEvent) {
             // now has its timer running — the selection's job is done.
             maybe_finish_nudge_selection(app);
         }
-        KeyCode::Char('n' | 'N') => {
+        // Enter defaults to the safe, most common choice: a fresh entry for
+        // today. Starting a timer (or adding time) on a carried-over task is
+        // the everyday case, and "one line per task-day" is the model — so
+        // the plain confirm key should do exactly that without demanding the
+        // user learn the continue-vs-new distinction first.
+        KeyCode::Enter | KeyCode::Char('n' | 'N') => {
             // New entry for today: carry forward (consuming the old line),
             // then start the timer / add the time on the fresh line.
             let pending = app.session.pending_day_boundary.take();
@@ -689,7 +701,7 @@ pub(crate) fn handle_day_boundary(app: &mut App, key: KeyEvent) {
             // returns to the popup — and never leaks the flag into Normal.
             if app.session.from_nudge {
                 app.session.from_nudge = false;
-                app.nav.set_mode(Mode::IdleNudge);
+                app.nav.set_mode(Mode::Nudge(Nudge::Idle));
             }
         }
         _ => {}

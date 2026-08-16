@@ -21,7 +21,10 @@ use std::time::Instant;
 
 use chrono::{Datelike, NaiveDate, Weekday};
 
-use super::{App, FLASH_TTL, Mode, TimesheetEntry, TimesheetSort, TimesheetTaskRef, WeekStart};
+use super::{
+    App, FLASH_TTL, Mode, Screen, TimesheetEntry, TimesheetSort, TimesheetTaskRef, WeekStart,
+    billable_units,
+};
 
 // ---------------------------------------------------------------------------
 // TimesheetState — pure navigation state
@@ -380,17 +383,55 @@ impl App {
     /// sidebar so the numbers stay visible while the center scrolls.
     #[must_use]
     pub fn timesheet_period_totals(&self) -> (u64, u64, u64) {
-        let groups = self.build_timesheet_groups();
-        let mut total = 0u64;
-        let mut billable = 0u64;
-        for g in &groups {
-            total += g.total_secs;
-            if g.billable {
-                billable += g.total_secs;
-            }
-        }
-        (total, billable, total - billable)
+        timesheet_totals(
+            &self.build_timesheet_groups(),
+            self.prefs.rounding_increment,
+        )
+        .secs()
     }
+}
+
+/// Aggregated totals for a list of timesheet groups: tracked seconds and
+/// billable units, each split billable vs non-billable. Pure over an
+/// already-built group list so the renderer can pass its local `groups`
+/// without re-cloning the cache (unlike the [`App::timesheet_period_totals`]
+/// accessors, which rebuild groups from the cache).
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct TimesheetTotals {
+    pub(crate) total_secs: u64,
+    pub(crate) billable_secs: u64,
+    pub(crate) non_billable_secs: u64,
+    pub(crate) total_units: u64,
+    pub(crate) billable_units: u64,
+    pub(crate) non_billable_units: u64,
+}
+
+impl TimesheetTotals {
+    /// Seconds triple: `(total, billable, non_billable)`.
+    fn secs(self) -> (u64, u64, u64) {
+        (self.total_secs, self.billable_secs, self.non_billable_secs)
+    }
+}
+
+/// Sum a group list's seconds and billable units, split billable vs
+/// non-billable. Billable units round per group (1 min × 5 matters = 0.5h at
+/// the 0.1 increment), matching the footer the renderer prints.
+#[must_use]
+pub(crate) fn timesheet_totals(groups: &[TimesheetEntry], increment: f64) -> TimesheetTotals {
+    let mut t = TimesheetTotals::default();
+    for g in groups {
+        let units = billable_units(g.total_secs, increment);
+        t.total_secs += g.total_secs;
+        t.total_units += units;
+        if g.billable {
+            t.billable_secs += g.total_secs;
+            t.billable_units += units;
+        } else {
+            t.non_billable_secs += g.total_secs;
+            t.non_billable_units += units;
+        }
+    }
+    t
 }
 
 /// True when `s` is a parseable `YYYY-MM-DD` date. Guards the timesheet
@@ -499,7 +540,7 @@ impl App {
         self.timesheet.date_input.clear();
         self.timesheet.cursor = 0;
         self.timesheet.invalidate_cache();
-        self.nav.mode = Mode::Normal;
+        self.nav.mode = Mode::Screen(Screen::Normal);
         let display = self.timesheet_date_display();
         self.flash(format!("jumped to {display}"));
     }
@@ -507,7 +548,7 @@ impl App {
     /// Cancel the calendar: return to Normal without changing the date.
     pub fn timesheet_calendar_cancel(&mut self) {
         self.timesheet.date_input.clear();
-        self.nav.mode = Mode::Normal;
+        self.nav.mode = Mode::Screen(Screen::Normal);
     }
 }
 

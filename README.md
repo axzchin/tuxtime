@@ -32,6 +32,19 @@ For a more in-depth walkthrough, please watch [this video](https://www.youtube.c
 - **Five themes, three densities.** Cycle with `T` and `D`. Choices persist across runs and hot-reload when you edit `config.toml` externally.
 - **No daemon, no database, no cloud.** One file in, one file out.
 
+## Privacy & confidentiality
+
+tuxtime stores everything locally, in plain text — your `todo.txt`, `done.txt`,
+`config.toml`, `keybinds.toml`, and `inbox.txt` are not encrypted, and task
+narratives routinely carry client names and matter details. Anyone who can read
+those files (a sync client, a backup tool, another account on the same machine)
+can read your entries, so treat them with the same care as any privileged
+document. Time-tracking data is a legal record: **verify your billing numbers
+before relying on them**, and don't point tuxtime at a file a less-trusted
+service can see. The only network activity is the phone-capture server (plain
+HTTP, LAN only — see [Phone capture](#phone-capture)) and the once-a-day update
+check; disable the latter with `TUXTIME_NO_UPDATE_CHECK=1`.
+
 ## Screens
 
 | | |
@@ -164,7 +177,7 @@ tuxtime --version
 When a newer release is available, the status bar shows `↑ <version> (tuxtime
 update)` next to the version. The check runs in the background, is cached at
 `$XDG_CACHE_HOME/tuxtime/latest_version.json` for 24 h, and fails silently
-when offline. Set `TUXEDO_NO_UPDATE_CHECK=1` to disable.
+when offline. Set `TUXTIME_NO_UPDATE_CHECK=1` to disable.
 
 ### Which file tuxtime opens
 

@@ -36,6 +36,30 @@ pub(crate) fn format_duration(total_secs: u64, increment_hours: f64) -> String {
     }
 }
 
+/// Stopwatch-style `HH:MM:SS` for a live running timer (status bar + task
+/// row). Zero-padded so the readout doesn't jump width as digits change.
+#[must_use]
+pub fn format_clock(total_secs: u64) -> String {
+    let h = total_secs / 3600;
+    let m = (total_secs % 3600) / 60;
+    let s = total_secs % 60;
+    format!("{h:02}:{m:02}:{s:02}")
+}
+
+/// Compact human duration for narrow columns (sidebar rows): `2h 05m`, `45m`.
+/// Unlike [`format_duration`] this carries no billable parenthetical — it's
+/// for rows too tight to fit one.
+#[must_use]
+pub fn format_compact_duration(total_secs: u64) -> String {
+    let hours = total_secs / 3600;
+    let minutes = (total_secs % 3600) / 60;
+    if hours > 0 {
+        format!("{hours}h {minutes:02}m")
+    } else {
+        format!("{minutes}m")
+    }
+}
+
 /// Format seconds as billable units at the configured increment, rounded up.
 /// 1 minute = 0.1h, 6 minutes = 0.1h, 30 minutes = 0.5h (at 0.1); 8 minutes =
 /// 0.25h (at 0.25); increment 0 shows exact decimal hours (e.g. 1.12h).

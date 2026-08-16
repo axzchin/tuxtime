@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::action::Action;
-use crate::app::{App, Mode, View};
+use crate::app::{App, Mode, Nudge, Picker, Prompt, Screen, View};
 use crate::config::Config;
 use crate::keybinds::KeyBindings;
 use chrono::NaiveDate;
@@ -37,7 +37,7 @@ fn welcome_app(name: &str) -> (App, std::path::PathBuf) {
         "2026-05-07".into(),
         Config::default(),
     );
-    app.nav.mode = Mode::Welcome;
+    app.nav.mode = Mode::Screen(Screen::Welcome);
     (app, path)
 }
 
@@ -47,7 +47,7 @@ fn welcome_c_creates_cwd_file_and_enters_normal() {
     assert!(!path.exists(), "precondition: file must not exist yet");
     handle_welcome(&mut app, key('c'));
     assert!(path.exists(), "`c` must create the target file");
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
     assert_eq!(app.env.file_path, path, "`c` keeps the cwd target path");
     assert!(!app.nav.should_quit);
     let _ = std::fs::remove_file(&path);
@@ -57,7 +57,7 @@ fn welcome_c_creates_cwd_file_and_enters_normal() {
 fn welcome_s_opens_sample_and_enters_normal() {
     let (mut app, path) = welcome_app("s");
     handle_welcome(&mut app, key('s'));
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
     assert_ne!(
         app.env.file_path, path,
         "`s` rebinds away from the cwd target"
@@ -410,10 +410,10 @@ fn timesheet_period_totals_sum_billable_and_non_billable() {
 fn timesheet_f_and_shift_f_open_pickers() {
     let mut app = build_timesheet_app();
     app.set_view(View::Timesheet);
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
 
     handle_timesheet_keys(&mut app, key('f'));
-    assert_eq!(app.nav.mode, Mode::PickProject);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::Project));
     assert!(
         app.filter.project.is_some(),
         "picker must seed a project filter"
@@ -421,17 +421,17 @@ fn timesheet_f_and_shift_f_open_pickers() {
 
     // Accept the picker: back to Normal, filter kept.
     app.pick_accept();
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
     assert_eq!(app.view(), View::Timesheet, "must stay in timesheet view");
 
     handle_timesheet_keys(&mut app, key('F'));
-    assert_eq!(app.nav.mode, Mode::PickContext);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::Context));
     assert!(
         app.filter.context.is_some(),
         "picker must seed a context filter"
     );
     app.pick_accept();
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
     assert_eq!(app.view(), View::Timesheet);
 }
 
@@ -449,7 +449,7 @@ fn timesheet_f_seeds_picker_from_timesheet_cursor_entry() {
     app.timesheet.cursor = 1; // "Write code +work @dev" (group 2 of 2)
 
     handle_timesheet_keys(&mut app, key('f'));
-    assert_eq!(app.nav.mode, Mode::PickProject);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::Project));
     assert_eq!(
         app.filter.project.as_deref(),
         Some("work"),
@@ -460,7 +460,7 @@ fn timesheet_f_seeds_picker_from_timesheet_cursor_entry() {
     // Same for context via F: the entry is @dev.
     app.timesheet.cursor = 1;
     handle_timesheet_keys(&mut app, key('F'));
-    assert_eq!(app.nav.mode, Mode::PickContext);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::Context));
     assert_eq!(
         app.filter.context.as_deref(),
         Some("dev"),
@@ -707,7 +707,7 @@ fn timesheet_g_key_opens_calendar_picker() {
     // Pre-fill input to verify g clears it.
     app.timesheet.date_input = "2026-01".into();
     handle_timesheet_keys(&mut app, key('g'));
-    assert_eq!(app.nav.mode, Mode::PickTimesheetDate);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::TimesheetDate));
     // Calendar focus is seeded from the current timesheet.date.
     assert_eq!(
         app.timesheet.calendar_focus.format("%Y-%m-%d").to_string(),
@@ -723,7 +723,7 @@ fn pick_timesheet_date_enter_accepts() {
     app.set_view(View::Timesheet);
     // Open calendar and navigate to select a date, then Enter.
     handle_timesheet_keys(&mut app, key('g'));
-    assert_eq!(app.nav.mode, Mode::PickTimesheetDate);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::TimesheetDate));
     let orig = app.timesheet.date.clone();
 
     // Navigate to a different date via the calendar.
@@ -733,7 +733,7 @@ fn pick_timesheet_date_enter_accepts() {
     assert_eq!(app.timesheet.date, "2026-01-15");
     assert_ne!(app.timesheet.date, orig);
     assert_eq!(app.timesheet.cursor, 0);
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
     assert!(
         app.flash_active()
             .is_some_and(|m| m.contains("jumped to Thu 2026-01-15"))
@@ -752,7 +752,7 @@ fn pick_timesheet_date_esc_cancels() {
         chrono::NaiveDate::from_ymd_opt(2026, 1, 15).expect("valid date");
     handle_pick_timesheet_date(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     assert_eq!(app.timesheet.date, orig, "Esc must not change date");
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
 }
 
 #[test]
@@ -760,7 +760,7 @@ fn pick_timesheet_date_typing_syncs_focus_and_accepts() {
     let mut app = build_timesheet_app();
     app.set_view(View::Timesheet);
     handle_timesheet_keys(&mut app, key('g'));
-    assert_eq!(app.nav.mode, Mode::PickTimesheetDate);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::TimesheetDate));
     let orig = app.timesheet.date.clone();
 
     // Type a partial date — calendar focus shouldn't move yet.
@@ -789,7 +789,7 @@ fn pick_timesheet_date_typing_syncs_focus_and_accepts() {
     handle_pick_timesheet_date(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert_eq!(app.timesheet.date, "2026-01-15");
     assert_ne!(app.timesheet.date, orig);
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
     assert!(
         app.flash_active()
             .is_some_and(|m| m.contains("jumped to Thu 2026-01-15"))
@@ -815,7 +815,7 @@ fn pick_timesheet_date_invalid_typing_flashes_error() {
     handle_pick_timesheet_date(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     // Date unchanged, mode stays in calendar, error flashed.
     assert_eq!(app.timesheet.date, orig_date);
-    assert_eq!(app.nav.mode, Mode::PickTimesheetDate);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::TimesheetDate));
     assert!(
         app.flash_active()
             .is_some_and(|m| m.contains("invalid date"))
@@ -1058,11 +1058,11 @@ fn lowercase_r_reschedules_task_with_due_date() {
     let mut app = build_app_with_due();
     assert_eq!(app.tasks().len(), 1);
     assert_eq!(app.tasks()[0].due.as_deref(), Some("2026-06-30"));
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
 
     assert_eq!(resolve(&mut app, key('r')), Some(Action::Reschedule),);
     apply_action(&mut app, Action::Reschedule);
-    assert_eq!(app.nav.mode, Mode::Insert);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Insert));
 
     let s = app.calendar_state().expect("calendar should be open");
     assert_eq!(
@@ -1083,11 +1083,11 @@ fn lowercase_r_reschedules_task_without_due_date() {
     let mut app = build_app();
     assert_eq!(app.tasks().len(), 3);
     assert_eq!(app.tasks()[0].due.as_deref(), None);
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
 
     assert_eq!(resolve(&mut app, key('r')), Some(Action::Reschedule),);
     apply_action(&mut app, Action::Reschedule);
-    assert_eq!(app.nav.mode, Mode::Insert);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Insert));
 
     let s = app.calendar_state().expect("calendar should be open");
     assert_eq!(
@@ -1175,7 +1175,7 @@ fn ctrl_h_deletes_instead_of_inserting_in_insert_mode() {
     // End-to-end through handle_insert: Ctrl+H must delete the char before
     // the cursor rather than typing 'h'.
     let mut app = build_app();
-    app.nav.mode = Mode::Insert;
+    app.nav.mode = Mode::Screen(Screen::Insert);
     app.draft_clear();
     app.draft_insert_char('a');
     app.draft_insert_char('b');
@@ -1188,7 +1188,7 @@ fn ctrl_u_clears_to_start_in_search_mode() {
     // Ctrl+U in the search box wipes back to the start and re-runs the
     // filter via the TextChanged effect.
     let mut app = build_app();
-    app.nav.mode = Mode::Search;
+    app.nav.mode = Mode::Screen(Screen::Search);
     app.draft_clear();
     for c in "abc".chars() {
         app.draft_insert_char(c);
@@ -1284,13 +1284,13 @@ fn toggle_billable_removes_bill_n_tag() {
 #[test]
 fn idle_nudge_prompt_prefills_default_minutes() {
     let mut app = build_app();
-    app.nav.mode = Mode::Settings;
+    app.nav.mode = Mode::Screen(Screen::Settings);
     // Simulate pressing 'i' in settings.
     handle_settings(
         &mut app,
         KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE),
     );
-    assert_eq!(app.nav.mode, Mode::PromptIdleNudge);
+    assert_eq!(app.nav.mode, Mode::Prompt(Prompt::IdleNudge));
     // Default idle nudge is 900s = 15 min.
     assert_eq!(app.draft.text(), "15");
 }
@@ -1298,12 +1298,12 @@ fn idle_nudge_prompt_prefills_default_minutes() {
 #[test]
 fn long_timer_nudge_prompt_prefills_default_minutes() {
     let mut app = build_app();
-    app.nav.mode = Mode::Settings;
+    app.nav.mode = Mode::Screen(Screen::Settings);
     handle_settings(
         &mut app,
         KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE),
     );
-    assert_eq!(app.nav.mode, Mode::PromptLongTimerNudge);
+    assert_eq!(app.nav.mode, Mode::Prompt(Prompt::LongTimerNudge));
     // Default long-timer nudge is 7200s = 120 min.
     assert_eq!(app.draft.text(), "120");
 }
@@ -1312,22 +1312,22 @@ fn long_timer_nudge_prompt_prefills_default_minutes() {
 fn idle_nudge_enter_sets_new_threshold() {
     let mut app = build_app();
     // Settings → push the nudge prompt → Enter must pop back to Settings.
-    app.nav.mode = Mode::Settings;
-    app.nav.push_mode(Mode::PromptIdleNudge);
+    app.nav.mode = Mode::Screen(Screen::Settings);
+    app.nav.push_mode(Mode::Prompt(Prompt::IdleNudge));
     app.draft_set_insert("30".to_string());
     handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert_eq!(app.nav.mode, Mode::Settings);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Settings));
     assert_eq!(app.idle_nudge_seconds(), 1800); // 30 min
 }
 
 #[test]
 fn idle_nudge_enter_rejects_zero_minutes() {
     let mut app = build_app();
-    app.nav.mode = Mode::Settings;
-    app.nav.push_mode(Mode::PromptIdleNudge);
+    app.nav.mode = Mode::Screen(Screen::Settings);
+    app.nav.push_mode(Mode::Prompt(Prompt::IdleNudge));
     app.draft_set_insert("0".to_string());
     handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert_eq!(app.nav.mode, Mode::Settings);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Settings));
     // Value should not have changed.
     assert_eq!(app.idle_nudge_seconds(), 900);
 }
@@ -1335,11 +1335,11 @@ fn idle_nudge_enter_rejects_zero_minutes() {
 #[test]
 fn long_timer_nudge_enter_sets_new_threshold() {
     let mut app = build_app();
-    app.nav.mode = Mode::Settings;
-    app.nav.push_mode(Mode::PromptLongTimerNudge);
+    app.nav.mode = Mode::Screen(Screen::Settings);
+    app.nav.push_mode(Mode::Prompt(Prompt::LongTimerNudge));
     app.draft_set_insert("60".to_string());
     handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert_eq!(app.nav.mode, Mode::Settings);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Settings));
     assert_eq!(app.long_timer_nudge_seconds(), 3600); // 60 min
 }
 
@@ -1350,7 +1350,7 @@ fn long_timer_nudge_enter_sets_new_threshold() {
 #[test]
 fn rounding_increment_r_cycles_and_persists() {
     let mut app = build_app();
-    app.nav.mode = Mode::Settings;
+    app.nav.mode = Mode::Screen(Screen::Settings);
     assert_eq!(
         crate::app::rounding_increment_label(app.prefs.rounding_increment),
         "0.1h"
@@ -1365,7 +1365,11 @@ fn rounding_increment_r_cycles_and_persists() {
         "0.25h",
         "first cycle → quarters"
     );
-    assert_eq!(app.nav.mode, Mode::Settings, "stays in settings");
+    assert_eq!(
+        app.nav.mode,
+        Mode::Screen(Screen::Settings),
+        "stays in settings"
+    );
 
     handle_settings(
         &mut app,
@@ -1393,7 +1397,7 @@ fn rounding_increment_r_cycles_and_persists() {
 #[test]
 fn settings_advertised_keys_apply_in_settings_mode() {
     let mut app = build_app();
-    app.nav.mode = Mode::Settings;
+    app.nav.mode = Mode::Screen(Screen::Settings);
 
     // Density cycles: comfortable → cozy.
     handle_settings(
@@ -1453,7 +1457,7 @@ fn settings_advertised_keys_apply_in_settings_mode() {
         &mut app,
         KeyEvent::new(KeyCode::Char('Z'), KeyModifiers::NONE),
     );
-    assert_eq!(app.nav.mode, Mode::PickTheme);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::Theme));
 }
 
 // ---- stale-timer startup prompt ----
@@ -1472,7 +1476,7 @@ fn stale_timer_app(secs: i64, name: &str) -> App {
     let raw = format!("Draft +Smith start:{start}\n");
     let _ = std::fs::write(&path, &raw);
     let mut app = App::new(path, raw, "2026-05-07".into(), Config::default());
-    app.nav.mode = Mode::StaleTimer;
+    app.nav.mode = Mode::Nudge(Nudge::StaleTimer);
     app
 }
 
@@ -1485,7 +1489,7 @@ fn stale_timer_s_stops_and_logs_elapsed() {
     handle_stale_timer(&mut app, key('S'));
 
     assert!(!app.timer_running(), "S must stop the timer");
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
     assert!(
         app.tasks()[0].dur.unwrap_or(0) > 7200,
         "S must log the elapsed time"
@@ -1501,7 +1505,7 @@ fn stale_timer_d_discards_gap() {
     handle_stale_timer(&mut app, key('d'));
 
     assert!(!app.timer_running(), "d must stop the timer");
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
     let raw = app.task_raw(0).unwrap_or_default();
     assert!(!raw.contains("start:"), "start: must be stripped: {raw}");
     assert_eq!(app.tasks()[0].dur, None, "no time may be credited");
@@ -1515,7 +1519,7 @@ fn stale_timer_k_keeps_counting() {
     handle_stale_timer(&mut app, key('k'));
 
     assert!(app.timer_running(), "k must keep the timer running");
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
 }
 
 /// `K` also acknowledges the timer is long-running: the long-timer popup must
@@ -1528,7 +1532,7 @@ fn stale_timer_k_does_not_rearm_long_timer_popup() {
 
     handle_stale_timer(&mut app, key('k'));
 
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
     assert!(app.timer_running());
     assert!(
         app.session.long_timer_nudge_active,
@@ -1538,7 +1542,7 @@ fn stale_timer_k_does_not_rearm_long_timer_popup() {
         !app.check_nudges(),
         "the long-timer popup must not re-fire immediately after keep"
     );
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
 }
 
 // ---- idle nudge recovery actions (S / M task picker) ----
@@ -1548,11 +1552,11 @@ fn stale_timer_k_does_not_rearm_long_timer_popup() {
 #[test]
 fn idle_nudge_s_opens_start_timer_picker() {
     let mut app = build_app();
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
 
     handle_idle_nudge(&mut app, key('S'));
 
-    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
     assert_eq!(
         app.session.nudge_picker.as_ref().map(|p| p.action),
         Some(crate::app::NudgePickAction::StartTimer)
@@ -1563,11 +1567,11 @@ fn idle_nudge_s_opens_start_timer_picker() {
 #[test]
 fn idle_nudge_m_opens_add_time_picker() {
     let mut app = build_app();
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
 
     handle_idle_nudge(&mut app, key('M'));
 
-    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
     assert_eq!(
         app.session.nudge_picker.as_ref().map(|p| p.action),
         Some(crate::app::NudgePickAction::AddTime)
@@ -1579,10 +1583,10 @@ fn idle_nudge_m_opens_add_time_picker() {
 #[test]
 fn pick_nudge_task_enter_starts_timer_on_chosen() {
     let mut app = build_app(); // tasks a, b, c
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
 
     handle_idle_nudge(&mut app, key('s'));
-    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
     // The selection runs on the real list: j/k navigate it, Enter commits
     // the highlighted task.
     handle_pick_nudge_task(&mut app, key('j'), &KeyBindings::default());
@@ -1595,16 +1599,16 @@ fn pick_nudge_task_enter_starts_timer_on_chosen() {
 
     assert!(app.timer_running());
     assert!(app.is_timer_running_on(2), "timer must run on task c");
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
 }
 
 /// Esc in the picker returns to the idle nudge popup.
 #[test]
 fn pick_nudge_task_esc_returns_to_idle_nudge() {
     let mut app = build_app();
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
     handle_idle_nudge(&mut app, key('s'));
-    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
 
     handle_pick_nudge_task(
         &mut app,
@@ -1612,7 +1616,7 @@ fn pick_nudge_task_esc_returns_to_idle_nudge() {
         &KeyBindings::default(),
     );
 
-    assert_eq!(app.nav.mode, Mode::IdleNudge);
+    assert_eq!(app.nav.mode, Mode::Nudge(Nudge::Idle));
 }
 
 /// `t` inside the list-based selection starts the timer on the highlighted
@@ -1621,11 +1625,11 @@ fn pick_nudge_task_esc_returns_to_idle_nudge() {
 #[test]
 fn nudge_select_t_starts_timer_and_exits() {
     let mut app = build_app(); // tasks a, b, c
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
     app.session.pre_nudge_view = Some(View::Timesheet);
 
     handle_idle_nudge(&mut app, key('s'));
-    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
     handle_pick_nudge_task(&mut app, key('j'), &KeyBindings::default());
     handle_pick_nudge_task(&mut app, key('t'), &KeyBindings::default());
 
@@ -1633,7 +1637,7 @@ fn nudge_select_t_starts_timer_and_exits() {
     assert!(app.is_timer_running_on(1), "timer on the highlighted task");
     assert_eq!(
         app.nav.mode,
-        Mode::Normal,
+        Mode::Screen(Screen::Normal),
         "selection completes when a timer starts"
     );
     assert_eq!(app.nav.view, View::Timesheet, "pre-nudge view restored");
@@ -1646,19 +1650,19 @@ fn nudge_select_t_starts_timer_and_exits() {
 #[test]
 fn nudge_select_search_filters_list() {
     let mut app = build_app(); // tasks a, b, c
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
 
     handle_idle_nudge(&mut app, key('s'));
-    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
     handle_pick_nudge_task(&mut app, key('/'), &KeyBindings::default());
-    assert_eq!(app.nav.mode, Mode::Search);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Search));
 
     handle_search(&mut app, key('b'));
     handle_search(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     assert_eq!(
         app.nav.mode,
-        Mode::PickNudgeTask,
+        Mode::Picker(Picker::NudgeTask),
         "accepting the search returns to the selection"
     );
     assert_eq!(app.filter().search, "b");
@@ -1675,16 +1679,16 @@ fn nudge_select_search_filters_list() {
 fn nudge_select_fp_filter_then_enter_starts_timer() {
     let mut app =
         crate::app::test_support::build_app("Brief +Acme\ndraft motion +Acme\ncall +Globex\n");
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
     app.session.pre_nudge_view = Some(View::Timesheet);
 
     handle_idle_nudge(&mut app, key('s'));
-    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
 
     // f p opens the project picker over the selection.
     handle_pick_nudge_task(&mut app, key('f'), &KeyBindings::default());
     handle_pick_nudge_task(&mut app, key('p'), &KeyBindings::default());
-    assert_eq!(app.nav.mode, Mode::PickProject);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::Project));
     assert!(
         app.session.nudge_picker.is_some(),
         "selection must survive opening the filter picker"
@@ -1696,7 +1700,7 @@ fn nudge_select_fp_filter_then_enter_starts_timer() {
     handle_pick(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert_eq!(
         app.nav.mode,
-        Mode::PickNudgeTask,
+        Mode::Picker(Picker::NudgeTask),
         "committing the filter returns to the selection"
     );
     assert_eq!(app.filter().project.as_deref(), Some("Acme"));
@@ -1714,7 +1718,7 @@ fn nudge_select_fp_filter_then_enter_starts_timer() {
         app.is_timer_running_on(0),
         "timer on the highlighted Acme task"
     );
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
     assert_eq!(app.nav.view, View::Timesheet, "pre-nudge view restored");
     assert!(app.session.nudge_picker.is_none());
     assert_eq!(
@@ -1730,16 +1734,16 @@ fn nudge_select_fp_filter_then_enter_starts_timer() {
 fn nudge_select_fp_esc_returns_to_selection() {
     let mut app =
         crate::app::test_support::build_app("Brief +Acme\ndraft motion +Acme\ncall +Globex\n");
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
 
     handle_idle_nudge(&mut app, key('s'));
     handle_pick_nudge_task(&mut app, key('f'), &KeyBindings::default());
     handle_pick_nudge_task(&mut app, key('p'), &KeyBindings::default());
-    assert_eq!(app.nav.mode, Mode::PickProject);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::Project));
 
     handle_pick(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
 
-    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
     assert_eq!(app.filter().project.as_deref(), None);
     assert!(
         app.session.nudge_picker.is_some(),
@@ -1751,7 +1755,7 @@ fn nudge_select_fp_esc_returns_to_selection() {
         KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
         &KeyBindings::default(),
     );
-    assert_eq!(app.nav.mode, Mode::IdleNudge);
+    assert_eq!(app.nav.mode, Mode::Nudge(Nudge::Idle));
 }
 
 /// `+` (add project) from the selection keeps it alive: committing the tag
@@ -1761,14 +1765,14 @@ fn nudge_select_fp_esc_returns_to_selection() {
 #[test]
 fn nudge_select_plus_adds_project_and_keeps_selection() {
     let mut app = crate::app::test_support::build_app("Brief\ncall +Globex\n");
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
     app.session.pre_nudge_view = Some(View::Timesheet);
 
     handle_idle_nudge(&mut app, key('s'));
-    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
 
     handle_pick_nudge_task(&mut app, key('+'), &KeyBindings::default());
-    assert_eq!(app.nav.mode, Mode::PromptProject);
+    assert_eq!(app.nav.mode, Mode::Prompt(Prompt::Project));
     assert!(
         app.session.nudge_picker.is_some(),
         "selection must survive opening the + prompt"
@@ -1780,7 +1784,7 @@ fn nudge_select_plus_adds_project_and_keeps_selection() {
 
     assert_eq!(
         app.nav.mode,
-        Mode::PickNudgeTask,
+        Mode::Picker(Picker::NudgeTask),
         "committing the tag returns to the selection"
     );
     assert!(
@@ -1795,7 +1799,7 @@ fn nudge_select_plus_adds_project_and_keeps_selection() {
     );
     assert!(app.timer_running());
     assert!(app.is_timer_running_on(0));
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
     assert_eq!(app.nav.view, View::Timesheet, "pre-nudge view restored");
 }
 
@@ -1806,16 +1810,16 @@ fn nudge_select_plus_adds_project_and_keeps_selection() {
 #[test]
 fn nudge_select_plus_esc_returns_to_selection() {
     let mut app = crate::app::test_support::build_app("Brief\ncall +Globex\n");
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
     handle_idle_nudge(&mut app, key('s'));
 
     handle_pick_nudge_task(&mut app, key('+'), &KeyBindings::default());
-    assert_eq!(app.nav.mode, Mode::PromptProject);
+    assert_eq!(app.nav.mode, Mode::Prompt(Prompt::Project));
     let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
     handle_prompt(&mut app, esc); // close the suggestion popup
     handle_prompt(&mut app, esc); // exit the prompt
 
-    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
     assert!(app.session.nudge_picker.is_some());
     // And the selection itself still Escs back to the nudge.
     handle_pick_nudge_task(
@@ -1823,7 +1827,7 @@ fn nudge_select_plus_esc_returns_to_selection() {
         KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
         &KeyBindings::default(),
     );
-    assert_eq!(app.nav.mode, Mode::IdleNudge);
+    assert_eq!(app.nav.mode, Mode::Nudge(Nudge::Idle));
 }
 
 /// `c` (toggle context) behaves like `+`: the selection survives the tag
@@ -1831,18 +1835,18 @@ fn nudge_select_plus_esc_returns_to_selection() {
 #[test]
 fn nudge_select_c_toggles_context_and_keeps_selection() {
     let mut app = crate::app::test_support::build_app("Brief\ncall +Globex\n");
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
     handle_idle_nudge(&mut app, key('s'));
-    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
 
     handle_pick_nudge_task(&mut app, key('c'), &KeyBindings::default());
-    assert_eq!(app.nav.mode, Mode::PromptContext);
+    assert_eq!(app.nav.mode, Mode::Prompt(Prompt::Context));
     for c in ['c', 'o', 'u', 'r', 't'] {
         handle_prompt(&mut app, key(c));
     }
     handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
-    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
     assert!(app.session.nudge_picker.is_some());
     assert!(
         app.store.tasks()[0].raw.contains("@court"),
@@ -1855,19 +1859,19 @@ fn nudge_select_c_toggles_context_and_keeps_selection() {
 #[test]
 fn nudge_select_fs_esc_returns_to_selection() {
     let mut app = crate::app::test_support::build_app("a\nb\nc\n");
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
     handle_idle_nudge(&mut app, key('s'));
 
     // Search mid-selection, then save it.
     handle_pick_nudge_task(&mut app, key('/'), &KeyBindings::default());
     handle_search(&mut app, key('b'));
     handle_search(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
     assert_eq!(app.filter().search, "b");
 
     handle_pick_nudge_task(&mut app, key('f'), &KeyBindings::default());
     handle_pick_nudge_task(&mut app, key('s'), &KeyBindings::default());
-    assert_eq!(app.nav.mode, Mode::PromptSaveFilter);
+    assert_eq!(app.nav.mode, Mode::Prompt(Prompt::SaveFilter));
     assert!(
         app.session.nudge_picker.is_some(),
         "selection must survive opening the save-filter prompt"
@@ -1875,7 +1879,7 @@ fn nudge_select_fs_esc_returns_to_selection() {
 
     handle_prompt(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
 
-    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
     assert!(app.session.nudge_picker.is_some());
     assert_eq!(app.filter().search, "b", "search stays applied");
 }
@@ -1886,7 +1890,7 @@ fn nudge_select_fs_esc_returns_to_selection() {
 #[test]
 fn nudge_select_fs_enter_returns_to_selection() {
     let mut app = crate::app::test_support::build_app("a\nb\nc\n");
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
     handle_idle_nudge(&mut app, key('s'));
 
     handle_pick_nudge_task(&mut app, key('/'), &KeyBindings::default());
@@ -1894,7 +1898,7 @@ fn nudge_select_fs_enter_returns_to_selection() {
     handle_search(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     handle_pick_nudge_task(&mut app, key('f'), &KeyBindings::default());
     handle_pick_nudge_task(&mut app, key('s'), &KeyBindings::default());
-    assert_eq!(app.nav.mode, Mode::PromptSaveFilter);
+    assert_eq!(app.nav.mode, Mode::Prompt(Prompt::SaveFilter));
 
     // Empty draft: upsert fails with "filter name required" — the mode
     // return happens first, and no config write occurs.
@@ -1902,7 +1906,7 @@ fn nudge_select_fs_enter_returns_to_selection() {
 
     assert_eq!(
         app.nav.mode,
-        Mode::PickNudgeTask,
+        Mode::Picker(Picker::NudgeTask),
         "Enter on the save-filter prompt returns to the selection"
     );
     assert!(app.session.nudge_picker.is_some());
@@ -1915,19 +1919,19 @@ fn nudge_select_fs_enter_returns_to_selection() {
 #[test]
 fn nudge_select_nudge_prompt_pushed_over_selection_pops_back() {
     let mut app = crate::app::test_support::build_app("a\nb\nc\n");
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
     handle_idle_nudge(&mut app, key('s'));
-    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
 
     // Model the palette's ConfigureIdleNudge: pushed over the selection
     // while session.nudge_picker is still set.
-    app.nav.push_mode(Mode::PromptIdleNudge);
+    app.nav.push_mode(Mode::Prompt(Prompt::IdleNudge));
     assert!(app.session.nudge_picker.is_some());
     handle_prompt(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
 
     assert_eq!(
         app.nav.mode,
-        Mode::PickNudgeTask,
+        Mode::Picker(Picker::NudgeTask),
         "pop restores the selection, not Normal"
     );
     assert!(
@@ -1943,14 +1947,18 @@ fn nudge_select_nudge_prompt_pushed_over_selection_pops_back() {
 #[test]
 fn nudge_select_v_abandons_to_timesheet_cleanly() {
     let mut app = crate::app::test_support::build_app("a\nb\nc\n");
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
     app.session.pre_nudge_view = Some(View::Timesheet);
     handle_idle_nudge(&mut app, key('s'));
-    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
 
     handle_pick_nudge_task(&mut app, key('V'), &KeyBindings::default());
 
-    assert_eq!(app.nav.mode, Mode::Normal, "selection ends on V");
+    assert_eq!(
+        app.nav.mode,
+        Mode::Screen(Screen::Normal),
+        "selection ends on V"
+    );
     assert_eq!(app.nav.view, View::Timesheet, "V opens the timesheet");
     assert!(app.session.nudge_picker.is_none());
     assert!(
@@ -1961,7 +1969,7 @@ fn nudge_select_v_abandons_to_timesheet_cleanly() {
     // next tick (backdate disabled so only the fresh clock is tested).
     app.session.idle_backdated = true;
     assert!(!app.check_nudges(), "no immediate nudge re-fire");
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
 }
 
 /// The V exit restores the search/filter that was active before the nudge.
@@ -1969,7 +1977,7 @@ fn nudge_select_v_abandons_to_timesheet_cleanly() {
 fn nudge_select_v_exit_restores_pre_nudge_filter() {
     let mut app = crate::app::test_support::build_app("First +A\nSecond +B\n");
     app.set_project_filter(Some("A".into()));
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
     handle_idle_nudge(&mut app, key('s'));
     assert!(
         app.filter().project.is_none(),
@@ -1992,13 +2000,13 @@ fn nudge_select_v_exit_restores_pre_nudge_filter() {
 #[test]
 fn nudge_select_a_abandons_to_archive_cleanly() {
     let mut app = crate::app::test_support::build_app("a\nb\nc\n");
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
     handle_idle_nudge(&mut app, key('s'));
-    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
 
     handle_pick_nudge_task(&mut app, key('a'), &KeyBindings::default());
 
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
     assert_eq!(app.nav.view, View::Archive);
     assert!(app.session.nudge_picker.is_none());
     app.session.idle_backdated = true;
@@ -2006,7 +2014,7 @@ fn nudge_select_a_abandons_to_archive_cleanly() {
         !app.check_nudges(),
         "no immediate nudge re-fire over the archive"
     );
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
 }
 
 /// A palette action (e.g. OpenTimesheet) can leave the selection open in
@@ -2015,9 +2023,9 @@ fn nudge_select_a_abandons_to_archive_cleanly() {
 #[test]
 fn nudge_select_stale_view_exits_before_key() {
     let mut app = crate::app::test_support::build_app("a\nb\nc\n");
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
     handle_idle_nudge(&mut app, key('s'));
-    assert_eq!(app.nav.mode, Mode::PickNudgeTask); // Model the palette's OpenTimesheet: mode unchanged, view switched.
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask)); // Model the palette's OpenTimesheet: mode unchanged, view switched.
     app.set_view(View::Timesheet);
     assert!(app.session.nudge_picker.is_some());
 
@@ -2025,7 +2033,11 @@ fn nudge_select_stale_view_exits_before_key() {
     // the key must be re-dispatched in Normal mode and take effect.
     handle_pick_nudge_task(&mut app, key('l'), &KeyBindings::default());
 
-    assert_eq!(app.nav.mode, Mode::Normal, "stale selection ends");
+    assert_eq!(
+        app.nav.mode,
+        Mode::Screen(Screen::Normal),
+        "stale selection ends"
+    );
     assert_eq!(
         app.nav.view,
         View::Timesheet,
@@ -2044,13 +2056,13 @@ fn nudge_select_stale_view_exits_before_key() {
 #[test]
 fn nudge_select_m_still_abandons_to_manual_entry() {
     let mut app = crate::app::test_support::build_app("a\nb\nc\n");
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
     handle_idle_nudge(&mut app, key('s'));
-    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
 
     handle_pick_nudge_task(&mut app, key('M'), &KeyBindings::default());
 
-    assert_eq!(app.nav.mode, Mode::ManualEntryChoice);
+    assert_eq!(app.nav.mode, Mode::Nudge(Nudge::ManualEntryChoice));
     assert!(
         app.session.nudge_picker.is_none(),
         "M ends the selection: it is a different recovery action"
@@ -2091,7 +2103,7 @@ fn timesheet_brackets_toggle_sidebars() {
 #[test]
 fn manage_projects_brackets_toggle_sidebars() {
     let mut app = build_app();
-    app.nav.mode = Mode::ManageProjects;
+    app.nav.mode = Mode::Screen(Screen::ManageProjects);
     let left = app.prefs.layout.left;
     let right = app.prefs.layout.right;
 
@@ -2102,7 +2114,7 @@ fn manage_projects_brackets_toggle_sidebars() {
     assert_ne!(app.prefs.layout.right, right);
     assert_eq!(
         app.nav.mode,
-        Mode::ManageProjects,
+        Mode::Screen(Screen::ManageProjects),
         "sidebar toggles must not leave the project manager"
     );
 }
@@ -2112,10 +2124,10 @@ fn manage_projects_brackets_toggle_sidebars() {
 #[test]
 fn idle_nudge_n_esc_returns_to_nudge() {
     let mut app = build_app();
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
 
     handle_idle_nudge(&mut app, key('N'));
-    assert_eq!(app.nav.mode, Mode::Insert);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Insert));
     assert!(
         app.session.from_nudge,
         "insert must be marked as nudge-born"
@@ -2128,7 +2140,7 @@ fn idle_nudge_n_esc_returns_to_nudge() {
 
     assert_eq!(
         app.nav.mode,
-        Mode::IdleNudge,
+        Mode::Nudge(Nudge::Idle),
         "Esc from the nudge's N insert must return to the nudge"
     );
     assert!(
@@ -2142,15 +2154,19 @@ fn idle_nudge_n_esc_returns_to_nudge() {
 #[test]
 fn idle_nudge_n_save_exits_to_normal() {
     let mut app = build_app();
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
 
     handle_idle_nudge(&mut app, key('N'));
-    assert_eq!(app.nav.mode, Mode::Insert);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Insert));
     app.draft_set_insert("Buy milk".into());
 
     handle_insert(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
-    assert_eq!(app.nav.mode, Mode::Normal, "save must exit to Normal");
+    assert_eq!(
+        app.nav.mode,
+        Mode::Screen(Screen::Normal),
+        "save must exit to Normal"
+    );
     assert_eq!(app.tasks().len(), 4, "the new task must be saved");
     assert!(!app.session.from_nudge, "marker must be cleared on save");
 }
@@ -2160,13 +2176,13 @@ fn idle_nudge_n_save_exits_to_normal() {
 #[test]
 fn plain_insert_esc_exits_to_normal() {
     let mut app = build_app();
-    app.nav.mode = Mode::Insert;
+    app.nav.mode = Mode::Screen(Screen::Insert);
     app.draft_clear();
 
     handle_insert(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     handle_insert(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
 
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
 }
 
 /// `M` → picker → Enter (add-time prompt): Esc from that prompt must return
@@ -2174,24 +2190,24 @@ fn plain_insert_esc_exits_to_normal() {
 #[test]
 fn idle_nudge_m_add_time_esc_returns_to_nudge() {
     let mut app = build_app();
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
 
     handle_idle_nudge(&mut app, key('M'));
-    assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
     // Commit the picker → the add-time prompt.
     handle_pick_nudge_task(
         &mut app,
         KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
         &KeyBindings::default(),
     );
-    assert_eq!(app.nav.mode, Mode::PromptAddTime);
+    assert_eq!(app.nav.mode, Mode::Prompt(Prompt::AddTime));
     assert!(app.session.from_nudge);
 
     handle_prompt(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
 
     assert_eq!(
         app.nav.mode,
-        Mode::IdleNudge,
+        Mode::Nudge(Nudge::Idle),
         "Esc from the nudge's add-time prompt must return to the nudge"
     );
     assert!(!app.session.from_nudge);
@@ -2203,7 +2219,7 @@ fn idle_nudge_m_add_time_esc_returns_to_nudge() {
 #[test]
 fn idle_nudge_m_add_time_invalid_duration_returns_to_nudge() {
     let mut app = build_app();
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
 
     handle_idle_nudge(&mut app, key('M'));
     handle_pick_nudge_task(
@@ -2211,7 +2227,7 @@ fn idle_nudge_m_add_time_invalid_duration_returns_to_nudge() {
         KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
         &KeyBindings::default(),
     );
-    assert_eq!(app.nav.mode, Mode::PromptAddTime);
+    assert_eq!(app.nav.mode, Mode::Prompt(Prompt::AddTime));
     assert!(app.session.from_nudge);
 
     app.draft_set("not-a-duration".into());
@@ -2219,7 +2235,7 @@ fn idle_nudge_m_add_time_invalid_duration_returns_to_nudge() {
 
     assert_eq!(
         app.nav.mode,
-        Mode::IdleNudge,
+        Mode::Nudge(Nudge::Idle),
         "a failed add must keep the reminder alive"
     );
     assert!(
@@ -2240,7 +2256,7 @@ fn idle_nudge_m_add_time_invalid_duration_returns_to_nudge() {
 #[test]
 fn idle_nudge_m_add_time_valid_exits_to_normal() {
     let mut app = build_app();
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
 
     handle_idle_nudge(&mut app, key('M'));
     handle_pick_nudge_task(
@@ -2254,7 +2270,7 @@ fn idle_nudge_m_add_time_valid_exits_to_normal() {
 
     assert_eq!(
         app.nav.mode,
-        Mode::Normal,
+        Mode::Screen(Screen::Normal),
         "a real add exits the nudge flow"
     );
     assert!(!app.session.from_nudge);
@@ -2271,7 +2287,7 @@ fn idle_nudge_m_add_time_valid_exits_to_normal() {
 #[test]
 fn idle_nudge_m_add_time_day_boundary_invalid_returns_to_nudge() {
     let mut app = build_app_with_archive("Draft +Smith dur:7200 log:2026-05-05\n", None);
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
 
     handle_idle_nudge(&mut app, key('M'));
     handle_pick_nudge_task(
@@ -2283,13 +2299,13 @@ fn idle_nudge_m_add_time_day_boundary_invalid_returns_to_nudge() {
     // Validation is deferred until the day-boundary prompt resolves.
     app.draft_set("oops".into());
     handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert_eq!(app.nav.mode, Mode::PromptDayBoundary);
+    assert_eq!(app.nav.mode, Mode::Prompt(Prompt::DayBoundary));
 
     handle_day_boundary(&mut app, key('c'));
 
     assert_eq!(
         app.nav.mode,
-        Mode::IdleNudge,
+        Mode::Nudge(Nudge::Idle),
         "a failed day-boundary resolution must keep the reminder"
     );
     assert!(!app.session.from_nudge);
@@ -2308,7 +2324,7 @@ fn idle_nudge_m_add_time_day_boundary_invalid_returns_to_nudge() {
 #[test]
 fn idle_nudge_m_add_time_day_boundary_new_entry_invalid_returns_to_nudge() {
     let mut app = build_app_with_archive("Draft +Smith dur:7200 log:2026-05-05\n", None);
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
 
     handle_idle_nudge(&mut app, key('M'));
     handle_pick_nudge_task(
@@ -2319,13 +2335,13 @@ fn idle_nudge_m_add_time_day_boundary_new_entry_invalid_returns_to_nudge() {
 
     app.draft_set("oops".into());
     handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert_eq!(app.nav.mode, Mode::PromptDayBoundary);
+    assert_eq!(app.nav.mode, Mode::Prompt(Prompt::DayBoundary));
 
     handle_day_boundary(&mut app, key('n'));
 
     assert_eq!(
         app.nav.mode,
-        Mode::IdleNudge,
+        Mode::Nudge(Nudge::Idle),
         "a failed 'new entry' resolution must keep the reminder"
     );
     assert!(!app.session.from_nudge);
@@ -2347,7 +2363,7 @@ fn idle_nudge_m_add_time_day_boundary_new_entry_invalid_returns_to_nudge() {
 #[test]
 fn idle_nudge_m_add_time_day_boundary_esc_returns_to_nudge() {
     let mut app = build_app_with_archive("Draft +Smith dur:7200 log:2026-05-05\n", None);
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
 
     handle_idle_nudge(&mut app, key('M'));
     handle_pick_nudge_task(
@@ -2358,11 +2374,15 @@ fn idle_nudge_m_add_time_day_boundary_esc_returns_to_nudge() {
 
     app.draft_set("30".into());
     handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert_eq!(app.nav.mode, Mode::PromptDayBoundary);
+    assert_eq!(app.nav.mode, Mode::Prompt(Prompt::DayBoundary));
 
     handle_day_boundary(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
 
-    assert_eq!(app.nav.mode, Mode::IdleNudge, "Esc keeps the reminder");
+    assert_eq!(
+        app.nav.mode,
+        Mode::Nudge(Nudge::Idle),
+        "Esc keeps the reminder"
+    );
     assert!(
         !app.session.from_nudge,
         "the flag must not leak into Normal"
@@ -2376,10 +2396,10 @@ fn idle_nudge_m_add_time_day_boundary_esc_returns_to_nudge() {
 #[test]
 fn plain_add_time_invalid_exits_to_normal() {
     let mut app = build_app();
-    app.nav.mode = Mode::ManualEntryChoice;
+    app.nav.mode = Mode::Nudge(Nudge::ManualEntryChoice);
 
     handle_manual_entry_choice(&mut app, key('A'));
-    assert_eq!(app.nav.mode, Mode::PromptAddTime);
+    assert_eq!(app.nav.mode, Mode::Prompt(Prompt::AddTime));
     assert!(!app.session.from_nudge);
 
     app.draft_set("nope".into());
@@ -2387,11 +2407,41 @@ fn plain_add_time_invalid_exits_to_normal() {
 
     assert_eq!(
         app.nav.mode,
-        Mode::Normal,
+        Mode::Screen(Screen::Normal),
         "non-nudge flow keeps its Normal exit"
     );
     assert!(!app.session.from_nudge);
     assert_eq!(app.tasks().len(), 3, "nothing may be saved");
+}
+
+/// `M` → `N` (new blank entry) is manual time entry: a typed `dur:` is read
+/// as flexible input (minutes/hours/clock time), so `dur:30` logs 30 *minutes*
+/// — not the 30 raw seconds the on-disk token would otherwise mean.
+#[test]
+fn manual_entry_new_converts_dur_minutes_to_seconds() {
+    let mut app = build_app();
+    app.nav.mode = Mode::Nudge(Nudge::ManualEntryChoice);
+
+    handle_manual_entry_choice(&mut app, key('N'));
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Insert));
+    assert!(
+        app.session.manual_time_entry,
+        "M→N must enable dur: conversion"
+    );
+
+    app.draft_set_insert("Call +client dur:30".into());
+    handle_insert(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
+    let raw = app
+        .tasks()
+        .last()
+        .map(|t| t.raw.clone())
+        .unwrap_or_default();
+    assert!(
+        raw.contains("dur:1800"),
+        "30m must be stored as 1800s, got: {raw}"
+    );
 }
 
 // ---- end-of-day review nudge ----
@@ -2400,12 +2450,12 @@ fn plain_add_time_invalid_exits_to_normal() {
 #[test]
 fn review_nudge_v_opens_timesheet() {
     let mut app = build_app();
-    app.nav.mode = Mode::ReviewNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Review);
 
     handle_review_nudge(&mut app, key('V'));
 
     assert_eq!(app.view(), View::Timesheet);
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
     assert_eq!(app.timesheet.date, app.today(), "anchored on today");
 }
 
@@ -2414,11 +2464,11 @@ fn review_nudge_v_opens_timesheet() {
 #[test]
 fn review_nudge_s_skips() {
     let mut app = build_app();
-    app.nav.mode = Mode::ReviewNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Review);
 
     handle_review_nudge(&mut app, key('s'));
 
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
     assert_eq!(app.view(), View::List);
 }
 
@@ -2436,10 +2486,14 @@ fn idle_nudge_skips_modes_with_unsaved_state() {
         std::time::Instant::now() - std::time::Duration::from_secs(60);
 
     // Insert mode with a half-typed draft.
-    app.nav.mode = Mode::Insert;
+    app.nav.mode = Mode::Screen(Screen::Insert);
     app.draft_set("half typed".into());
     assert!(!app.check_nudges(), "nudge must not fire in Insert mode");
-    assert_eq!(app.nav.mode, Mode::Insert, "Insert mode must be preserved");
+    assert_eq!(
+        app.nav.mode,
+        Mode::Screen(Screen::Insert),
+        "Insert mode must be preserved"
+    );
     assert_eq!(
         app.draft.text(),
         "half typed",
@@ -2447,27 +2501,27 @@ fn idle_nudge_skips_modes_with_unsaved_state() {
     );
 
     // Search mode with a filter typed.
-    app.nav.mode = Mode::Search;
+    app.nav.mode = Mode::Screen(Screen::Search);
     app.draft_set("needle".into());
     assert!(!app.check_nudges(), "nudge must not fire in Search mode");
-    assert_eq!(app.nav.mode, Mode::Search);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Search));
     assert_eq!(app.draft.text(), "needle");
 
     // Settings overlay.
-    app.nav.mode = Mode::Settings;
+    app.nav.mode = Mode::Screen(Screen::Settings);
     assert!(!app.check_nudges(), "nudge must not fire over Settings");
-    assert_eq!(app.nav.mode, Mode::Settings);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Settings));
 
     // Command palette.
-    app.nav.mode = Mode::CommandPalette;
+    app.nav.mode = Mode::Screen(Screen::CommandPalette);
     assert!(!app.check_nudges(), "nudge must not fire over the palette");
-    assert_eq!(app.nav.mode, Mode::CommandPalette);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::CommandPalette));
 
     // A text-input prompt.
-    app.nav.mode = Mode::PromptAddTime;
+    app.nav.mode = Mode::Prompt(Prompt::AddTime);
     app.draft_set("30".into());
     assert!(!app.check_nudges(), "nudge must not fire over a prompt");
-    assert_eq!(app.nav.mode, Mode::PromptAddTime);
+    assert_eq!(app.nav.mode, Mode::Prompt(Prompt::AddTime));
 }
 
 /// From Normal mode — no draft, no modal — the idle nudge fires as designed.
@@ -2478,7 +2532,27 @@ fn idle_nudge_fires_in_normal_mode() {
     app.session.last_timer_activity =
         std::time::Instant::now() - std::time::Duration::from_secs(60);
     assert!(app.check_nudges());
-    assert_eq!(app.nav.mode, Mode::IdleNudge);
+    assert_eq!(app.nav.mode, Mode::Nudge(Nudge::Idle));
+}
+
+/// `D`/Esc on the idle nudge escalates the reminder: each dismissal halves
+/// the wait until it fires again, so an untracked stretch can't be snoozed
+/// forever with the flat threshold.
+#[test]
+fn idle_nudge_dismiss_escalates_next_reminder() {
+    let mut app = build_app();
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
+    app.session.pre_nudge_view = Some(View::List);
+
+    handle_idle_nudge(&mut app, key('D'));
+
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
+    assert_eq!(app.view(), View::List, "pre-nudge view restored");
+    assert_eq!(app.session.idle_nudge_dismissals, 1);
+    assert_eq!(
+        app.effective_idle_nudge_seconds(),
+        app.prefs.idle_nudge_seconds / 2
+    );
 }
 
 // ---- prompt mode transitions ----
@@ -2486,19 +2560,19 @@ fn idle_nudge_fires_in_normal_mode() {
 #[test]
 fn idle_nudge_prompt_esc_returns_to_settings() {
     let mut app = build_app();
-    app.nav.mode = Mode::Settings;
-    app.nav.push_mode(Mode::PromptIdleNudge);
+    app.nav.mode = Mode::Screen(Screen::Settings);
+    app.nav.push_mode(Mode::Prompt(Prompt::IdleNudge));
     handle_prompt(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert_eq!(app.nav.mode, Mode::Settings);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Settings));
     assert!(app.draft.text().is_empty());
 }
 
 #[test]
 fn rename_prompt_esc_returns_to_manage_projects() {
     let mut app = build_app();
-    app.nav.mode = Mode::PromptRenameProject;
+    app.nav.mode = Mode::Prompt(Prompt::RenameProject);
     handle_prompt(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert_eq!(app.nav.mode, Mode::ManageProjects);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::ManageProjects));
     assert!(app.draft.text().is_empty());
 }
 
@@ -2690,18 +2764,18 @@ fn all_projects_collects_from_active_and_archive() {
 #[test]
 fn manage_projects_p_returns_to_normal() {
     let mut app = build_app();
-    app.nav.mode = Mode::ManageProjects;
+    app.nav.mode = Mode::Screen(Screen::ManageProjects);
     handle_manage_projects(
         &mut app,
         KeyEvent::new(KeyCode::Char('P'), KeyModifiers::NONE),
     );
-    assert_eq!(app.nav.mode, Mode::Normal);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
 }
 
 #[test]
 fn manage_projects_s_cycles_sort() {
     let mut app = build_app();
-    app.nav.mode = Mode::ManageProjects;
+    app.nav.mode = Mode::Screen(Screen::ManageProjects);
     let original = app.project_manager.project_sort;
     handle_manage_projects(
         &mut app,
@@ -2716,16 +2790,20 @@ fn manage_projects_s_cycles_sort() {
 #[test]
 fn manage_projects_search_esc_returns_to_manage_projects() {
     let mut app = build_app();
-    app.nav.mode = Mode::ManageProjects;
+    app.nav.mode = Mode::Screen(Screen::ManageProjects);
     handle_manage_projects(&mut app, key('/'));
-    assert_eq!(app.nav.mode, Mode::Search, "`/` must open search");
+    assert_eq!(
+        app.nav.mode,
+        Mode::Screen(Screen::Search),
+        "`/` must open search"
+    );
     assert_eq!(
         app.nav.peek_under(),
-        Some(Mode::ManageProjects),
+        Some(Mode::Screen(Screen::ManageProjects)),
         "search must be stacked over ManageProjects"
     );
     handle_search(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert_eq!(app.nav.mode, Mode::ManageProjects);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::ManageProjects));
 }
 
 /// The command palette pushes over the current mode and pops back to it,
@@ -2735,17 +2813,17 @@ fn palette_esc_restores_underlying_mode() {
     let mut app = build_app();
     app.nav.enter_visual();
     apply_action(&mut app, Action::OpenCommandPalette);
-    assert_eq!(app.nav.mode, Mode::CommandPalette);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::CommandPalette));
     assert_eq!(
         app.nav.peek_under(),
-        Some(Mode::Visual),
+        Some(Mode::Screen(Screen::Visual)),
         "palette must remember it opened over Visual"
     );
     crate::interactive::overlays::handle_command_palette(
         &mut app,
         KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
     );
-    assert_eq!(app.nav.mode, Mode::Visual);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Visual));
     assert!(app.nav.peek_under().is_none(), "stack must be empty");
 }
 
@@ -2756,15 +2834,15 @@ fn palette_launched_nudge_prompt_pops_back_to_caller() {
     let mut app = build_app();
     // Palette opened over Settings; Enter pops the palette back to Settings
     // *before* running the chosen action (mirroring handle_command_palette).
-    app.nav.mode = Mode::Settings;
-    app.nav.push_mode(Mode::CommandPalette);
+    app.nav.mode = Mode::Screen(Screen::Settings);
+    app.nav.push_mode(Mode::Screen(Screen::CommandPalette));
     app.nav.pop_mode();
     apply_action(&mut app, Action::ConfigureIdleNudge);
-    assert_eq!(app.nav.mode, Mode::PromptIdleNudge);
+    assert_eq!(app.nav.mode, Mode::Prompt(Prompt::IdleNudge));
     handle_prompt(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     assert_eq!(
         app.nav.mode,
-        Mode::Settings,
+        Mode::Screen(Screen::Settings),
         "nudge prompt must return to the mode the palette returned to"
     );
 }

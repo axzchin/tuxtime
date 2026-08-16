@@ -20,71 +20,132 @@ pub enum AddOutcome {
     Invalid,
 }
 
+/// The four kinds of state `tuxtime` can be in, each with its own sub-enum.
+/// Keeping them as separate enums (rather than one flat list of 30 variants)
+/// makes the categories explicit and lets a match arm group a whole category
+/// ("any prompt routes to the shared prompt handler") instead of repeating
+/// per-variant arms in every registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
+    /// Persistent full-screen states (the base modes).
+    Screen(Screen),
+    /// Text-input prompts (an inline `key:value` entry).
+    Prompt(Prompt),
+    /// `j/k` selection pickers.
+    Picker(Picker),
+    /// Transient popups, mostly automatic reminders.
+    Nudge(Nudge),
+}
+
+impl Mode {
+    /// True when this mode is a nudge popup (idle/long-timer/stale/review
+    /// or the manual-entry choice).
+    #[must_use]
+    pub const fn is_nudge(self) -> bool {
+        matches!(self, Mode::Nudge(_))
+    }
+
+    /// True when this mode is a text-input prompt.
+    #[must_use]
+    pub const fn is_prompt(self) -> bool {
+        matches!(self, Mode::Prompt(_))
+    }
+
+    /// True when this mode is a `j/k` selection picker.
+    #[must_use]
+    pub const fn is_picker(self) -> bool {
+        matches!(self, Mode::Picker(_))
+    }
+
+    /// True when this mode is a persistent screen.
+    #[must_use]
+    pub const fn is_screen(self) -> bool {
+        matches!(self, Mode::Screen(_))
+    }
+}
+
+/// Persistent full-screen states.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Screen {
     Normal,
     Insert,
     Search,
     Visual,
     Help,
     Settings,
-    PromptProject,    // text input → add project on current task
-    PromptContext,    // text input → add/remove context on current task
-    PickProject,      // j/k cycles through projects to filter by
-    PickContext,      // j/k cycles through contexts to filter by
-    PickSavedFilter,  // j/k cycles through saved searches to apply
-    PromptSaveFilter, // text input → name the current search and save it
-    /// Prompt to add time (in minutes/hours) to the current task's dur.
-    PromptAddTime,
-    /// Prompt to set the idle nudge threshold (minutes).
-    PromptIdleNudge,
-    /// Prompt to set the long-timer nudge threshold (minutes).
-    PromptLongTimerNudge,
-    /// Day-boundary prompt — starting a timer (or adding time) on a task
-    /// whose accumulated time belongs to a previous day. `[c]ontinue same
-    /// entry / [n]ew entry for today / [esc] cancel`.
-    PromptDayBoundary,
-    /// Calendar picker → jump the timesheet to a selected date.
-    PickTimesheetDate,
+    /// Project management view (`<P>`) — archive/unarchive/rename projects.
+    ManageProjects,
+    /// Fuzzy command palette over every action.
     CommandPalette,
-    /// QR + URL overlay for the in-TUI capture server. Any key
-    /// dismisses; press `s` again to re-open without rebinding (the
-    /// server stays running once started).
+    /// QR + URL overlay for the in-TUI capture server. Any key dismisses;
+    /// press `s` again to re-open without rebinding (the server stays
+    /// running once started).
     Share,
-    /// Theme picker dialog — j/k to preview themes, Enter to accept,
-    /// Esc to revert.
-    PickTheme,
     /// First-run welcome prompt, shown when `tuxtime` is launched with no
     /// target and no `./todo.txt` exists. `c` creates `./todo.txt`, `s`
     /// opens the bundled sample, `q`/`Esc` quits without creating anything.
     Welcome,
-    /// Idle nudge popup — shown when no timer has been running for the configured duration.
+}
+
+/// Text-input prompts (an inline `key:value` entry).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Prompt {
+    /// Add project on the current task.
+    Project,
+    /// Add/remove context on the current task.
+    Context,
+    /// Name the current search and save it.
+    SaveFilter,
+    /// Add time (minutes/hours) to the current task's `dur:`.
+    AddTime,
+    /// Set the idle nudge threshold (minutes).
     IdleNudge,
-    /// Long-timer nudge popup — shown when a timer has been running past the
-    /// configured threshold (from Normal mode only, so it never destroys
-    /// in-progress composition). `[S]top timer / [D]ismiss`.
+    /// Set the long-timer nudge threshold (minutes).
     LongTimerNudge,
+    /// Rename a project (triggered from the project management view).
+    RenameProject,
+    /// Day-boundary choice — starting a timer (or adding time) on a task
+    /// whose accumulated time belongs to a previous day. `[c]ontinue same
+    /// entry / [n]ew entry for today / [esc] cancel`.
+    DayBoundary,
+}
+
+/// `j/k` selection pickers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Picker {
+    /// Cycle through projects to filter by.
+    Project,
+    /// Cycle through contexts to filter by.
+    Context,
+    /// Cycle through saved searches to apply.
+    SavedFilter,
+    /// Preview themes; Enter accepts, Esc reverts.
+    Theme,
+    /// Calendar picker → jump the timesheet to a selected date.
+    TimesheetDate,
+    /// Nudge task picker — choose which task to time (`S`/`M` from the idle
+    /// nudge). `j/k` navigate, `Enter` commits, `Esc` returns to the nudge.
+    NudgeTask,
+}
+
+/// Transient popups, mostly automatic reminders.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Nudge {
+    /// Idle nudge — no timer has been running for the configured duration.
+    Idle,
+    /// Long-timer nudge — a timer has run past the configured threshold.
+    /// `[S]top timer / [D]ismiss`.
+    LongTimer,
     /// Stale-timer startup prompt — a timer was left running when the app
     /// last closed (or was killed) and has since exceeded the long-timer
     /// threshold. `[k]eep counting / [s]top & log / [d]iscard gap`, so a
-    /// zombie session (e.g. closed terminal overnight) never silently bills
-    /// the away time. Shown once at launch, before any long-timer nudge.
+    /// zombie session never silently bills the away time.
     StaleTimer,
-    /// Nudge task picker — reached via `S`/`M` from the idle nudge. Lists
-    /// open tasks so the user consciously chooses which task to start timing
-    /// (or add time to), instead of blindly hitting whatever the cursor is
-    /// on. `j/k` navigate, `Enter` commits, `Esc` returns to the nudge.
-    PickNudgeTask,
-    /// End-of-day review nudge — once per day, after the configured
-    /// `review_time`, remind the user to reconcile the day's entries.
+    /// End-of-day review nudge — reconcile the day's entries.
     /// `[V]iew timesheet / [M] add time / [s]kip for today`.
-    ReviewNudge,
-    /// Manual entry choice popup — [C]urrent task description or [N]ew blank entry.
+    Review,
+    /// Manual-entry choice popup — current task description or new blank entry.
     ManualEntryChoice,
-    /// Project management view (`<P>`) — archive/unarchive/rename projects.
-    ManageProjects,
-    /// Prompt to rename a project (triggered from the project management view).
-    PromptRenameProject,
 }
 
 /// Top-level views. The explicit discriminants are the canonical slot

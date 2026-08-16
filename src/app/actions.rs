@@ -1,7 +1,8 @@
-//! App-level mutation wrappers. Each resolves the cursor to an absolute task
+//! App-level action handlers. Each resolves the cursor to an absolute task
 //! index, delegates to the headless [`Store`](crate::core::Store), then maps the
 //! returned outcome to a flash message and refreshes the visible cache/cursor.
 //! All task logic (recurrence, persistence, reconciliation) lives in the store.
+//! The store's own mutation implementations live in `core::mutations`, not here.
 
 use super::App;
 use super::types::{AddOutcome, View};
@@ -610,7 +611,10 @@ mod tests {
         app.recompute_visible();
 
         app.add_time_to_current_from_input("30");
-        assert_eq!(app.nav.mode(), crate::app::Mode::PromptDayBoundary);
+        assert_eq!(
+            app.nav.mode(),
+            crate::app::Mode::Prompt(crate::app::Prompt::DayBoundary)
+        );
         crate::interactive::handle_day_boundary(&mut app, key('c'));
 
         let raw = &app.tasks()[0].raw;

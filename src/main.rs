@@ -10,7 +10,7 @@ use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, Ke
 
 use std::io::Write;
 
-use tuxtime::app::{App, Mode};
+use tuxtime::app::{App, Mode, Nudge, Screen};
 use tuxtime::cli;
 use tuxtime::config::Config;
 use tuxtime::config_watcher;
@@ -44,17 +44,20 @@ fn main() -> Result<()> {
             update::run()?;
             return Ok(());
         }
-        Some("--sample") => (cli::sample_path()?, Mode::Normal),
+        Some("--sample") => (cli::sample_path()?, Mode::Screen(Screen::Normal)),
         Some(s) if s.starts_with('-') => {
             eprintln!("tuxtime: unknown option: {s}");
             eprintln!("try `tuxtime --help`");
             std::process::exit(2);
         }
         _ => match cli::resolve_target(arg)? {
-            cli::Target::File(p) => (p, Mode::Normal),
+            cli::Target::File(p) => (p, Mode::Screen(Screen::Normal)),
             // Open into the welcome prompt backed by an as-yet-uncreated
             // ./todo.txt; `handle_welcome` materializes the file the user picks.
-            cli::Target::FirstRun => (std::path::PathBuf::from("todo.txt"), Mode::Welcome),
+            cli::Target::FirstRun => (
+                std::path::PathBuf::from("todo.txt"),
+                Mode::Screen(Screen::Welcome),
+            ),
         },
     };
     // A freshly-created file is empty; otherwise read it. We accept NotFound
@@ -90,9 +93,9 @@ fn main() -> Result<()> {
     // accrued hours of away time — ask how to handle it before anything else
     // (keep counting / stop & log / discard the gap). The long-timer nudge
     // alone would silently present "log all of it" as the only real option.
-    if app_state.nav.mode == Mode::Normal && app_state.stale_timer_at_startup() {
+    if app_state.nav.mode == Mode::Screen(Screen::Normal) && app_state.stale_timer_at_startup() {
         app_state.session.pre_nudge_view = Some(app_state.nav.view);
-        app_state.nav.mode = Mode::StaleTimer;
+        app_state.nav.mode = Mode::Nudge(Nudge::StaleTimer);
     }
     // Start the config hot-reload watcher.
     let config_rx = app_state
@@ -114,7 +117,7 @@ fn main() -> Result<()> {
             "{n} theme(s) skipped — check ~/.config/tuxtime/themes/"
         )),
     }
-    if std::env::var_os("TUXEDO_NO_UPDATE_CHECK").is_none() {
+    if std::env::var_os("TUXTIME_NO_UPDATE_CHECK").is_none() {
         app_state.set_update_check(update::spawn_check());
     }
 
@@ -134,7 +137,7 @@ fn main() -> Result<()> {
     // alt-screen. Read it back from the app: the welcome prompt may have
     // rebound to the sample. Skip the line if the user quit the welcome
     // prompt without choosing — no file was opened.
-    if app_state.nav.mode != Mode::Welcome {
+    if app_state.nav.mode != Mode::Screen(Screen::Welcome) {
         eprintln!("tuxtime: {}", app_state.env.file_path.display());
     }
     result
@@ -277,7 +280,10 @@ fn run(
         let nudge_alert = app.session.long_timer_nudge_active
             || matches!(
                 app.nav.mode,
-                Mode::IdleNudge | Mode::LongTimerNudge | Mode::StaleTimer | Mode::ReviewNudge
+                Mode::Nudge(Nudge::Idle)
+                    | Mode::Nudge(Nudge::LongTimer)
+                    | Mode::Nudge(Nudge::StaleTimer)
+                    | Mode::Nudge(Nudge::Review)
             );
         if nudge_alert && !alerting {
             let _ = crossterm::execute!(

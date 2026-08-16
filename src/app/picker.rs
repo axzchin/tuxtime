@@ -1,5 +1,5 @@
 use super::App;
-use super::types::{Mode, TimesheetTaskRef, View};
+use super::types::{Mode, Picker, Screen, TimesheetTaskRef, View};
 use crate::core::filter::unique_values;
 
 impl App {
@@ -24,7 +24,7 @@ impl App {
             .unwrap_or_else(|| all[0].clone());
         self.filter.project = Some(seed);
         self.nav.cursor = 0;
-        self.nav.mode = Mode::PickProject;
+        self.nav.mode = Mode::Picker(Picker::Project);
         self.recompute_visible();
         self.flash_pick_project();
     }
@@ -44,7 +44,7 @@ impl App {
             .unwrap_or_else(|| all[0].clone());
         self.filter.context = Some(seed);
         self.nav.cursor = 0;
-        self.nav.mode = Mode::PickContext;
+        self.nav.mode = Mode::Picker(Picker::Context);
         self.recompute_visible();
         self.flash_pick_context();
     }
@@ -83,7 +83,7 @@ impl App {
             .unwrap_or(0);
         self.filter.search = self.saved.list[self.saved.picker.idx].query.clone();
         self.nav.cursor = 0;
-        self.nav.mode = Mode::PickSavedFilter;
+        self.nav.mode = Mode::Picker(Picker::SavedFilter);
         self.recompute_visible();
         self.flash_pick_saved();
     }
@@ -96,7 +96,7 @@ impl App {
     /// idle nudge re-fire on the next tick (still idle, no timer) before
     /// the user can pick a task.
     pub fn pick_accept(&mut self) {
-        if self.nav.mode == Mode::PickSavedFilter {
+        if self.nav.mode == Mode::Picker(Picker::SavedFilter) {
             self.saved.picker.restore = None;
         }
         self.nav.mode = picker_return_mode(self);
@@ -108,9 +108,9 @@ impl App {
     /// search that was active before it opened.
     pub fn pick_cancel(&mut self) {
         match self.nav.mode {
-            Mode::PickProject => self.filter.project = None,
-            Mode::PickContext => self.filter.context = None,
-            Mode::PickSavedFilter => {
+            Mode::Picker(Picker::Project) => self.filter.project = None,
+            Mode::Picker(Picker::Context) => self.filter.context = None,
+            Mode::Picker(Picker::SavedFilter) => {
                 self.filter.search = self.saved.picker.restore.take().unwrap_or_default();
             }
             _ => {}
@@ -123,7 +123,7 @@ impl App {
     /// Step through projects/contexts within picker mode.
     pub fn pick_step(&mut self, forward: bool) {
         match self.nav.mode {
-            Mode::PickProject => {
+            Mode::Picker(Picker::Project) => {
                 let all: Vec<String> = unique_values(self.store.tasks(), |t| &t.projects)
                     .into_iter()
                     .filter(|p| !self.is_project_archived(p))
@@ -136,7 +136,7 @@ impl App {
                 self.recompute_visible();
                 self.flash_pick_project();
             }
-            Mode::PickContext => {
+            Mode::Picker(Picker::Context) => {
                 let all = unique_values(self.store.tasks(), |t| &t.contexts);
                 if all.is_empty() {
                     return;
@@ -146,7 +146,7 @@ impl App {
                 self.recompute_visible();
                 self.flash_pick_context();
             }
-            Mode::PickSavedFilter => {
+            Mode::Picker(Picker::SavedFilter) => {
                 let len = self.saved.list.len();
                 if len == 0 {
                     return;
@@ -197,9 +197,9 @@ impl App {
 /// opened from it (a filter is part of choosing a task), else Normal.
 fn picker_return_mode(app: &App) -> Mode {
     if app.session.nudge_picker.is_some() {
-        Mode::PickNudgeTask
+        Mode::Picker(Picker::NudgeTask)
     } else {
-        Mode::Normal
+        Mode::Screen(Screen::Normal)
     }
 }
 
@@ -262,7 +262,7 @@ mod tests {
         app.pick_cancel();
         assert_eq!(app.filter.project.as_deref(), Some("work"));
         assert!(app.filter.context.is_none());
-        assert_eq!(app.nav.mode, Mode::Normal);
+        assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
     }
 
     #[test]
@@ -281,7 +281,7 @@ mod tests {
         ];
         app.set_search("pre".into()); // an unrelated search active beforehand
         app.enter_pick_saved();
-        assert_eq!(app.nav.mode, Mode::PickSavedFilter);
+        assert_eq!(app.nav.mode, Mode::Picker(Picker::SavedFilter));
         // No saved query equals "pre", so it seeds to the first filter.
         assert_eq!(app.filter().search, "alpha");
         app.pick_step(true);
@@ -289,7 +289,7 @@ mod tests {
         app.pick_step(true); // wraps
         assert_eq!(app.filter().search, "alpha");
         app.pick_cancel();
-        assert_eq!(app.nav.mode, Mode::Normal);
+        assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
         assert_eq!(app.filter().search, "pre"); // reverted to pre-picker search
     }
 
@@ -314,7 +314,7 @@ mod tests {
         app.pick_step(true); // wraps to "a"
         assert_eq!(app.filter().search, "alpha");
         app.pick_accept();
-        assert_eq!(app.nav.mode, Mode::Normal);
+        assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
         assert_eq!(app.filter().search, "alpha"); // commit keeps the preview
     }
 
@@ -322,7 +322,7 @@ mod tests {
     fn enter_pick_saved_empty_flashes_and_stays_normal() {
         let mut app = build_app(crate::sample::TODO_RAW);
         app.enter_pick_saved();
-        assert_eq!(app.nav.mode, Mode::Normal);
+        assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
         assert_eq!(app.flash_active(), Some("no saved filters"));
     }
 
@@ -369,7 +369,7 @@ mod tests {
         // desc, name asc: [work(4), health(3), finance(1), home(1),
         // learning(1), personal(1), travel(1)].
         app.enter_pick_project();
-        assert!(matches!(app.nav.mode, Mode::PickProject));
+        assert!(matches!(app.nav.mode, Mode::Picker(Picker::Project)));
         assert_eq!(app.filter.project.as_deref(), Some("work"));
         // Forward: work → health
         app.pick_step(true);
@@ -391,11 +391,11 @@ mod tests {
         let mut app = build_app(crate::sample::TODO_RAW);
         app.enter_nudge_picker(crate::app::NudgePickAction::StartTimer);
         app.enter_pick_project();
-        assert_eq!(app.nav.mode, Mode::PickProject);
+        assert_eq!(app.nav.mode, Mode::Picker(Picker::Project));
 
         app.pick_accept();
 
-        assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+        assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
         assert!(
             app.session.nudge_picker.is_some(),
             "selection must survive the filter commit"
@@ -413,11 +413,11 @@ mod tests {
         let mut app = build_app(crate::sample::TODO_RAW);
         app.enter_nudge_picker(crate::app::NudgePickAction::StartTimer);
         app.enter_pick_project();
-        assert_eq!(app.nav.mode, Mode::PickProject);
+        assert_eq!(app.nav.mode, Mode::Picker(Picker::Project));
 
         app.pick_cancel();
 
-        assert_eq!(app.nav.mode, Mode::PickNudgeTask);
+        assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
         assert!(app.session.nudge_picker.is_some());
         assert!(
             app.filter().project.is_none(),

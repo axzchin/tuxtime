@@ -1,10 +1,15 @@
+//! Rendering for the add/edit dialog and the floating metadata pickers whose
+//! state lives in [`crate::app::draft_overlay_state`] (`DraftOverlay`,
+//! `CalendarState`, `SlashMenuState`, …). This module only draws — it never
+//! mutates the pickers' state.
+
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph};
 
-use crate::app::{App, DraftOverlay, Mode, TokenKind};
+use crate::app::{App, DraftOverlay, Mode, Prompt, TokenKind};
 use crate::theme::Theme;
 use crate::ui::{msgbox, overlay};
 
@@ -426,13 +431,16 @@ fn preview_line<'a>(app: &App) -> Line<'a> {
 pub fn render_prompt(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
     let (sigil, label, sigil_color) = match app.nav.mode {
-        Mode::PromptProject => ("+", " ADD PROJECT ", theme.project),
-        Mode::PromptContext => ("@", " TOGGLE CONTEXT ", theme.context),
-        Mode::PromptSaveFilter => ("✦", " SAVE FILTER AS ", theme.accent),
-        Mode::PromptAddTime => ("⏱", " ADD TIME ", theme.accent),
-        Mode::PromptIdleNudge => ("⏰", " IDLE NUDGE (MIN) ", theme.accent),
-        Mode::PromptLongTimerNudge => ("⏰", " LONG TIMER NUDGE (MIN) ", theme.accent),
-        Mode::PromptRenameProject => ("+", " RENAME PROJECT ", theme.project),
+        Mode::Prompt(prompt) => match prompt {
+            Prompt::Project => ("+", " ADD PROJECT ", theme.project),
+            Prompt::Context => ("@", " TOGGLE CONTEXT ", theme.context),
+            Prompt::SaveFilter => ("✦", " SAVE FILTER AS ", theme.accent),
+            Prompt::AddTime => ("⏱", " ADD TIME ", theme.accent),
+            Prompt::IdleNudge => ("⏰", " IDLE NUDGE (MIN) ", theme.accent),
+            Prompt::LongTimerNudge => ("⏰", " LONG TIMER NUDGE (MIN) ", theme.accent),
+            Prompt::RenameProject => ("+", " RENAME PROJECT ", theme.project),
+            Prompt::DayBoundary => return,
+        },
         _ => return,
     };
     let inner = msgbox::frame_box(
@@ -594,7 +602,7 @@ mod tests {
     use ratatui::backend::TestBackend;
     use ratatui::buffer::Buffer;
 
-    use crate::app::{App, Mode};
+    use crate::app::{App, Mode, Prompt, Screen};
     use crate::config::Config;
 
     /// Pull just the rows immediately below the centered Insert dialog where
@@ -632,7 +640,7 @@ mod tests {
             "2026-05-06".to_string(),
             Config::default(),
         );
-        app.nav.mode = Mode::Insert;
+        app.nav.mode = Mode::Screen(Screen::Insert);
         app.draft_set_insert(draft.to_string());
         app
     }
@@ -943,7 +951,7 @@ mod tests {
         let app = build_prompt_app(
             "(A) 2026-05-01 a +work\n(A) 2026-05-01 b +health\n",
             "hea",
-            Mode::PromptProject,
+            Mode::Prompt(Prompt::Project),
         );
         let backend = TestBackend::new(80, 30);
         let mut terminal = Terminal::new(backend).unwrap();
@@ -964,7 +972,7 @@ mod tests {
         let app = build_prompt_app(
             "(A) 2026-05-01 a @work\n(A) 2026-05-01 b @health\n",
             "hea",
-            Mode::PromptContext,
+            Mode::Prompt(Prompt::Context),
         );
         let backend = TestBackend::new(80, 30);
         let mut terminal = Terminal::new(backend).unwrap();

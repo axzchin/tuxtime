@@ -1,22 +1,23 @@
 //! Mode dispatch: maps the active [`Mode`] to its key handler.
 //!
 //! `dispatch` is the single place that knows which handler owns each mode.
-//! Adding a mode touches four registries that must stay in sync:
-//! 1. the [`Mode`] enum,
-//! 2. one arm here in [`dispatch`] (the key handler),
-//! 3. one arm in `ui::overlays::draw_overlays` (the renderer) — *unless* the
-//!    mode is deliberately draw-less and renders inline (see below),
-//! 4. a status hint for the mode in `ui::status`.
+//! Adding a mode still touches the [`Mode`] sub-enums plus one arm here (the
+//! key handler), one arm in `ui::overlays::draw_overlays` (the renderer), and
+//! a status hint in `ui::status` — but the nested [`Screen`]/[`Prompt`]/
+//! [`Picker`]/[`Nudge`] categories keep each registry grouped by category, so
+//! a whole family can be routed (or rendered) in one arm instead of listing
+//! every sibling variant.
 //!
-//! Draw-less modes: `PickProject`/`PickContext`/`PickSavedFilter` preview the
-//! filter directly on the main list (no floating overlay, so they're absent
-//! from `draw_overlays`), and `Search` renders its input in the status bar via
-//! `ui::status::render_command_line`. Everything else floats an overlay.
+//! Draw-less modes: `Picker::Project`/`Picker::Context`/`Picker::SavedFilter`
+//! preview the filter directly on the main list (no floating overlay, so
+//! they're absent from `draw_overlays`), and `Screen::Search` renders its
+//! input in the status bar via `ui::status::render_command_line`. Everything
+//! else floats an overlay.
 //!
 //! The binary's event loop delegates every keypress here; this module never
 //! touches the store directly, only forwards to the per-mode handlers.
 
-use crate::app::{App, Mode};
+use crate::app::{App, Mode, Nudge, Picker, Prompt, Screen};
 use crate::keybinds::KeyBindings;
 use ratatui::crossterm::event::KeyEvent;
 
@@ -41,33 +42,39 @@ pub fn dispatch(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
         return;
     }
     match app.nav.mode() {
-        Mode::Insert => handle_insert(app, key),
-        Mode::Search => handle_search(app, key),
-        Mode::Help => handle_help(app, key),
-        Mode::Settings => handle_settings(app, key),
-        Mode::PromptProject
-        | Mode::PromptContext
-        | Mode::PromptSaveFilter
-        | Mode::PromptAddTime
-        | Mode::PromptIdleNudge
-        | Mode::PromptLongTimerNudge
-        | Mode::PromptRenameProject => {
-            handle_prompt(app, key);
-        }
-        Mode::PromptDayBoundary => handle_day_boundary(app, key),
-        Mode::PickTimesheetDate => handle_pick_timesheet_date(app, key),
-        Mode::PickProject | Mode::PickContext | Mode::PickSavedFilter => handle_pick(app, key),
-        Mode::PickTheme => handle_pick_theme(app, key),
-        Mode::CommandPalette => handle_command_palette(app, key),
-        Mode::Share => handle_share(app, key),
-        Mode::Welcome => handle_welcome(app, key),
-        Mode::Normal | Mode::Visual => handle_normal(app, key, keybinds),
-        Mode::IdleNudge => handle_idle_nudge(app, key),
-        Mode::PickNudgeTask => handle_pick_nudge_task(app, key, keybinds),
-        Mode::ReviewNudge => handle_review_nudge(app, key),
-        Mode::LongTimerNudge => handle_long_timer_nudge(app, key),
-        Mode::StaleTimer => handle_stale_timer(app, key),
-        Mode::ManualEntryChoice => handle_manual_entry_choice(app, key),
-        Mode::ManageProjects => handle_manage_projects(app, key),
+        Mode::Screen(screen) => match screen {
+            Screen::Normal | Screen::Visual => handle_normal(app, key, keybinds),
+            Screen::Insert => handle_insert(app, key),
+            Screen::Search => handle_search(app, key),
+            Screen::Help => handle_help(app, key),
+            Screen::Settings => handle_settings(app, key),
+            Screen::CommandPalette => handle_command_palette(app, key),
+            Screen::Share => handle_share(app, key),
+            Screen::Welcome => handle_welcome(app, key),
+            Screen::ManageProjects => handle_manage_projects(app, key),
+        },
+        Mode::Prompt(prompt) => match prompt {
+            Prompt::DayBoundary => handle_day_boundary(app, key),
+            Prompt::Project
+            | Prompt::Context
+            | Prompt::SaveFilter
+            | Prompt::AddTime
+            | Prompt::IdleNudge
+            | Prompt::LongTimerNudge
+            | Prompt::RenameProject => handle_prompt(app, key),
+        },
+        Mode::Picker(picker) => match picker {
+            Picker::Project | Picker::Context | Picker::SavedFilter => handle_pick(app, key),
+            Picker::Theme => handle_pick_theme(app, key),
+            Picker::TimesheetDate => handle_pick_timesheet_date(app, key),
+            Picker::NudgeTask => handle_pick_nudge_task(app, key, keybinds),
+        },
+        Mode::Nudge(nudge) => match nudge {
+            Nudge::Idle => handle_idle_nudge(app, key),
+            Nudge::LongTimer => handle_long_timer_nudge(app, key),
+            Nudge::StaleTimer => handle_stale_timer(app, key),
+            Nudge::Review => handle_review_nudge(app, key),
+            Nudge::ManualEntryChoice => handle_manual_entry_choice(app, key),
+        },
     }
 }

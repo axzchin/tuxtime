@@ -10,7 +10,7 @@
 //! the draft buffer — callers like search and the command palette reuse
 //! [`apply_to_draft`] to share the same text-editing behavior.
 
-use crate::app::{AddOutcome, App, DialogInputMode, Mode, OverlayKind};
+use crate::app::{AddOutcome, App, DialogInputMode, Mode, Nudge, OverlayKind};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::overlays::handle_autocomplete_keys;
@@ -192,7 +192,7 @@ fn exit_insert(app: &mut App, cancelled: bool) {
     let from_nudge = app.session.from_nudge;
     app.session.from_nudge = false;
     if from_nudge && cancelled {
-        app.nav.mode = Mode::IdleNudge;
+        app.nav.mode = Mode::Nudge(Nudge::Idle);
     } else {
         app.nav.enter_normal();
     }

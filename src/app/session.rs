@@ -17,7 +17,7 @@ pub enum NudgePickAction {
     AddTime,
 }
 
-/// Transient state for the nudge task picker (`Mode::PickNudgeTask`): the
+/// Transient state for the nudge task picker (`Mode::Picker(Picker::NudgeTask)`): the
 /// action to commit on Enter plus the search/filter state in place before
 /// the picker opened. The picker runs on the *real list view* — full
 /// navigation, search and filters — so it needs no task list of its own:
@@ -89,7 +89,11 @@ pub struct Session {
     pub idle_backdated: bool,
     /// Why the idle nudge is (or would be) showing; drives the popup text.
     pub idle_reason: IdleReason,
-    /// Transient state for the nudge task picker (`Mode::PickNudgeTask`).
+    /// How many times the idle nudge has been dismissed without any time
+    /// being captured since. Each dismissal halves the wait until the next
+    /// reminder (floored at one minute); any real capture resets it to 0.
+    pub idle_nudge_dismissals: u32,
+    /// Transient state for the nudge task picker (`Mode::Picker(Picker::NudgeTask)`).
     /// `None` when the picker isn't open.
     pub nudge_picker: Option<NudgePickerState>,
     /// The day the end-of-day review nudge was last shown (`YYYY-MM-DD`),
@@ -119,6 +123,7 @@ impl Session {
             carry_forward_from: None,
             idle_backdated: false,
             idle_reason: IdleReason::TimerStopped,
+            idle_nudge_dismissals: 0,
             nudge_picker: None,
             review_nudge_date: None,
             from_nudge: false,

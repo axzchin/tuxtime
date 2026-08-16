@@ -4,7 +4,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-use crate::app::{App, GroupKey, Mode, View};
+use crate::app::{App, GroupKey, Mode, Screen, View};
 use crate::ui::{header, keep_cursor_visible, task_row};
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
@@ -34,7 +34,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let visible = app.visible_indices();
     let groups = app.visible_groups();
     let blank = super::density_blank_lines(app.prefs.density);
-    let cursor_active = app.nav.mode != Mode::Help && app.nav.mode != Mode::Settings;
+    let cursor_active = app.nav.mode != Mode::Screen(Screen::Help)
+        && app.nav.mode != Mode::Screen(Screen::Settings);
 
     if visible.is_empty() {
         let para = Paragraph::new(vec![Line::from(Span::styled(

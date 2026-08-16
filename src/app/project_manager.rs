@@ -9,7 +9,7 @@ pub struct ProjectManager {
     /// Persisted to `~/.config/tuxtime/archived-projects.txt`. Bare names,
     /// no `+` prefix.
     pub archived_projects: Vec<String>,
-    /// The old project name while in [`super::types::Mode::PromptRenameProject`].
+    /// The old project name while in [`super::types::Mode::Prompt(Prompt::RenameProject)`].
     /// Set when entering rename mode; consumed by the rename handler on Enter.
     pub rename_project_old: Option<String>,
     /// Sort mode for the project management view (`Z`). Cycled with `s`.

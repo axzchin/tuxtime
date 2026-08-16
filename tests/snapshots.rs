@@ -21,8 +21,8 @@ use ratatui::buffer::Buffer;
 use ratatui::style::{Color, Modifier};
 
 use tuxtime::app::{
-    App, BuilderField, CalendarState, CalendarTarget, Density, DraftOverlay, Mode,
-    PriorityChooserState, RecurrenceBuilderState, SlashMenuState, View,
+    App, BuilderField, CalendarState, CalendarTarget, Density, DraftOverlay, Mode, Nudge, Picker,
+    PriorityChooserState, Prompt, RecurrenceBuilderState, Screen, SlashMenuState, View,
 };
 use tuxtime::config::Config;
 use tuxtime::recurrence::RecUnit;
@@ -295,14 +295,14 @@ fn archive_view() {
 #[test]
 fn help_overlay() {
     let mut app = make_app();
-    app.nav.mode = Mode::Help;
+    app.nav.mode = Mode::Screen(Screen::Help);
     snapshot_app("help_overlay", &app);
 }
 
 #[test]
 fn settings_overlay() {
     let mut app = make_app();
-    app.nav.mode = Mode::Settings;
+    app.nav.mode = Mode::Screen(Screen::Settings);
     snapshot_app("settings_overlay", &app);
 }
 
@@ -310,7 +310,7 @@ fn settings_overlay() {
 fn command_palette_unfiltered() {
     let mut app = make_app();
     app.command_palette.open();
-    app.nav.push_mode(Mode::CommandPalette);
+    app.nav.push_mode(Mode::Screen(Screen::CommandPalette));
     snapshot_app("command_palette_unfiltered", &app);
 }
 
@@ -318,7 +318,7 @@ fn command_palette_unfiltered() {
 fn command_palette_filtered() {
     let mut app = make_app();
     app.command_palette.open();
-    app.nav.push_mode(Mode::CommandPalette);
+    app.nav.push_mode(Mode::Screen(Screen::CommandPalette));
     app.draft_set("arch".to_string());
     app.command_palette.refresh("arch");
     snapshot_app("command_palette_filtered", &app);
@@ -329,19 +329,19 @@ fn command_palette_preserves_visual_selection() {
     // Open the palette mid-Visual with two rows ticked: the underlying list
     // must keep its checkboxes visible while the overlay is shown.
     let mut app = make_app();
-    app.nav.mode = Mode::Visual;
+    app.nav.mode = Mode::Screen(Screen::Visual);
     app.selection.toggle(0);
     app.selection.toggle(1);
     app.command_palette.open();
     // Push over Visual so the palette's peek_under keeps the tick marks visible.
-    app.nav.push_mode(Mode::CommandPalette);
+    app.nav.push_mode(Mode::Screen(Screen::CommandPalette));
     snapshot_app("command_palette_preserves_visual_selection", &app);
 }
 
 #[test]
 fn insert_dialog() {
     let mut app = make_app();
-    app.nav.mode = Mode::Insert;
+    app.nav.mode = Mode::Screen(Screen::Insert);
     app.draft_set_insert("(A) Buy milk +groceries @errands due:2026-05-10".to_string());
     snapshot_app("insert_dialog", &app);
 }
@@ -352,7 +352,7 @@ fn insert_dialog_after_nl_parse() {
     // draft to canonical todo.txt and surfaces a flash asking the user to
     // confirm. Mode stays in Insert so the user can review/edit.
     let mut app = make_app();
-    app.nav.mode = Mode::Insert;
+    app.nav.mode = Mode::Screen(Screen::Insert);
     app.draft_set_insert(
         "Pay rent monthly on the first of the month, show the todo 3 days before the due date. \
          It's part of project home and context bank"
@@ -372,7 +372,7 @@ fn insert_slash_menu() {
     // Mirrors mockup 1: slash menu open after the user has typed text plus
     // tags and is now picking metadata via `/`.
     let mut app = make_app();
-    app.nav.mode = Mode::Insert;
+    app.nav.mode = Mode::Screen(Screen::Insert);
     app.draft_set_insert("Schedule team offsite +work @phone /".to_string());
     // The `/` lives at the last byte; install the overlay state that
     // `maybe_open_slash_menu` would normally produce.
@@ -391,7 +391,7 @@ fn insert_calendar_for_due() {
     // focused date is one ahead of today so the focus/today highlights are
     // distinguishable in the snapshot.
     let mut app = make_app();
-    app.nav.mode = Mode::Insert;
+    app.nav.mode = Mode::Screen(Screen::Insert);
     app.draft_set_insert("(A) Renew passport before summer trip +travel @errands".to_string());
     app.draft
         .set_overlay(Some(DraftOverlay::Calendar(CalendarState {
@@ -406,7 +406,7 @@ fn insert_calendar_for_due() {
 fn insert_recurrence_builder() {
     // Mirrors mockup 3: recurrence builder open after /rec.
     let mut app = make_app();
-    app.nav.mode = Mode::Insert;
+    app.nav.mode = Mode::Screen(Screen::Insert);
     app.draft_set_insert("Water the plants +home".to_string());
     app.draft.set_overlay(Some(DraftOverlay::RecurrenceBuilder(
         RecurrenceBuilderState {
@@ -423,7 +423,7 @@ fn insert_recurrence_builder() {
 #[test]
 fn insert_priority_chooser() {
     let mut app = make_app();
-    app.nav.mode = Mode::Insert;
+    app.nav.mode = Mode::Screen(Screen::Insert);
     app.draft_set_insert("Buy milk +groceries".to_string());
     app.draft
         .set_overlay(Some(DraftOverlay::PriorityChooser(PriorityChooserState {
@@ -456,7 +456,7 @@ fn welcome_overlay() {
         Config::default(),
     );
     app.prefs.density = Density::Compact;
-    app.nav.mode = Mode::Welcome;
+    app.nav.mode = Mode::Screen(Screen::Welcome);
     snapshot_app("welcome_overlay", &app);
 }
 
@@ -485,14 +485,14 @@ fn render_text(app: &App, cols: u16, rows: u16) -> String {
 #[test]
 fn project_management_unfiltered() {
     let mut app = make_app();
-    app.nav.mode = Mode::ManageProjects;
+    app.nav.mode = Mode::Screen(Screen::ManageProjects);
     snapshot_app("project_management_unfiltered", &app);
 }
 
 #[test]
 fn project_management_search() {
     let mut app = make_app();
-    app.nav.mode = Mode::ManageProjects;
+    app.nav.mode = Mode::Screen(Screen::ManageProjects);
     app.set_search("work".to_string());
     snapshot_app("project_management_search", &app);
 }
@@ -527,7 +527,7 @@ fn timesheet_weekly_with_daily_subtotals() {
 #[test]
 fn idle_nudge_popup() {
     let mut app = make_app();
-    app.nav.mode = Mode::IdleNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
     snapshot_app("idle_nudge", &app);
 }
 
@@ -539,7 +539,7 @@ fn nudge_task_picker() {
     // mode. The user consciously highlights the task to time instead of
     // blindly hitting whatever the cursor was on.
     let mut app = make_app();
-    app.nav.mode = Mode::PickNudgeTask;
+    app.nav.mode = Mode::Picker(Picker::NudgeTask);
     app.session.nudge_picker = Some(tuxtime::app::NudgePickerState {
         action: tuxtime::app::NudgePickAction::StartTimer,
         prev_filter: app.filter().clone(),
@@ -570,7 +570,7 @@ fn stale_timer_popup() {
     // Hide the detail pane: its RAW view echoes the live `start:` timestamp,
     // which is wall-clock dependent and would make the snapshot flaky.
     app.prefs.layout.right = false;
-    app.nav.mode = Mode::StaleTimer;
+    app.nav.mode = Mode::Nudge(Nudge::StaleTimer);
     snapshot_app("stale_timer", &app);
 }
 
@@ -589,7 +589,7 @@ fn review_nudge_popup() {
     );
     app.env.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
     app.prefs.density = Density::Compact;
-    app.nav.mode = Mode::ReviewNudge;
+    app.nav.mode = Mode::Nudge(Nudge::Review);
     snapshot_app("review_nudge", &app);
 }
 
@@ -619,7 +619,7 @@ fn timesheet_daily_with_coverage_line() {
 #[test]
 fn manual_entry_choice_popup() {
     let mut app = make_app();
-    app.nav.mode = Mode::ManualEntryChoice;
+    app.nav.mode = Mode::Nudge(Nudge::ManualEntryChoice);
     snapshot_app("manual_entry_choice", &app);
 }
 
@@ -627,7 +627,7 @@ fn manual_entry_choice_popup() {
 fn settings_with_idle_nudge_prompt() {
     // The idle-nudge prompt stacked on top of the settings overlay.
     let mut app = make_app();
-    app.nav.mode = Mode::PromptIdleNudge;
+    app.nav.mode = Mode::Prompt(Prompt::IdleNudge);
     app.draft_set_insert("15".to_string());
     snapshot_app("settings_with_idle_nudge_prompt", &app);
 }
@@ -636,7 +636,7 @@ fn settings_with_idle_nudge_prompt() {
 fn manage_projects_with_rename_prompt() {
     // The rename-project prompt stacked on top of the project management view.
     let mut app = make_app();
-    app.nav.mode = Mode::PromptRenameProject;
+    app.nav.mode = Mode::Prompt(Prompt::RenameProject);
     app.project_manager.rename_project_old = Some("work".to_string());
     app.draft_set_insert("work2".to_string());
     snapshot_app("manage_projects_with_rename_prompt", &app);
@@ -648,7 +648,7 @@ fn day_boundary_prompt() {
     // the day-boundary prompt (one line per task-day): continue the same
     // entry, start a new entry for today, or cancel.
     let mut app = make_app();
-    app.nav.mode = Mode::PromptDayBoundary;
+    app.nav.mode = Mode::Prompt(Prompt::DayBoundary);
     app.session.pending_day_boundary = Some((0, tuxtime::app::DayBoundaryAction::StartTimer));
     snapshot_app("day_boundary_prompt", &app);
 }
@@ -669,7 +669,7 @@ fn day_boundary_prompt_wraps_long_narrative() {
         Config::default(),
     );
     app.prefs.density = Density::Compact;
-    app.nav.mode = Mode::PromptDayBoundary;
+    app.nav.mode = Mode::Prompt(Prompt::DayBoundary);
     app.session.pending_day_boundary = Some((0, tuxtime::app::DayBoundaryAction::StartTimer));
 
     let text = render_text(&app, 100, 32);

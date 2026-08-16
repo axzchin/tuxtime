@@ -16,7 +16,7 @@ use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
 use ratatui::style::{Color, Modifier};
 
-use tuxtime::app::{App, Density, Mode, View};
+use tuxtime::app::{App, Density, Mode, Screen, View};
 use tuxtime::config::Config;
 use tuxtime::sample;
 use tuxtime::theme;
@@ -56,7 +56,7 @@ fn main() -> std::io::Result<()> {
 
     // 3. Help overlay.
     let mut app = make();
-    app.nav.mode = Mode::Help;
+    app.nav.mode = Mode::Screen(Screen::Help);
     save(&app, &out.join("help.svg"))?;
 
     // 4. List with an active project filter — sidebar shows the selection.
@@ -69,7 +69,7 @@ fn main() -> std::io::Result<()> {
     // then mid-word.
     let mut app = make();
     app.command_palette.open();
-    app.nav.push_mode(Mode::CommandPalette);
+    app.nav.push_mode(Mode::Screen(Screen::CommandPalette));
     app.draft_set("arch".to_string());
     app.command_palette.refresh("arch");
     save(&app, &out.join("command-palette.svg"))?;

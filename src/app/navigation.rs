@@ -4,7 +4,7 @@
 
 use std::cell::Cell;
 
-use super::types::{Mode, View, ViewMap};
+use super::types::{Mode, Screen, View, ViewMap};
 
 /// All state related to view navigation: which view, in which mode,
 /// at which cursor position, with per-view scroll offsets and saved
@@ -27,7 +27,7 @@ pub struct Navigation {
     pub should_quit: bool,
     /// Return-path stack for modal overlays. [`push_mode`](Self::push_mode)
     /// saves the current mode and enters a new one; [`pop_mode`](Self::pop_mode)
-    /// restores the most recently saved mode (falling back to [`Mode::Normal`]
+    /// restores the most recently saved mode (falling back to [`Mode::Screen(Screen::Normal)`]
     /// on an empty stack). Replaces the hand-rolled `pre_search_mode` /
     /// `nudge_prompt_return` `Option<Mode>` fields — overlays no longer
     /// reimplement "where do I go back to" with bespoke fields.
@@ -39,7 +39,7 @@ impl Navigation {
     pub fn new() -> Self {
         Self {
             view: View::List,
-            mode: Mode::Normal,
+            mode: Mode::Screen(Screen::Normal),
             cursor: 0,
             view_cursor: ViewMap::default(),
             view_scroll: ViewMap::default(),
@@ -65,13 +65,16 @@ impl Navigation {
     /// Is the user in Normal or Visual mode?
     #[must_use]
     pub fn is_normal_or_visual(&self) -> bool {
-        matches!(self.mode, Mode::Normal | Mode::Visual)
+        matches!(
+            self.mode,
+            Mode::Screen(Screen::Normal) | Mode::Screen(Screen::Visual)
+        )
     }
 
     /// Is the user in Visual mode?
     #[must_use]
     pub fn is_visual(&self) -> bool {
-        self.mode == Mode::Visual
+        self.mode == Mode::Screen(Screen::Visual)
     }
 
     /// Current cursor position.
@@ -96,9 +99,12 @@ impl Navigation {
     }
 
     /// Leave a modal overlay entered with [`push_mode`](Self::push_mode),
-    /// restoring the saved mode (or [`Mode::Normal`] on an empty stack).
+    /// restoring the saved mode (or [`Mode::Screen(Screen::Normal)`] on an empty stack).
     pub fn pop_mode(&mut self) -> Mode {
-        self.mode = self.mode_stack.pop().unwrap_or(Mode::Normal);
+        self.mode = self
+            .mode_stack
+            .pop()
+            .unwrap_or(Mode::Screen(Screen::Normal));
         self.mode
     }
 
@@ -113,12 +119,12 @@ impl Navigation {
 
     /// Transition to Normal mode.
     pub fn enter_normal(&mut self) {
-        self.mode = Mode::Normal;
+        self.mode = Mode::Screen(Screen::Normal);
     }
 
     /// Transition to Visual mode.
     pub fn enter_visual(&mut self) {
-        self.mode = Mode::Visual;
+        self.mode = Mode::Screen(Screen::Visual);
     }
 
     /// Set the cursor to an absolute position.
@@ -175,10 +181,10 @@ impl Navigation {
 
     /// Toggle between Visual and Normal mode.
     pub fn toggle_visual(&mut self) {
-        self.mode = if self.mode == Mode::Visual {
-            Mode::Normal
+        self.mode = if self.mode == Mode::Screen(Screen::Visual) {
+            Mode::Screen(Screen::Normal)
         } else {
-            Mode::Visual
+            Mode::Screen(Screen::Visual)
         };
     }
 }

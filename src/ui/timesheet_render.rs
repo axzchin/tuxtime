@@ -63,16 +63,10 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
         let selected = app.timesheet_narrative_at(app.timesheet.cursor);
         let selected_group = selected.map(|(gi, _, _)| gi);
         let selected_narrative = selected.map(|(_, ni, _)| ni);
-        let mut grand_total: u64 = 0;
-        let mut billable_total: u64 = 0;
-        let mut dnb_total: u64 = 0;
+        // Grand/billable/DNB totals come from the domain helper; the renderer
+        // only tracks the per-day subtotal it flushes at each date header.
+        let totals = crate::app::timesheet_totals(&groups, increment);
         let mut day_total: u64 = 0;
-        // Billable units (per-group rounding, summed): 1 min × 5 matters = 0.5h
-        // at the 0.1 increment. Computed via `billable_units` so a non-default
-        // increment (0.25, exact) changes every group's unit consistently.
-        let mut grand_billable_units: u64 = 0;
-        let mut billable_billable_units: u64 = 0;
-        let mut dnb_billable_units: u64 = 0;
         let mut day_billable_units: u64 = 0;
         let mut last_date: Option<&str> = None;
         for (i, entry) in groups.iter().enumerate() {
@@ -187,17 +181,8 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                 )));
             }
             let units = crate::app::billable_units(entry.total_secs, increment);
-            grand_total += entry.total_secs;
-            grand_billable_units += units;
             day_total += entry.total_secs;
             day_billable_units += units;
-            if entry.billable {
-                billable_total += entry.total_secs;
-                billable_billable_units += units;
-            } else {
-                dnb_total += entry.total_secs;
-                dnb_billable_units += units;
-            }
         }
         // Flush the final day's subtotal (if date headers were shown).
         if (app.timesheet.weekly || matches!(app.timesheet.sort, crate::app::TimesheetSort::Date))
@@ -220,23 +205,23 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
         } else {
             " (filtered)"
         };
-        let billable_str = crate::app::format_billable_units(billable_billable_units, increment);
+        let billable_str = crate::app::format_billable_units(totals.billable_units, increment);
         lines.push(Line::from(Span::styled(
             format!(
                 "  Billable: {} ({billable_str})",
-                crate::app::format_duration(billable_total, increment),
+                crate::app::format_duration(totals.billable_secs, increment),
             ),
             Style::default()
                 .fg(theme.accent)
                 .bg(theme.panel)
                 .add_modifier(Modifier::BOLD),
         )));
-        if dnb_total > 0 {
-            let dnb_str = crate::app::format_billable_units(dnb_billable_units, increment);
+        if totals.non_billable_secs > 0 {
+            let dnb_str = crate::app::format_billable_units(totals.non_billable_units, increment);
             lines.push(Line::from(Span::styled(
                 format!(
                     "  DNB:      {} ({dnb_str})",
-                    crate::app::format_duration(dnb_total, increment)
+                    crate::app::format_duration(totals.non_billable_secs, increment)
                 ),
                 Style::default()
                     .fg(theme.dim)
@@ -244,11 +229,11 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                     .add_modifier(Modifier::BOLD),
             )));
         }
-        let total_str = crate::app::format_billable_units(grand_billable_units, increment);
+        let total_str = crate::app::format_billable_units(totals.total_units, increment);
         lines.push(Line::from(Span::styled(
             format!(
                 "  Total:    {} ({total_str}){search_note}",
-                crate::app::format_duration(grand_total, increment)
+                crate::app::format_duration(totals.total_secs, increment)
             ),
             Style::default()
                 .fg(theme.accent)
@@ -263,7 +248,7 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
             let now = chrono::Local::now();
             let now_min = now.hour() * 60 + now.minute();
             if let Some((span_secs, unaccounted, in_progress)) =
-                app.workday_coverage(&app.timesheet.date, grand_total, now_min, app.today())
+                app.workday_coverage(&app.timesheet.date, totals.total_secs, now_min, app.today())
             {
                 let fmt = |s: u64| format!("{}h {}m", s / 3600, (s % 3600) / 60);
                 let suffix = if in_progress {

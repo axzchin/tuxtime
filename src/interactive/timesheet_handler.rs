@@ -2,7 +2,7 @@
 //! date navigation, narrative-level movement, edit, archive, billable
 //! toggle, and clipboard operations.
 
-use crate::app::{App, Mode, TimesheetTaskRef, View, format_billable};
+use crate::app::{App, Mode, Picker, Screen, TimesheetTaskRef, View, format_billable};
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
 #[allow(clippy::too_many_lines)]
@@ -60,7 +60,7 @@ pub(crate) fn handle_timesheet_keys(app: &mut App, key: KeyEvent) {
                 app.timesheet.calendar_focus = d;
             }
             app.timesheet.date_input.clear();
-            app.nav.mode = Mode::PickTimesheetDate;
+            app.nav.mode = Mode::Picker(Picker::TimesheetDate);
         }
         // Narrative-level navigation: j/k moves between individual narratives.
         KeyCode::Char('j') | KeyCode::Down => {
@@ -208,7 +208,7 @@ pub(crate) fn handle_timesheet_keys(app: &mut App, key: KeyEvent) {
                         app.selection.enter_edit(abs);
                         app.draft_set(raw);
                         app.session.manual_time_entry = false;
-                        app.nav.mode = Mode::Insert;
+                        app.nav.mode = Mode::Screen(Screen::Insert);
                     }
                 }
                 TimesheetTaskRef::Archived(_) => {

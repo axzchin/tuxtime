@@ -4,7 +4,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-use crate::app::{App, View, ordered_unique};
+use crate::app::{App, View, format_compact_duration, ordered_unique};
 use crate::search::subseq_match_ci;
 use crate::theme::Theme;
 use crate::todo;
@@ -183,7 +183,7 @@ fn matter_row(theme: &Theme, name: String, secs: u64, active: bool) -> Line<'sta
         let pad = 16 - padded.chars().count();
         padded.push_str(&" ".repeat(pad));
     }
-    let dur = compact_duration(secs);
+    let dur = format_compact_duration(secs);
     Line::from(vec![
         Span::raw(" "),
         Span::styled(prefix.to_string(), Style::default().fg(theme.accent)),
@@ -195,7 +195,7 @@ fn matter_row(theme: &Theme, name: String, secs: u64, active: bool) -> Line<'sta
 
 /// A totals row: dim label + right-aligned compact duration.
 fn total_row(theme: &Theme, label: &str, secs: u64) -> Line<'static> {
-    let dur = compact_duration(secs);
+    let dur = format_compact_duration(secs);
     let mut padded = label.to_string();
     if padded.chars().count() < 16 {
         let pad = 16 - padded.chars().count();
@@ -208,17 +208,6 @@ fn total_row(theme: &Theme, label: &str, secs: u64) -> Line<'static> {
         Span::styled(format!("{dur:>7}"), Style::default().fg(theme.fg)),
     ])
     .style(Style::default().bg(theme.panel))
-}
-
-/// Compact human duration ("2h 0m", "45m") for narrow sidebar rows.
-fn compact_duration(total_secs: u64) -> String {
-    let hours = total_secs / 3600;
-    let minutes = (total_secs % 3600) / 60;
-    if hours > 0 {
-        format!("{hours}h {minutes:02}m")
-    } else {
-        format!("{minutes}m")
-    }
 }
 
 fn filter_row<'a>(

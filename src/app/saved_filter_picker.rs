@@ -4,7 +4,7 @@
 pub struct SavedFilterPicker {
     /// The search string that was active when the `ff` picker opened, so
     /// cancelling (`Esc`) restores it instead of leaving the previewed
-    /// filter applied. `None` outside `Mode::PickSavedFilter`.
+    /// filter applied. `None` outside `Mode::Picker(Picker::SavedFilter)`.
     pub restore: Option<String>,
     /// Index into `saved_filters` of the row the `ff` picker currently
     /// previews.

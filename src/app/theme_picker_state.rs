@@ -21,7 +21,7 @@ impl ThemePicker {
 }
 
 use super::App;
-use crate::app::Mode;
+use crate::app::{Mode, Picker};
 use crate::theme;
 
 impl App {
@@ -32,7 +32,7 @@ impl App {
     pub fn enter_pick_theme(&mut self) {
         self.theme_picker.orig = self.prefs.theme_idx();
         self.theme_picker.cursor = self.theme_picker.orig;
-        self.nav.set_mode(Mode::PickTheme);
+        self.nav.set_mode(Mode::Picker(Picker::Theme));
     }
 
     /// Step through themes in `forward` (true = next) direction with

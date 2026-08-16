@@ -1,6 +1,6 @@
 {
-  "name": "tuxedo capture",
-  "short_name": "tuxedo",
+  "name": "tuxtime capture",
+  "short_name": "tuxtime",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

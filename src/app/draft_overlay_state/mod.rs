@@ -21,6 +21,9 @@
 //! methods; this parent keeps the shared catalog, the `DraftOverlay` /
 //! `OverlayKind` enums, the `apply_*` buffer writers, and the shared pure
 //! helpers.
+//!
+//! This module owns only the pickers' state and buffer-writing logic; their
+//! rendering lives in [`crate::ui::dialog`].
 
 use chrono::NaiveDate;
 use std::ops::Range;

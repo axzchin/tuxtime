@@ -6,7 +6,7 @@
 //! canonical form for the user to review.
 //!
 //! Pure logic — no I/O, no app state. The crate-level wiring lives in
-//! `app::mutations::add_from_draft` and `inbox::canonicalize_line`.
+//! `app::actions::add_from_draft` and `inbox::canonicalize_line`.
 //!
 //! # Architecture
 //!

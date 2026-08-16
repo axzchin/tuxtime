@@ -11,17 +11,21 @@ use crate::serve::ShareInfo;
 use crate::theme::Theme;
 use crate::todo::Task;
 
+mod actions;
 mod archive_cache;
 mod autocomplete;
+mod billable;
 mod bulk;
 mod chord;
 mod draft;
-mod draft_overlay;
+mod draft_overlay_state;
 mod duration;
 mod env;
 mod flash;
-mod mutations;
+mod manual_entry;
 mod navigation;
+mod nudge_picker;
+mod nudges;
 pub mod palette;
 mod picker;
 mod prefs;
@@ -33,7 +37,7 @@ mod selection;
 mod session;
 mod share_state;
 mod theme_picker_state;
-mod timer;
+mod timer_actions;
 mod timesheet;
 mod types;
 mod update_checker;
@@ -50,14 +54,15 @@ pub use archive_cache::ArchiveCache;
 pub use autocomplete::{ActiveToken, AutocompleteTarget, TokenKind, active_token};
 pub use chord::Chord;
 pub use draft::{DialogInputMode, DraftCursor, DraftState};
-pub use draft_overlay::{
+pub use draft_overlay_state::{
     BuilderField, CalendarState, CalendarTarget, DURATION_PRESETS, DraftOverlay,
     DurationPickerState, OverlayKind, PriorityChooserState, REC_UNIT_ORDER, RecurrenceBuilderState,
     SLASH_ENTRIES, SlashEntry, SlashKind, SlashMenuState, format_rec_value,
     recurrence_next_preview,
 };
 pub use duration::{
-    billable_units, format_billable, format_billable_units, parse_clock, rounding_increment_label,
+    billable_units, format_billable, format_billable_units, format_clock, format_compact_duration,
+    parse_clock, rounding_increment_label,
 };
 pub(crate) use duration::{format_duration, parse_duration_input};
 pub use env::Env;
@@ -72,9 +77,11 @@ pub use session::{DayBoundaryAction, IdleReason, NudgePickAction, NudgePickerSta
 pub use share_state::ShareState;
 pub use theme_picker_state::ThemePicker;
 pub use timesheet::TimesheetState;
+pub(crate) use timesheet::timesheet_totals;
 pub use types::{
-    AUTOCOMPLETE_CAP, AddOutcome, Density, FLASH_TTL, Filter, LEADER_WINDOW, Mode, ProjectSort,
-    SavedFilter, Sort, TimesheetEntry, TimesheetSort, TimesheetTaskRef, UNDO_LIMIT, View,
+    AUTOCOMPLETE_CAP, AddOutcome, Density, FLASH_TTL, Filter, LEADER_WINDOW, Mode, Nudge, Picker,
+    ProjectSort, Prompt, SavedFilter, Screen, Sort, TimesheetEntry, TimesheetSort,
+    TimesheetTaskRef, UNDO_LIMIT, View,
 };
 pub use update_checker::UpdateChecker;
 pub use visibility::GroupKey;
@@ -250,7 +257,9 @@ impl App {
     /// mode beneath it.
     pub fn effective_mode(&self) -> Mode {
         match self.nav.mode() {
-            Mode::CommandPalette => self.nav.peek_under().unwrap_or(self.nav.mode()),
+            Mode::Screen(Screen::CommandPalette) => {
+                self.nav.peek_under().unwrap_or(self.nav.mode())
+            }
             m => m,
         }
     }

@@ -48,26 +48,26 @@ pub fn run() -> io::Result<()> {
         InstallKind::Homebrew => {
             println!("Looks like a Homebrew install. Update with:");
             println!();
-            println!("    brew update && brew upgrade webstonehq/tap/tuxedo");
+            println!("    brew update && brew upgrade axzchin/tap/tuxtime");
         }
         InstallKind::Cargo => {
             println!("Looks like a `cargo install` build. Update with:");
             println!();
-            println!("    cargo install --git https://github.com/webstonehq/tuxedo --force");
+            println!("    cargo install --git https://github.com/axzchin/tuxtime --force");
         }
         InstallKind::Binary => {
             println!("Looks like a downloaded binary. Grab the latest from:");
             println!();
-            println!("    https://github.com/webstonehq/tuxedo/releases/latest");
+            println!("    https://github.com/axzchin/tuxtime/releases/latest");
             println!();
             println!("...and replace the file above.");
         }
         InstallKind::Unknown => {
             println!("Could not detect the install method. Options:");
             println!();
-            println!("    brew upgrade webstonehq/tap/tuxedo");
-            println!("    cargo install --git https://github.com/webstonehq/tuxedo --force");
-            println!("    https://github.com/webstonehq/tuxedo/releases/latest");
+            println!("    brew upgrade axzchin/tap/tuxtime");
+            println!("    cargo install --git https://github.com/axzchin/tuxtime --force");
+            println!("    https://github.com/axzchin/tuxtime/releases/latest");
         }
     }
     Ok(())
@@ -117,7 +117,7 @@ const CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 /// (which is what burned us once during testing).
 const NEGATIVE_CACHE_TTL: Duration = Duration::from_secs(60 * 60);
 const CURL_TIMEOUT_SECS: u64 = 5;
-const RELEASE_URL: &str = "https://api.github.com/repos/webstonehq/tuxedo/releases/latest";
+const RELEASE_URL: &str = "https://api.github.com/repos/axzchin/tuxtime/releases/latest";
 
 fn check_for_update() -> Option<String> {
     let cache_path = cache_path();

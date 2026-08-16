@@ -3,7 +3,7 @@ use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::Style;
 use ratatui::widgets::Block;
 
-use crate::app::{App, Mode, View};
+use crate::app::{App, Mode, Screen, View};
 
 pub mod archive;
 pub mod calendar_utils;
@@ -130,7 +130,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
     }
 
     if app.prefs.layout.status_bar {
-        if app.nav.mode == Mode::Search {
+        if app.nav.mode == Mode::Screen(Screen::Search) {
             status::render_command_line(frame, bottom_area, app);
         } else {
             status::render(frame, bottom_area, app);

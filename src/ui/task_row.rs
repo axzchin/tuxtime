@@ -145,10 +145,7 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
     if opts.timer_running
         && let Some(elapsed) = opts.timer_elapsed
     {
-        let h = elapsed / 3600;
-        let m = (elapsed % 3600) / 60;
-        let s = elapsed % 60;
-        let timer_text = format!(" [{h:02}:{m:02}:{s:02}]");
+        let timer_text = format!(" [{}]", crate::app::format_clock(elapsed));
         line.spans
             .push(Span::styled(timer_text, Style::default().fg(theme.accent)));
     }

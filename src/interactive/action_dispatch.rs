@@ -5,7 +5,7 @@
 //! and action dispatch for the Normal/Visual modes.
 
 use crate::action::Action;
-use crate::app::{App, CalendarTarget, Mode, View};
+use crate::app::{App, CalendarTarget, Mode, Nudge, Prompt, Screen, View};
 use crate::keybinds::KeyBindings;
 use crate::theme;
 use crate::{clipboard, todo};
@@ -165,7 +165,7 @@ pub fn apply_action(app: &mut App, action: Action) {
 
         // ---- mode transitions / overlays --------------------------------
         Action::BeginAdd => {
-            app.nav.set_mode(Mode::Insert);
+            app.nav.set_mode(Mode::Screen(Screen::Insert));
             app.draft_clear();
             app.selection.exit_edit();
             app.session.manual_time_entry = false;
@@ -176,7 +176,7 @@ pub fn apply_action(app: &mut App, action: Action) {
             {
                 app.selection.enter_edit(abs);
                 app.draft_set(raw);
-                app.nav.set_mode(Mode::Insert);
+                app.nav.set_mode(Mode::Screen(Screen::Insert));
             }
         }
         Action::BeginEditInsert => {
@@ -185,7 +185,7 @@ pub fn apply_action(app: &mut App, action: Action) {
             {
                 app.selection.enter_edit(abs);
                 app.draft_set_insert(raw);
-                app.nav.set_mode(Mode::Insert);
+                app.nav.set_mode(Mode::Screen(Screen::Insert));
             }
         }
         Action::Reschedule => {
@@ -194,20 +194,20 @@ pub fn apply_action(app: &mut App, action: Action) {
             {
                 app.selection.enter_edit(abs);
                 app.draft_set_insert(raw);
-                app.nav.set_mode(Mode::Insert);
+                app.nav.set_mode(Mode::Screen(Screen::Insert));
                 app.open_calendar(CalendarTarget::Due);
             }
         }
         Action::BeginSearch => {
-            app.nav.push_mode(Mode::Search);
+            app.nav.push_mode(Mode::Screen(Screen::Search));
             app.draft_clear();
             app.clear_search();
         }
-        Action::OpenHelp => app.nav.set_mode(Mode::Help),
-        Action::OpenSettings => app.nav.set_mode(Mode::Settings),
+        Action::OpenHelp => app.nav.set_mode(Mode::Screen(Screen::Help)),
+        Action::OpenSettings => app.nav.set_mode(Mode::Screen(Screen::Settings)),
         Action::OpenCommandPalette => {
             app.command_palette.open();
-            app.nav.push_mode(Mode::CommandPalette);
+            app.nav.push_mode(Mode::Screen(Screen::CommandPalette));
             app.draft_clear();
         }
         Action::OpenThemePicker => {
@@ -218,7 +218,7 @@ pub fn apply_action(app: &mut App, action: Action) {
             }
         }
         Action::TimerStartStop => app.toggle_timer(),
-        Action::ManualTimeEntry => app.nav.set_mode(Mode::ManualEntryChoice),
+        Action::ManualTimeEntry => app.nav.set_mode(Mode::Nudge(Nudge::ManualEntryChoice)),
         Action::BeginSessionFromCurrent => {
             let Some(abs) = app.cur_abs() else {
                 app.flash("no task to start session from");
@@ -252,27 +252,27 @@ pub fn apply_action(app: &mut App, action: Action) {
                 app.draft_clear();
                 app.draft_set_insert(draft);
                 app.session.manual_time_entry = false;
-                app.nav.set_mode(Mode::Insert);
+                app.nav.set_mode(Mode::Screen(Screen::Insert));
                 app.selection.exit_edit();
             }
         }
-        Action::OpenProjectManager => app.nav.set_mode(Mode::ManageProjects),
+        Action::OpenProjectManager => app.nav.set_mode(Mode::Screen(Screen::ManageProjects)),
         Action::ConfigureIdleNudge => {
             let mins = app.idle_nudge_seconds() / 60;
             app.draft_clear();
             app.draft_set_insert(mins.to_string());
             // Push so the prompt pops back to the mode the palette returned to.
-            app.nav.push_mode(Mode::PromptIdleNudge);
+            app.nav.push_mode(Mode::Prompt(Prompt::IdleNudge));
         }
         Action::ConfigureLongTimerNudge => {
             let mins = app.long_timer_nudge_seconds() / 60;
             app.draft_clear();
             app.draft_set_insert(mins.to_string());
             // Push so the prompt pops back to the mode the palette returned to.
-            app.nav.push_mode(Mode::PromptLongTimerNudge);
+            app.nav.push_mode(Mode::Prompt(Prompt::LongTimerNudge));
         }
         Action::OpenShare => match app.ensure_share_started() {
-            Ok(_) => app.nav.set_mode(Mode::Share),
+            Ok(_) => app.nav.set_mode(Mode::Screen(Screen::Share)),
             Err(e) => app.flash(format!("share unavailable: {e}")),
         },
         Action::ArmF => app.chord.arm('f'),
@@ -283,16 +283,16 @@ pub fn apply_action(app: &mut App, action: Action) {
             if app.filter().search.is_empty() {
                 app.flash("no active search to save");
             } else {
-                app.nav.set_mode(Mode::PromptSaveFilter);
+                app.nav.set_mode(Mode::Prompt(Prompt::SaveFilter));
                 app.draft_clear();
             }
         }
         Action::BeginPromptProject => {
-            app.nav.set_mode(Mode::PromptProject);
+            app.nav.set_mode(Mode::Prompt(Prompt::Project));
             app.draft_clear();
         }
         Action::BeginPromptContext => {
-            app.nav.set_mode(Mode::PromptContext);
+            app.nav.set_mode(Mode::Prompt(Prompt::Context));
             app.draft_clear();
         }
         Action::CopyLine => copy_current_task(app, false),

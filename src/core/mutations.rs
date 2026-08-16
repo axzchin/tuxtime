@@ -246,14 +246,16 @@ impl Store {
             return EditOutcome::OutOfRange;
         }
         let raw = &self.tasks[abs].raw;
-        if !raw.split_whitespace().any(|t| t == term) {
+        // Only body tokens are removable — a term that happens to equal the
+        // priority or a date must not strip the line's metadata prefix.
+        if !todo::body_after_priority(raw)
+            .split_whitespace()
+            .any(|t| t == term)
+        {
             return EditOutcome::TermNotFound;
         }
-        let new_raw = raw
-            .split_whitespace()
-            .filter(|t| *t != term)
-            .collect::<Vec<_>>()
-            .join(" ");
+        let new_raw =
+            todo::map_body_tokens(raw, |t| if t == term { None } else { Some(t.to_string()) });
         self.rewrite_raw(abs, &new_raw)
     }
 
@@ -449,18 +451,13 @@ impl Store {
         // Rename in active tasks.
         for i in 0..self.tasks.len() {
             if self.tasks[i].projects.iter().any(|p| p == old) {
-                let new_raw = self.tasks[i]
-                    .raw
-                    .split_whitespace()
-                    .map(|tok| {
-                        if tok == needle {
-                            replacement.as_str()
-                        } else {
-                            tok
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" ");
+                let new_raw = todo::map_body_tokens(&self.tasks[i].raw, |tok| {
+                    if tok == needle.as_str() {
+                        Some(replacement.clone())
+                    } else {
+                        Some(tok.to_string())
+                    }
+                });
                 if let Ok(parsed) = todo::parse_line(&new_raw) {
                     self.tasks[i] = parsed;
                     active_count += 1;
@@ -472,18 +469,13 @@ impl Store {
         let mut archive_modified = false;
         for i in 0..self.archive.tasks.len() {
             if self.archive.tasks[i].projects.iter().any(|p| p == old) {
-                let new_raw = self.archive.tasks[i]
-                    .raw
-                    .split_whitespace()
-                    .map(|tok| {
-                        if tok == needle {
-                            replacement.as_str()
-                        } else {
-                            tok
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" ");
+                let new_raw = todo::map_body_tokens(&self.archive.tasks[i].raw, |tok| {
+                    if tok == needle.as_str() {
+                        Some(replacement.clone())
+                    } else {
+                        Some(tok.to_string())
+                    }
+                });
                 if let Ok(parsed) = todo::parse_line(&new_raw) {
                     self.archive.tasks[i] = parsed;
                     archived_count += 1;
@@ -757,6 +749,34 @@ mod tests {
             store.remove_term_at(0, "+nope"),
             EditOutcome::TermNotFound
         ));
+    }
+
+    /// `del N TERM` removes only body tokens: a term that happens to equal the
+    /// priority or a creation date must not strip the line's metadata prefix
+    /// (the bug `raw.split_whitespace()` filtering introduced — the prefix is
+    /// preserved by `todo::map_body_tokens`).
+    #[test]
+    fn remove_term_never_strips_priority_or_date_prefix() {
+        let mut store = build_store("(A) 2026-05-01 call mom +family\n");
+        // The creation-date token is metadata, not a removable body term.
+        assert!(matches!(
+            store.remove_term_at(0, "2026-05-01"),
+            EditOutcome::TermNotFound
+        ));
+        assert!(store.tasks()[0].raw.starts_with("(A) 2026-05-01"));
+        // Same for the priority token.
+        assert!(matches!(
+            store.remove_term_at(0, "(A)"),
+            EditOutcome::TermNotFound
+        ));
+        assert!(store.tasks()[0].raw.starts_with("(A) 2026-05-01"));
+        // A genuine body token is still removable, leaving the prefix intact.
+        assert!(matches!(
+            store.remove_term_at(0, "+family"),
+            EditOutcome::Saved { .. }
+        ));
+        assert!(store.tasks()[0].raw.starts_with("(A) 2026-05-01"));
+        assert!(!store.tasks()[0].raw.contains("+family"));
     }
 
     #[test]

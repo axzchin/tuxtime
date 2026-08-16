@@ -4,7 +4,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-use crate::app::{App, GroupKey, ListDueBucket, Mode, View};
+use crate::app::{App, GroupKey, ListDueBucket, Mode, Screen, View};
 use crate::theme::Theme;
 use crate::ui::{header, keep_cursor_visible, task_row};
 
@@ -71,9 +71,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             let opts = task_row::RowOpts {
                 idx_label: i,
                 cursor: i == app.nav.cursor
-                    && app.nav.mode != Mode::Help
-                    && app.nav.mode != Mode::Settings,
-                multi_mode: app.effective_mode() == Mode::Visual,
+                    && app.nav.mode != Mode::Screen(Screen::Help)
+                    && app.nav.mode != Mode::Screen(Screen::Settings),
+                multi_mode: app.effective_mode() == Mode::Screen(Screen::Visual),
                 multi_checked: app.selection.is_selected(abs),
                 selected: app.selection.is_selected(abs),
                 show_line_num: app.prefs.layout.line_num,
