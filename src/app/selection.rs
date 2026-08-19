@@ -36,6 +36,23 @@ impl Selection {
         self.selected.clear();
     }
 
+    /// Re-map selected indices across a list of index swaps, so a visual
+    /// selection stays attached to its tasks after `Store::move_tasks`
+    /// reorders them. `swaps` is applied in order; for each `(a, b)` the
+    /// membership at `a` and `b` is exchanged.
+    pub fn remap_swaps(&mut self, swaps: &[(usize, usize)]) {
+        for &(a, b) in swaps {
+            let a_selected = self.selected.remove(&a);
+            let b_selected = self.selected.remove(&b);
+            if a_selected {
+                self.selected.insert(b);
+            }
+            if b_selected {
+                self.selected.insert(a);
+            }
+        }
+    }
+
     #[must_use]
     pub fn editing(&self) -> Option<usize> {
         self.editing

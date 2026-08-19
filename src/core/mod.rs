@@ -29,7 +29,7 @@ pub use history::History;
 pub use outcome::{
     AddOutcome, ArchiveDeleteOutcome, ArchiveOneOutcome, ArchiveOutcome, BulkCompleteOutcome,
     BulkDeleteOutcome, CarryForwardOutcome, CompleteOutcome, DeleteOutcome, DrainReport,
-    EditOutcome, PriorityOutcome, Reconcile, StoreError, TagOutcome, TimerOutcome,
+    EditOutcome, MoveOutcome, PriorityOutcome, Reconcile, StoreError, TagOutcome, TimerOutcome,
     TimerQuitOutcome, UnarchiveOutcome, UndoOutcome,
 };
 

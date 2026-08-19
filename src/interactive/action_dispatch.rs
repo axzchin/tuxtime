@@ -142,6 +142,8 @@ pub fn apply_action(app: &mut App, action: Action) {
                 app.cycle_priority(abs);
             }
         }
+        Action::MoveTaskDown => app.move_tasks(true),
+        Action::MoveTaskUp => app.move_tasks(false),
         Action::Undo => app.undo(),
         Action::ToggleSelected => {
             if app.nav.is_visual()
@@ -326,6 +328,8 @@ fn apply_archive_action(app: &mut App, action: Action) -> bool {
         | Action::BeginEdit
         | Action::BeginEditInsert
         | Action::CyclePriority
+        | Action::MoveTaskDown
+        | Action::MoveTaskUp
         | Action::ToggleVisual
         | Action::ToggleSelected
         | Action::BeginSearch

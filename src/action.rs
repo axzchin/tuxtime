@@ -20,6 +20,8 @@ pub enum Action {
     Delete,
     Reschedule,
     CyclePriority,
+    MoveTaskDown,
+    MoveTaskUp,
     BeginSearch,
     OpenHelp,
     OpenSettings,
@@ -108,6 +110,8 @@ impl Action {
         ("delete", Self::Delete),
         ("reschedule", Self::Reschedule),
         ("cycle_priority", Self::CyclePriority),
+        ("move_task_down", Self::MoveTaskDown),
+        ("move_task_up", Self::MoveTaskUp),
         ("begin_search", Self::BeginSearch),
         ("search", Self::BeginSearch),
         ("open_help", Self::OpenHelp),
@@ -233,6 +237,18 @@ mod tests {
     }
 
     #[test]
+    fn task_movement_is_rebindable() {
+        assert_eq!(
+            Action::from_keybind_name("move_task_down"),
+            Some(Action::MoveTaskDown)
+        );
+        assert_eq!(
+            Action::from_keybind_name("move_task_up"),
+            Some(Action::MoveTaskUp)
+        );
+    }
+
+    #[test]
     fn open_note_is_rebindable() {
         assert_eq!(
             Action::from_keybind_name("open_note"),
@@ -290,6 +306,8 @@ mod tests {
             Action::Delete => all.push(Action::Delete),
             Action::Reschedule => all.push(Action::Reschedule),
             Action::CyclePriority => all.push(Action::CyclePriority),
+            Action::MoveTaskDown => all.push(Action::MoveTaskDown),
+            Action::MoveTaskUp => all.push(Action::MoveTaskUp),
             Action::BeginSearch => all.push(Action::BeginSearch),
             Action::OpenHelp => all.push(Action::OpenHelp),
             Action::OpenSettings => all.push(Action::OpenSettings),

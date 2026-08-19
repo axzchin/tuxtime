@@ -5,15 +5,28 @@
 //! The store's own mutation implementations live in `core::mutations`, not here.
 
 use super::App;
-use super::types::{AddOutcome, View};
+use super::types::{AddOutcome, Sort, View};
 use crate::app::WeekStart;
 use crate::core::AddOutcome as CoreAdd;
 use crate::core::{
     ArchiveDeleteOutcome, ArchiveOneOutcome, ArchiveOutcome, CarryForwardOutcome, CompleteOutcome,
-    DeleteOutcome, EditOutcome, PriorityOutcome, TagOutcome, UnarchiveOutcome, UndoOutcome,
+    DeleteOutcome, EditOutcome, MoveOutcome, PriorityOutcome, TagOutcome, UnarchiveOutcome,
+    UndoOutcome,
 };
 use crate::nl;
 use crate::note;
+use crate::todo::Task;
+
+/// Two tasks belong to the same "movable group" under `sort` — manual
+/// reordering must never cross these boundaries, or the sort would silently
+/// re-shuffle the task right back on the next recompute.
+fn same_sort_key(sort: Sort, a: &Task, b: &Task) -> bool {
+    match sort {
+        Sort::Priority => a.priority == b.priority && a.due == b.due,
+        Sort::Due => a.due == b.due,
+        Sort::File => true,
+    }
+}
 
 impl App {
     pub fn toggle_complete(&mut self, abs: usize) {
@@ -33,6 +46,112 @@ impl App {
             PriorityOutcome::Aborted(r) => self.handle_reconcile_abort(r),
             PriorityOutcome::OutOfRange => {}
             PriorityOutcome::Error(e) => self.flash(format!("priority failed: {e}")),
+        }
+    }
+
+    /// Move the cursor task (or the whole visual selection) one step up or
+    /// down, respecting sort-group boundaries. In `Sort::File` the whole list
+    /// is one group, so this is free manual reordering; under Priority/Due it
+    /// only reorders within a group of equal sort keys (otherwise the sort
+    /// would undo the move on the next recompute).
+    pub fn move_tasks(&mut self, down: bool) {
+        let moving_selection = self.nav.is_visual() && !self.selection.is_empty();
+        let visible: Vec<usize> = self.visible_indices().to_vec();
+        if moving_selection {
+            let visible_selected = visible
+                .iter()
+                .filter(|&&abs| self.selection.is_selected(abs))
+                .count();
+            if visible_selected != self.selection.len() {
+                self.flash("selection includes hidden tasks");
+                return;
+            }
+            let spans_sort_groups = {
+                let mut selected = self.selection.iter();
+                selected.next().is_some_and(|first| {
+                    selected.any(|abs| {
+                        !same_sort_key(
+                            self.prefs.sort,
+                            &self.store.tasks()[first],
+                            &self.store.tasks()[abs],
+                        )
+                    })
+                })
+            };
+            if spans_sort_groups {
+                self.flash("selection spans sort groups");
+                return;
+            }
+        }
+        let mut moving: Vec<bool> = visible
+            .iter()
+            .enumerate()
+            .map(|(cursor, &abs)| {
+                if moving_selection {
+                    self.selection.is_selected(abs)
+                } else {
+                    cursor == self.nav.cursor
+                }
+            })
+            .collect();
+        let mut swaps = Vec::new();
+        if down {
+            for cursor in (0..moving.len().saturating_sub(1)).rev() {
+                if moving[cursor]
+                    && !moving[cursor + 1]
+                    && same_sort_key(
+                        self.prefs.sort,
+                        &self.store.tasks()[visible[cursor]],
+                        &self.store.tasks()[visible[cursor + 1]],
+                    )
+                {
+                    swaps.push((visible[cursor], visible[cursor + 1]));
+                    moving.swap(cursor, cursor + 1);
+                }
+            }
+        } else {
+            for cursor in 1..moving.len() {
+                if moving[cursor]
+                    && !moving[cursor - 1]
+                    && same_sort_key(
+                        self.prefs.sort,
+                        &self.store.tasks()[visible[cursor]],
+                        &self.store.tasks()[visible[cursor - 1]],
+                    )
+                {
+                    swaps.push((visible[cursor], visible[cursor - 1]));
+                    moving.swap(cursor, cursor - 1);
+                }
+            }
+        }
+        if swaps.is_empty() {
+            if moving.iter().any(|&selected| selected) {
+                self.flash(match self.prefs.sort {
+                    Sort::Priority => "edge of priority/due group",
+                    Sort::Due => "edge of due-date group",
+                    Sort::File => "edge of list",
+                });
+            }
+            return;
+        }
+        let Some(mut follow_abs) = visible.get(self.nav.cursor).copied() else {
+            return;
+        };
+        for &(abs, target) in &swaps {
+            if follow_abs == abs {
+                follow_abs = target;
+            } else if follow_abs == target {
+                follow_abs = abs;
+            }
+        }
+        match self.store.move_tasks(&swaps) {
+            MoveOutcome::Moved => {
+                self.selection.remap_swaps(&swaps);
+                self.after_mutation(follow_abs);
+            }
+            MoveOutcome::Unchanged | MoveOutcome::OutOfRange => {}
+            MoveOutcome::Aborted(r) => self.handle_reconcile_abort(r),
+            MoveOutcome::Error(e) => self.flash(format!("reorder failed: {e}")),
         }
     }
 
@@ -256,6 +375,13 @@ impl App {
     pub fn undo(&mut self) {
         match self.store.undo() {
             UndoOutcome::Undone => {
+                // Undo collapses any in-flight multi-select, and a move/delete
+                // undone from Visual drops back to Normal — the selection's
+                // indices no longer mean the same tasks after the restore.
+                self.selection.clear();
+                if self.nav.is_visual() {
+                    self.nav.enter_normal();
+                }
                 self.flash("undo");
                 self.refresh_view();
             }

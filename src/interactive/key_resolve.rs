@@ -58,6 +58,8 @@ fn builtin_action(key: KeyEvent, mut chord: Option<&mut Chord>) -> Option<Action
         KeyCode::Char('q') => Action::Quit,
         KeyCode::Char('j') | KeyCode::Down => Action::CursorDown,
         KeyCode::Char('k') | KeyCode::Up => Action::CursorUp,
+        KeyCode::Char('J') => Action::MoveTaskDown,
+        KeyCode::Char('K') => Action::MoveTaskUp,
         KeyCode::Char('G') => Action::CursorBottom,
         // First 'g' arms the chord; second 'g' fires CursorTop.
         KeyCode::Char('g') if chord.as_mut().is_some_and(|c| c.toggle('g')) => Action::CursorTop,

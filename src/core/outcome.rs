@@ -71,6 +71,18 @@ pub enum PriorityOutcome {
     Error(StoreError),
 }
 
+/// Result of reordering tasks via `move_tasks`. `swaps` is a list of
+/// `(from, to)` index pairs applied in order.
+#[derive(Debug)]
+pub enum MoveOutcome {
+    Moved,
+    /// No swap was requested, or every swap was a self-swap.
+    Unchanged,
+    Aborted(Reconcile),
+    OutOfRange,
+    Error(StoreError),
+}
+
 #[derive(Debug)]
 pub enum DeleteOutcome {
     Deleted { abs: usize },

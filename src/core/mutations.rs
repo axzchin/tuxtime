@@ -1,7 +1,7 @@
 use super::Store;
 use super::outcome::{
     AddOutcome, BulkCompleteOutcome, BulkDeleteOutcome, CompleteOutcome, DeleteOutcome,
-    EditOutcome, PriorityOutcome, Reconcile, RenameOutcome, StoreError, TagOutcome,
+    EditOutcome, MoveOutcome, PriorityOutcome, Reconcile, RenameOutcome, StoreError, TagOutcome,
 };
 use crate::recurrence::{self, RecSpec};
 use crate::todo::{self, TagError};
@@ -124,6 +124,45 @@ impl Store {
         match self.persist() {
             Ok(()) => DeleteOutcome::Deleted { abs },
             Err(e) => DeleteOutcome::Error(e),
+        }
+    }
+
+    /// Reorder tasks by applying a list of index swaps in order. Used by
+    /// manual task ordering (`J`/`K`) — the App computes the minimal swap
+    /// list that moves the cursor (or the whole visual selection) one step
+    /// while respecting sort-group boundaries.
+    pub fn move_tasks(&mut self, swaps: &[(usize, usize)]) -> MoveOutcome {
+        match self.reconcile() {
+            Reconcile::Unchanged => {}
+            other => return MoveOutcome::Aborted(other),
+        }
+        if swaps
+            .iter()
+            .any(|&(abs, target)| abs >= self.tasks.len() || target >= self.tasks.len())
+        {
+            return MoveOutcome::OutOfRange;
+        }
+        if swaps.is_empty() || swaps.iter().all(|&(abs, target)| abs == target) {
+            return MoveOutcome::Unchanged;
+        }
+        let previous = self.tasks.clone();
+        for &(abs, target) in swaps {
+            self.tasks.swap(abs, target);
+        }
+        // Swapping moves the `start:`-bearing task between indices without
+        // changing the length — re-attach the timer to the task that still
+        // carries `start:`.
+        self.resync_timer();
+        match self.persist() {
+            Ok(()) => {
+                self.history.push(previous);
+                MoveOutcome::Moved
+            }
+            Err(e) => {
+                self.tasks = previous;
+                self.resync_timer();
+                MoveOutcome::Error(e)
+            }
         }
     }
 
@@ -868,6 +907,69 @@ mod tests {
         assert_eq!(store.tasks()[0].priority, Some('A'));
         store.set_priority_at(0, None);
         assert_eq!(store.tasks()[0].priority, None);
+    }
+
+    #[test]
+    fn move_task_persists_and_undoes() {
+        let mut store = build_store("first\nsecond\nthird\n");
+        assert!(matches!(
+            store.move_tasks(&[(1, 2), (0, 1)]),
+            MoveOutcome::Moved
+        ));
+        assert_eq!(
+            store
+                .tasks()
+                .iter()
+                .map(|task| task.raw.as_str())
+                .collect::<Vec<_>>(),
+            ["third", "first", "second"]
+        );
+        assert_eq!(
+            std::fs::read_to_string(&store.file_path).expect("read todo.txt"),
+            "third\nfirst\nsecond\n"
+        );
+        store.undo();
+        assert_eq!(
+            store
+                .tasks()
+                .iter()
+                .map(|task| task.raw.as_str())
+                .collect::<Vec<_>>(),
+            ["first", "second", "third"]
+        );
+    }
+
+    #[test]
+    fn move_tasks_aborts_after_external_edit() {
+        let mut store = build_store("first\nsecond\n");
+        std::fs::write(&store.file_path, "external\nfirst\nsecond\n")
+            .expect("write external change");
+
+        assert!(matches!(
+            store.move_tasks(&[(0, 1)]),
+            MoveOutcome::Aborted(Reconcile::Reloaded)
+        ));
+        assert_eq!(
+            store
+                .tasks()
+                .iter()
+                .map(|task| task.raw.as_str())
+                .collect::<Vec<_>>(),
+            ["external", "first", "second"]
+        );
+    }
+
+    #[test]
+    fn move_tasks_resyncs_running_timer_to_swapped_task() {
+        let mut store = build_store("first start:2026-05-06T10:00:00\nsecond\n");
+        assert_eq!(store.active_timer_abs(), Some(0));
+        assert!(matches!(store.move_tasks(&[(0, 1)]), MoveOutcome::Moved));
+        assert_eq!(
+            store.active_timer_abs(),
+            Some(1),
+            "the running timer must follow the start:-bearing task across the swap"
+        );
+        assert_eq!(store.tasks()[1].raw, "first start:2026-05-06T10:00:00");
     }
 
     #[test]

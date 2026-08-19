@@ -19,17 +19,17 @@ expression: buffer_to_text(&buf)
    @l│    x                 toggle complete           D                 cycle density         │     
    @p│    dd                delete task               L                 toggle line numbers   │     
      │    p                 cycle priority A→B→C→·    Z                 theme picker          │     
-     │    c                 add/remove context                                                │     
-     │    +                 add project             TIMESHEET (V to open)                     │     
-     │    b                 toggle billable           w / d             weekly / daily view   │     
-     │    yy / yb           copy line / body          s                 cycle sort            │     
-     │    u                 undo                      h / l             day back / forward    │     
-     │    o / O             open / create note        H / L             week back / forward   │     
-     │                                                t                 jump to today         │     
-     │  TIMER                                         g                 calendar date picker  │     
-     │    t                 start / stop timer        j / k             next / prev narrative │     
-     │    M                 manual time entry         Enter             edit narrative        │     
-     │    T                 quick interrupt           b                 toggle billable       │     
+     │    J / K             move task down / up                                               │     
+     │    c                 add/remove context      TIMESHEET (V to open)                     │     
+     │    +                 add project               w / d             weekly / daily view   │     
+     │    b                 toggle billable           s                 cycle sort            │     
+     │    yy / yb           copy line / body          h / l             day back / forward    │     
+     │    u                 undo                      H / L             week back / forward   │     
+     │    o / O             open / create note        t                 jump to today         │     
+     │                                                g                 calendar date picker  │     
+     │  TIMER                                         j / k             next / prev narrative │     
+     │    t                 start / stop timer        Enter             edit narrative        │     
+     │    M                 manual time entry         b                 toggle billable       │     
      │────────────────────────────────────────────────────────────────────────────────────────│     
      └────────────────────────────────────────────────────────────────────────────────────────┘     
                                                                                                     

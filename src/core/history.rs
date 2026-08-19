@@ -49,7 +49,7 @@ impl Store {
         }
         match self.history.pop() {
             Some(prev) => {
-                self.tasks = prev;
+                let current = std::mem::replace(&mut self.tasks, prev);
                 // Undo restores a pre-mutation task list whose indices may
                 // differ from the live one — re-attach the timer to whatever
                 // task in the snapshot carries `start:` (e.g. undoing a delete
@@ -57,7 +57,14 @@ impl Store {
                 self.resync_timer();
                 match self.persist() {
                     Ok(()) => UndoOutcome::Undone,
-                    Err(e) => UndoOutcome::Error(e),
+                    Err(e) => {
+                        // Persist failed: roll back to the pre-undo task list
+                        // and put the snapshot back so the undo can be retried.
+                        let prev = std::mem::replace(&mut self.tasks, current);
+                        self.history.push(prev);
+                        self.resync_timer();
+                        UndoOutcome::Error(e)
+                    }
                 }
             }
             None => UndoOutcome::Nothing,

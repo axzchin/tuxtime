@@ -47,6 +47,16 @@ pub const ENTRIES: &[PaletteEntry] = &[
         action: Action::CyclePriority,
     },
     PaletteEntry {
+        label: "move task down",
+        keys: "J",
+        action: Action::MoveTaskDown,
+    },
+    PaletteEntry {
+        label: "move task up",
+        keys: "K",
+        action: Action::MoveTaskUp,
+    },
+    PaletteEntry {
         label: "add project to current task",
         keys: "+",
         action: Action::BeginPromptProject,
@@ -542,6 +552,8 @@ mod tests {
             Action::ToggleComplete,
             Action::Delete,
             Action::CyclePriority,
+            Action::MoveTaskDown,
+            Action::MoveTaskUp,
             Action::BeginSearch,
             Action::OpenHelp,
             Action::OpenSettings,

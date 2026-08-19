@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::action::Action;
-use crate::app::{App, Mode, Nudge, Picker, Prompt, Screen, View};
+use crate::app::{App, Mode, Nudge, Picker, Prompt, Screen, Sort, View};
 use crate::config::Config;
 use crate::keybinds::KeyBindings;
 use chrono::NaiveDate;
@@ -119,6 +119,8 @@ fn plain_keys_resolve_to_their_actions() {
     let mut app = build_app();
     assert_eq!(resolve(&mut app, key('q')), Some(Action::Quit));
     assert_eq!(resolve(&mut app, key('j')), Some(Action::CursorDown),);
+    assert_eq!(resolve(&mut app, key('J')), Some(Action::MoveTaskDown),);
+    assert_eq!(resolve(&mut app, key('K')), Some(Action::MoveTaskUp),);
     assert_eq!(resolve(&mut app, key('?')), Some(Action::OpenHelp));
     assert_eq!(resolve(&mut app, ctrl('d')), Some(Action::HalfPageDown),);
     assert_eq!(resolve(&mut app, key('n')), Some(Action::BeginAdd),);
@@ -1059,6 +1061,191 @@ fn build_app_with_archive(todo_raw: &str, done_raw: Option<&str>) -> App {
     app
 }
 
+fn task_lines(app: &App) -> Vec<&str> {
+    app.tasks().iter().map(|task| task.raw.as_str()).collect()
+}
+
+#[test]
+fn capital_j_and_k_reorder_within_priority_sort_ties() {
+    let mut app = build_app_with_archive("(A) first\n(B) middle\n(A) second\n", None);
+    apply_action(&mut app, Action::MoveTaskDown);
+    assert_eq!(app.tasks()[0].raw, "(A) second");
+    assert_eq!(app.tasks()[2].raw, "(A) first");
+    assert_eq!(app.nav.cursor, 1);
+
+    apply_action(&mut app, Action::MoveTaskUp);
+    assert_eq!(app.tasks()[0].raw, "(A) first");
+    assert_eq!(app.tasks()[2].raw, "(A) second");
+    assert_eq!(app.nav.cursor, 0);
+}
+
+#[test]
+fn task_movement_preserves_priority_due_fallback() {
+    let mut app = build_app_with_archive(
+        "(A) later due:2026-06-20\n(A) sooner due:2026-06-01\n",
+        None,
+    );
+    apply_action(&mut app, Action::MoveTaskDown);
+    assert_eq!(
+        task_lines(&app),
+        ["(A) later due:2026-06-20", "(A) sooner due:2026-06-01"]
+    );
+    assert_eq!(app.nav.cursor, 0);
+    assert_eq!(app.flash_active(), Some("edge of priority/due group"));
+}
+
+#[test]
+fn task_movement_reorders_equal_due_dates() {
+    let mut app = build_app_with_archive(
+        "first due:2026-06-01\nundated\nsecond due:2026-06-01\n",
+        None,
+    );
+    app.prefs.sort = Sort::Due;
+    app.recompute_visible();
+    apply_action(&mut app, Action::MoveTaskDown);
+    assert_eq!(
+        task_lines(&app),
+        ["second due:2026-06-01", "undated", "first due:2026-06-01"]
+    );
+    assert_eq!(app.nav.cursor, 1);
+
+    apply_action(&mut app, Action::MoveTaskDown);
+    assert_eq!(app.flash_active(), Some("edge of due-date group"));
+}
+
+#[test]
+fn task_movement_is_unrestricted_in_file_sort() {
+    let mut app = build_app_with_archive(
+        "(B) first due:2026-06-20\n(A) second due:2026-06-01\n",
+        None,
+    );
+    app.prefs.sort = Sort::File;
+    app.recompute_visible();
+    apply_action(&mut app, Action::MoveTaskDown);
+    assert_eq!(
+        task_lines(&app),
+        ["(A) second due:2026-06-01", "(B) first due:2026-06-20"]
+    );
+    assert_eq!(app.nav.cursor, 1);
+}
+
+#[test]
+fn filtered_movement_swaps_visible_tasks_without_moving_hidden_tasks() {
+    let mut app = build_app_with_archive("first +work\nhidden +home\nsecond +work\n", None);
+    app.prefs.sort = Sort::File;
+    app.set_project_filter(Some("work".into()));
+
+    apply_action(&mut app, Action::MoveTaskDown);
+
+    assert_eq!(
+        task_lines(&app),
+        ["second +work", "hidden +home", "first +work"]
+    );
+    assert_eq!(app.nav.cursor, 1);
+}
+
+#[test]
+fn movement_rejects_selections_with_hidden_tasks() {
+    let mut app = build_app_with_archive("first +work\nhidden +home\nsecond +work\n", None);
+    app.prefs.sort = Sort::File;
+    app.nav.set_mode(Mode::Screen(Screen::Visual));
+    app.selection.toggle(0);
+    app.selection.toggle(1);
+    app.set_project_filter(Some("work".into()));
+
+    apply_action(&mut app, Action::MoveTaskDown);
+
+    assert_eq!(
+        task_lines(&app),
+        ["first +work", "hidden +home", "second +work"]
+    );
+    assert_eq!(app.flash_active(), Some("selection includes hidden tasks"));
+}
+
+#[test]
+fn movement_rejects_selections_across_sort_groups() {
+    let mut app = build_app_with_archive("(A) first\n(A) second\n(B) third\n(B) fourth\n", None);
+    app.nav.set_mode(Mode::Screen(Screen::Visual));
+    app.selection.toggle(0);
+    app.selection.toggle(2);
+
+    apply_action(&mut app, Action::MoveTaskDown);
+
+    assert_eq!(
+        task_lines(&app),
+        ["(A) first", "(A) second", "(B) third", "(B) fourth"]
+    );
+    assert_eq!(app.flash_active(), Some("selection spans sort groups"));
+}
+
+#[test]
+fn visual_selection_crosses_sort_groups_in_file_sort() {
+    let mut app = build_app_with_archive("(A) first\n(B) second\n(C) third\n", None);
+    app.prefs.sort = Sort::File;
+    app.nav.set_mode(Mode::Screen(Screen::Visual));
+    app.selection.toggle(0);
+    app.selection.toggle(1);
+
+    apply_action(&mut app, Action::MoveTaskDown);
+
+    assert_eq!(task_lines(&app), ["(C) third", "(A) first", "(B) second"]);
+    assert!(app.selection.is_selected(1));
+    assert!(app.selection.is_selected(2));
+}
+
+#[test]
+fn visual_selection_moves_as_one_undoable_block() {
+    let mut app = build_app_with_archive("(A) first\n(A) second\n(A) third\n(A) fourth\n", None);
+    app.nav.set_mode(Mode::Screen(Screen::Visual));
+    app.selection.toggle(0);
+    app.selection.toggle(1);
+    app.nav.cursor = 1;
+
+    apply_action(&mut app, Action::MoveTaskDown);
+    assert_eq!(
+        task_lines(&app),
+        ["(A) third", "(A) first", "(A) second", "(A) fourth"]
+    );
+    assert!(app.selection.is_selected(1));
+    assert!(app.selection.is_selected(2));
+    assert_eq!(app.nav.cursor, 2);
+
+    apply_action(&mut app, Action::Undo);
+    assert_eq!(
+        task_lines(&app),
+        ["(A) first", "(A) second", "(A) third", "(A) fourth"]
+    );
+    assert!(app.selection.is_empty());
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
+}
+
+#[test]
+fn disjoint_visual_selection_moves_independently() {
+    let mut app = build_app_with_archive("(A) first\n(A) second\n(A) third\n(A) fourth\n", None);
+    app.nav.set_mode(Mode::Screen(Screen::Visual));
+    app.selection.toggle(0);
+    app.selection.toggle(2);
+    app.nav.cursor = 2;
+
+    apply_action(&mut app, Action::MoveTaskDown);
+    assert_eq!(
+        task_lines(&app),
+        ["(A) second", "(A) first", "(A) fourth", "(A) third"]
+    );
+    assert!(app.selection.is_selected(1));
+    assert!(app.selection.is_selected(3));
+    assert_eq!(app.nav.cursor, 3);
+
+    apply_action(&mut app, Action::MoveTaskUp);
+    assert_eq!(
+        task_lines(&app),
+        ["(A) first", "(A) second", "(A) third", "(A) fourth"]
+    );
+    assert!(app.selection.is_selected(0));
+    assert!(app.selection.is_selected(2));
+    assert_eq!(app.nav.cursor, 2);
+}
+
 #[test]
 fn cursor_navigation_works_in_archive() {
     let mut app = build_app_with_archive(
@@ -1097,12 +1284,14 @@ fn archive_dd_permanently_deletes_task_under_cursor() {
 }
 
 #[test]
-fn archive_e_and_p_flash_readonly() {
+fn archive_mutations_flash_readonly() {
     let mut app = build_app_with_archive("a\n", Some("x 2026-05-02 2026-04-02 done one\n"));
     app.set_view(View::Archive);
     apply_action(&mut app, Action::BeginEdit);
     assert_eq!(app.flash_active(), Some("read-only in archive"));
     apply_action(&mut app, Action::CyclePriority);
+    assert_eq!(app.flash_active(), Some("read-only in archive"));
+    apply_action(&mut app, Action::MoveTaskDown);
     assert_eq!(app.flash_active(), Some("read-only in archive"));
     assert!(app.archive().tasks()[0].done);
 }
