@@ -379,17 +379,49 @@ pub(crate) fn handle_normal(app: &mut App, key: KeyEvent, keybinds: &KeyBindings
 // Copy helper (shared by CopyLine / CopyBody actions)
 // ---------------------------------------------------------------------------
 
-fn copy_current_task(app: &mut App, body_only: bool) {
-    let Some(task) = app.cur_task() else {
+pub(crate) fn copy_current_task(app: &mut App, body_only: bool) {
+    let multi = app.view() == View::List && app.nav.is_visual() && !app.selection.is_empty();
+    let count = if multi { app.selection.len() } else { 1 };
+    let Some(payload) = copy_payload(app, body_only) else {
+        if multi {
+            app.flash("selection includes hidden tasks");
+        }
         return;
     };
-    let payload = if body_only {
-        todo::body_only_from_clean(&task.clean_raw)
-    } else {
-        task.raw.clone()
-    };
     match clipboard::copy(&payload) {
-        Ok(()) => app.flash(if body_only { "copied (body)" } else { "copied" }),
+        Ok(()) => {
+            let msg = match (body_only, count) {
+                (false, 1) => "copied".to_string(),
+                (true, 1) => "copied (body)".to_string(),
+                (false, n) => format!("copied {n}"),
+                (true, n) => format!("copied {n} (body)"),
+            };
+            app.flash(msg);
+        }
         Err(e) => app.flash(format!("copy failed: {e}")),
     }
+}
+
+/// Build the copy payload for the current context. In Visual mode over the
+/// list view, copies every *visible* selected task in display order (joined by
+/// newlines); returns `None` when a selected task is hidden by the current
+/// filter, so the caller can refuse instead of copying a partial selection.
+pub(crate) fn copy_payload(app: &App, body_only: bool) -> Option<String> {
+    let fmt = |t: &todo::Task| {
+        if body_only {
+            todo::body_only_from_clean(&t.clean_raw)
+        } else {
+            t.raw.clone()
+        }
+    };
+    if app.view() == View::List && app.nav.is_visual() && !app.selection.is_empty() {
+        let lines: Vec<String> = app
+            .visible_indices()
+            .iter()
+            .filter(|&&abs| app.selection.is_selected(abs))
+            .map(|&abs| fmt(&app.tasks()[abs]))
+            .collect();
+        return (lines.len() == app.selection.len()).then(|| lines.join("\n"));
+    }
+    app.cur_task().map(fmt)
 }

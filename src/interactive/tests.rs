@@ -974,6 +974,36 @@ fn yb_chord_routes_to_copy_body() {
 }
 
 #[test]
+fn visual_copy_payload_uses_display_order() {
+    // Default sort is Priority, so display order is (A) then (B) even though
+    // the file lists (B) first.
+    let mut app = build_app_with_archive("(B) Second @phone\n(A) First +work\n", None);
+    app.nav.mode = Mode::Screen(Screen::Visual);
+    app.selection.toggle(0);
+    app.selection.toggle(1);
+
+    assert_eq!(
+        copy_payload(&app, false).as_deref(),
+        Some("(A) First +work\n(B) Second @phone")
+    );
+    assert_eq!(copy_payload(&app, true).as_deref(), Some("First\nSecond"));
+}
+
+#[test]
+fn visual_copy_rejects_hidden_selections() {
+    let mut app = build_app_with_archive("first +work\nhidden +home\n", None);
+    app.prefs.sort = crate::app::Sort::File;
+    app.nav.mode = Mode::Screen(Screen::Visual);
+    app.selection.toggle(0);
+    app.selection.toggle(1);
+    app.set_project_filter(Some("work".into()));
+
+    assert_eq!(copy_payload(&app, false), None);
+    copy_current_task(&mut app, false);
+    assert_eq!(app.flash_active(), Some("selection includes hidden tasks"));
+}
+
+#[test]
 fn plain_b_toggles_billable() {
     let mut app = build_app();
     // Plain 'b' now toggles billable/non-billable.
@@ -1482,6 +1512,61 @@ fn settings_advertised_keys_apply_in_settings_mode() {
         KeyEvent::new(KeyCode::Char('Z'), KeyModifiers::NONE),
     );
     assert_eq!(app.nav.mode, Mode::Picker(Picker::Theme));
+}
+
+/// `T` must step the theme picker's live preview forward exactly like `j`
+/// (matching the `j/k/T` footer legend), and Esc must still revert.
+#[test]
+fn pick_theme_t_steps_like_j_and_esc_reverts() {
+    let mut app = build_app();
+    app.enter_pick_theme();
+    let orig = app.prefs.theme_idx();
+    assert_eq!(app.nav.mode, Mode::Picker(Picker::Theme));
+
+    handle_pick_theme(&mut app, key('T'));
+    let after_t = app.prefs.theme_idx();
+    assert_ne!(after_t, orig, "`T` must advance the preview");
+    assert_eq!(
+        app.nav.mode,
+        Mode::Picker(Picker::Theme),
+        "`T` must not close the picker"
+    );
+
+    handle_pick_theme(&mut app, key('j'));
+    assert_ne!(
+        app.prefs.theme_idx(),
+        after_t,
+        "`j` must advance from wherever `T` left the preview"
+    );
+
+    handle_pick_theme(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(
+        app.prefs.theme_idx(),
+        orig,
+        "Esc must revert to the theme active when the picker opened"
+    );
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
+}
+
+/// A config reload landing mid-preview would clobber the in-memory preview
+/// back to disk, so it is deferred while the theme picker is open.
+#[test]
+fn config_reload_is_deferred_while_theme_picker_is_open() {
+    let mut app = build_app();
+    assert!(
+        !app.defer_config_reload(),
+        "precondition: nothing deferred outside the picker"
+    );
+    app.enter_pick_theme();
+    assert!(
+        app.defer_config_reload(),
+        "reload must be deferred while the picker previews a theme"
+    );
+    app.pick_theme_cancel();
+    assert!(
+        !app.defer_config_reload(),
+        "reload resumes once the picker closes"
+    );
 }
 
 // ---- stale-timer startup prompt ----

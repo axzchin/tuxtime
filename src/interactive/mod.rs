@@ -26,15 +26,17 @@ pub use key_resolve::resolve_builtin_single_key;
 // every one of these is already reachable within this module tree through
 // the modules' own `super::` imports.
 #[cfg(test)]
+pub(crate) use action_dispatch::{copy_current_task, copy_payload};
+#[cfg(test)]
 pub(crate) use insert::{EditAction, handle_insert, resolve_edit_key};
 #[cfg(test)]
 pub(crate) use key_resolve::resolve_normal_key;
 #[cfg(test)]
 pub(crate) use overlays::{
     handle_day_boundary, handle_idle_nudge, handle_long_timer_nudge, handle_manage_projects,
-    handle_manual_entry_choice, handle_pick, handle_pick_nudge_task, handle_pick_timesheet_date,
-    handle_prompt, handle_review_nudge, handle_search, handle_settings, handle_stale_timer,
-    handle_welcome,
+    handle_manual_entry_choice, handle_pick, handle_pick_nudge_task, handle_pick_theme,
+    handle_pick_timesheet_date, handle_prompt, handle_review_nudge, handle_search, handle_settings,
+    handle_stale_timer, handle_welcome,
 };
 #[cfg(test)]
 pub(crate) use timesheet_handler::handle_timesheet_keys;

@@ -323,13 +323,20 @@ fn run(
 /// apply it to the app. Returns `true` when a reload was attempted (whether
 /// successful or not) so the caller can trigger a redraw.
 fn poll_config_reload(app: &mut App, rx: &Option<mpsc::Receiver<()>>) -> bool {
+    // Defer while the theme picker is open: its live preview mutates
+    // `prefs.theme_idx` without saving, so a reload landing mid-preview
+    // would silently clobber it back to disk. The signal stays queued in
+    // `rx` and is applied on the first poll after the picker closes.
+    if app.defer_config_reload() {
+        return false;
+    }
     let rx = match rx {
         Some(r) => r,
         None => return false,
     };
     match rx.try_recv() {
-        Ok(()) | Err(mpsc::TryRecvError::Disconnected) => {}
-        Err(mpsc::TryRecvError::Empty) => return false,
+        Ok(()) => {}
+        Err(mpsc::TryRecvError::Empty | mpsc::TryRecvError::Disconnected) => return false,
     }
     let Some(ref path) = app.env.config_path else {
         return true;

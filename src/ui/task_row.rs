@@ -29,9 +29,11 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
     let mut spans: Vec<Span<'a>> = Vec::new();
 
     if opts.show_line_num {
+        // The line number must stay visible on the highlighted cursor row.
+        let num_color = if opts.cursor { theme.fg } else { theme.dim };
         spans.push(Span::styled(
             format!("{:>3} ", opts.idx_label + 1),
-            Style::default().fg(theme.dim),
+            Style::default().fg(num_color),
         ));
     }
     if opts.multi_mode {
@@ -54,7 +56,13 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
     } else {
         "  "
     };
-    let glyph_color = if task.done { theme.done } else { theme.accent };
+    // Keep the glyph visible on the cursor row (a completed task's dim
+    // "done" color otherwise disappears into the highlight).
+    let glyph_color = if task.done && !opts.cursor {
+        theme.done
+    } else {
+        theme.accent
+    };
     let mut glyph_style = Style::default().fg(glyph_color);
     if opts.cursor {
         glyph_style = glyph_style.add_modifier(Modifier::BOLD);
@@ -133,9 +141,9 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
         rest = &rest[tok_end..];
     }
     let line_style = if opts.cursor {
-        Style::default().bg(theme.cursor)
+        Style::default().bg(theme.cursor).fg(theme.fg)
     } else if opts.selected {
-        Style::default().bg(theme.selected)
+        Style::default().bg(theme.selected).fg(theme.fg)
     } else {
         Style::default()
     };
@@ -194,7 +202,12 @@ fn push_token_spans<'a>(
     }
 
     // plain word — highlight each matched subsequence char inside this token.
-    let base_color = if task.done { theme.done } else { theme.fg };
+    // Body text stays visible on the cursor row even when the task is done.
+    let base_color = if task.done && !opts.cursor {
+        theme.done
+    } else {
+        theme.fg
+    };
     let base_style = apply_dim(Style::default().fg(base_color), task.done);
     let hl_style = Style::default()
         .fg(theme.bg)

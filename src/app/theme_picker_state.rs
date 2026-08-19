@@ -69,4 +69,14 @@ impl App {
         self.prefs.set_theme_idx(self.theme_picker.orig);
         self.nav.enter_normal();
     }
+
+    /// Whether a pending config reload should be deferred. The theme picker's
+    /// live preview (`pick_theme_step`) mutates `prefs.theme_idx` in memory
+    /// without saving, so an unrelated reload landing mid-preview would
+    /// silently clobber it back to whatever's on disk. The watcher signal
+    /// stays queued and is applied on the first poll after the picker closes.
+    #[must_use]
+    pub fn defer_config_reload(&self) -> bool {
+        self.nav.mode() == Mode::Picker(Picker::Theme)
+    }
 }

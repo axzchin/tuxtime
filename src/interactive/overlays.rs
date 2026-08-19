@@ -158,6 +158,12 @@ pub(crate) fn handle_pick(app: &mut App, key: KeyEvent) {
 }
 
 pub(crate) fn handle_pick_theme(app: &mut App, key: KeyEvent) {
+    // `T` mirrors `j` inside the picker — a second, home-row-friendly way to
+    // step the live preview — matching the `j/k/T` legend in its footer.
+    if key.code == KeyCode::Char('T') {
+        app.pick_theme_step(true);
+        return;
+    }
     handle_list_picker(
         app,
         key,
