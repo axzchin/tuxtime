@@ -815,6 +815,51 @@ mod tests {
     }
 
     #[test]
+    fn cli_due_filter_matches_exact_date() {
+        let store = crate::core::test_support::build_store(
+            "later due:2026-05-10\nmatch due:2026-05-06\nother due:2026-05-11\n",
+        );
+        let filter = filter_from_terms(&argv(&["due:2026-05-06"]));
+        let indices = matching_indices(store.tasks(), &filter, store.today(), |_| true);
+        assert_eq!(indices, vec![1]);
+    }
+
+    #[test]
+    fn cli_due_filter_matches_forward_and_backward_ranges() {
+        let store = crate::core::test_support::build_store(
+            "yesterday due:2026-05-05\ntoday due:2026-05-06\nforward due:2026-05-10\nfar due:2026-05-20\n",
+        );
+
+        let forward = filter_from_terms(&argv(&["due:+1w"]));
+        let forward_indices = matching_indices(store.tasks(), &forward, store.today(), |_| true);
+        // CLI output is case-insensitively sorted by the full task line.
+        assert_eq!(forward_indices, vec![2, 1]);
+
+        let backward = filter_from_terms(&argv(&["due:-1d"]));
+        let backward_indices = matching_indices(store.tasks(), &backward, store.today(), |_| true);
+        assert_eq!(backward_indices, vec![1, 0]);
+    }
+
+    #[test]
+    fn cli_due_filter_combines_date_range_with_project_and_text() {
+        let store = crate::core::test_support::build_store(
+            "call client +work due:2026-05-08\ncall client +home due:2026-05-08\nwrite report +work due:2026-05-20\n",
+        );
+        let filter = filter_from_terms(&argv(&["due:+1w", "+work", "client"]));
+        let indices = matching_indices(store.tasks(), &filter, store.today(), |_| true);
+        assert_eq!(indices, vec![0]);
+    }
+
+    #[test]
+    fn cli_invalid_due_filter_remains_literal_search() {
+        let store =
+            crate::core::test_support::build_store("remember due:xyz later\nordinary task\n");
+        let filter = filter_from_terms(&argv(&["due:xyz"]));
+        let indices = matching_indices(store.tasks(), &filter, store.today(), |_| true);
+        assert_eq!(indices, vec![0]);
+    }
+
+    #[test]
     fn parse_indices_desc_orders_highest_first_and_dedups() {
         // 1-based in, 0-based out, descending, deduplicated.
         assert_eq!(
