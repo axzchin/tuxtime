@@ -8,6 +8,7 @@ pub mod cmd;
 pub mod config;
 pub mod config_watcher;
 pub mod core;
+pub(crate) mod due_filter;
 pub(crate) mod file_lock;
 pub(crate) mod inbox;
 pub mod interactive;

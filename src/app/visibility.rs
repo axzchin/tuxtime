@@ -74,11 +74,21 @@ impl VisibleList {
         sort: Sort,
         week_start: &WeekStart,
     ) -> Self {
-        let needle = (!filter.search.is_empty()).then_some(filter.search.as_str());
+        // Resolved once, not per task — a `due:` term can drive a
+        // business-day walk in `threshold::shift`.
+        let needle =
+            (!filter.search.is_empty()).then(|| filter::resolve_needle(&filter.search, today));
 
         let mut idxs: Vec<usize> = (0..tasks.len())
             .filter(|&i| {
-                filter::list_predicate(&tasks[i], show_done, show_future, today, filter, needle)
+                filter::list_predicate(
+                    &tasks[i],
+                    show_done,
+                    show_future,
+                    today,
+                    filter,
+                    needle.as_ref(),
+                )
             })
             .collect();
 
@@ -196,6 +206,15 @@ mod tests {
     fn search_matches_subsequence() {
         let mut app = build_app("2026-05-01 Call dentist\n2026-05-01 buy milk\n");
         app.filter.search = "cade".into();
+        app.recompute_visible();
+        assert_eq!(app.visible_indices().len(), 1);
+    }
+
+    #[test]
+    fn search_due_range_matches_by_due_field_not_literal_text() {
+        let mut app =
+            build_app("in range due:2026-05-10\nout of range due:2026-05-20\nno due date here\n");
+        app.filter.search = "due:+1w".into();
         app.recompute_visible();
         assert_eq!(app.visible_indices().len(), 1);
     }

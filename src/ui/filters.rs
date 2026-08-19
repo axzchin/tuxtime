@@ -4,10 +4,9 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-use crate::app::{App, View, format_compact_duration, ordered_unique};
-use crate::search::subseq_match_ci;
+use crate::app::{App, Filter, View, format_compact_duration, ordered_unique};
+use crate::core::filter;
 use crate::theme::Theme;
-use crate::todo;
 
 /// Render the left sidebar. The content is view-aware: the list/archive
 /// views show the project/context/saved-filter list (task counts), while the
@@ -87,14 +86,18 @@ fn render_filter_side(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
                     .add_modifier(Modifier::BOLD),
             )],
         ));
+        let today = app.today();
+        let default_filter = Filter::default();
         for f in saved {
             let active = app.filter().search == f.query;
+            // Same predicate the list view uses, so a saved `due:` query
+            // counts by date range instead of its own literal text.
+            let needle = filter::resolve_needle(&f.query, today);
             let count = app
                 .tasks()
                 .iter()
                 .filter(|t| {
-                    !t.done
-                        && subseq_match_ci(todo::body_after_priority(&t.raw), &f.query).is_some()
+                    !t.done && filter::passes_user_filter(t, &default_filter, Some(&needle))
                 })
                 .count();
             lines.push(filter_row(theme, "", &f.name, count, active, theme.accent));

@@ -584,10 +584,20 @@ fn filter_from_terms(terms: &[String]) -> Filter {
 /// Indices into `tasks` matching `filter` (with an optional extra predicate),
 /// ordered like todo.sh's default: a case-insensitive sort of the full task
 /// line (`sort -f -k2 -b`), ties broken by file position.
-fn matching_indices(tasks: &[Task], filter: &Filter, extra: impl Fn(&Task) -> bool) -> Vec<usize> {
-    let needle = (!filter.search.is_empty()).then_some(filter.search.as_str());
+fn matching_indices(
+    tasks: &[Task],
+    filter: &Filter,
+    today: &str,
+    extra: impl Fn(&Task) -> bool,
+) -> Vec<usize> {
+    // Resolved once for the whole list rather than per task; see the same
+    // hoist in `app::visibility`.
+    let needle =
+        (!filter.search.is_empty()).then(|| corefilter::resolve_needle(&filter.search, today));
     let mut idxs: Vec<usize> = (0..tasks.len())
-        .filter(|&i| corefilter::passes_user_filter(&tasks[i], filter, needle) && extra(&tasks[i]))
+        .filter(|&i| {
+            corefilter::passes_user_filter(&tasks[i], filter, needle.as_ref()) && extra(&tasks[i])
+        })
         .collect();
     idxs.sort_by(|&a, &b| {
         tasks[a]
@@ -621,7 +631,7 @@ fn print_row(n: usize, raw: &str) {
 fn cmd_list(store: &Store, pos: &[String], json: bool) -> i32 {
     let filter = filter_from_terms(pos);
     let tasks = store.tasks();
-    let idxs = matching_indices(tasks, &filter, |_| true);
+    let idxs = matching_indices(tasks, &filter, store.today(), |_| true);
     if json {
         let refs: Vec<(usize, &Task)> = idxs.iter().map(|&i| (i + 1, &tasks[i])).collect();
         println!("{}", json::task_array(&refs));
@@ -641,9 +651,9 @@ fn cmd_list(store: &Store, pos: &[String], json: bool) -> i32 {
 fn cmd_listall(store: &Store, pos: &[String], json: bool) -> i32 {
     let filter = filter_from_terms(pos);
     let tasks = store.tasks();
-    let live = matching_indices(tasks, &filter, |_| true);
+    let live = matching_indices(tasks, &filter, store.today(), |_| true);
     let archived_tasks = store.archive().tasks();
-    let done = matching_indices(archived_tasks, &filter, |_| true);
+    let done = matching_indices(archived_tasks, &filter, store.today(), |_| true);
     if json {
         let live_refs: Vec<(usize, &Task)> = live.iter().map(|&i| (i + 1, &tasks[i])).collect();
         let done_refs: Vec<(usize, &Task)> =
@@ -692,7 +702,7 @@ fn cmd_listpri(store: &Store, pos: &[String], json: bool) -> i32 {
         }
     };
     let tasks = store.tasks();
-    let idxs = matching_indices(tasks, &Filter::default(), |t| match only {
+    let idxs = matching_indices(tasks, &Filter::default(), store.today(), |t| match only {
         Some(c) => t.priority == Some(c),
         None => t.priority.is_some(),
     });
