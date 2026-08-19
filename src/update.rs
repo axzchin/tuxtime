@@ -56,11 +56,13 @@ pub fn run() -> io::Result<()> {
             println!("    cargo install --git https://github.com/axzchin/tuxtime --force");
         }
         InstallKind::Binary => {
-            println!("Looks like a downloaded binary. Grab the latest from:");
+            println!("Looks like a downloaded binary. Update with:");
             println!();
-            println!("    https://github.com/axzchin/tuxtime/releases/latest");
-            println!();
-            println!("...and replace the file above.");
+            println!("    {}", binary_update_instructions(std::env::consts::OS));
+            if std::env::consts::OS != "linux" {
+                println!();
+                println!("...and replace the file above.");
+            }
         }
         InstallKind::Unknown => {
             println!("Could not detect the install method. Options:");
@@ -94,6 +96,18 @@ pub fn detect_kind(exe: &Path) -> InstallKind {
         return InstallKind::Binary;
     }
     InstallKind::Unknown
+}
+
+/// The update command shown for a downloaded-binary install. Linux (incl. WSL)
+/// gets the one-line installer; other platforms are pointed at the release
+/// page. `os` is injected rather than read directly so it's unit-testable.
+#[must_use]
+pub fn binary_update_instructions(os: &str) -> &'static str {
+    if os == "linux" {
+        "curl -fsSL https://raw.githubusercontent.com/axzchin/tuxtime/main/install.sh | sh"
+    } else {
+        "https://github.com/axzchin/tuxtime/releases/latest"
+    }
 }
 
 /// Spawn the background update check. Returns a receiver that yields exactly
@@ -335,6 +349,21 @@ mod tests {
             detect_kind(&PathBuf::from("/tmp/tuxtime")),
             InstallKind::Binary
         );
+    }
+
+    #[test]
+    fn binary_update_instructions_points_linux_at_install_script() {
+        let hint = binary_update_instructions("linux");
+        assert!(hint.contains("install.sh"), "{hint}");
+        assert!(hint.contains("| sh"), "{hint}");
+    }
+
+    #[test]
+    fn binary_update_instructions_points_other_oses_at_release_page() {
+        for os in ["macos", "windows", "freebsd"] {
+            let hint = binary_update_instructions(os);
+            assert!(hint.contains("releases/latest"), "{os}: {hint}");
+        }
     }
 
     #[test]

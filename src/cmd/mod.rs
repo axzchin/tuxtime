@@ -356,8 +356,10 @@ fn cmd_done(store: &mut Store, pos: &[String], json: bool) -> i32 {
     };
 
     let prefix = file_prefix(store);
-    // (number, completed task, optional (next number, spawned task))
-    type Completed = (usize, Task, Option<(usize, Task)>);
+    // (original 0-based index, completed task, optional spawned successor).
+    // Final 1-based numbers are resolved after the loop — a spawn inserted
+    // below a later completion shifts that later task's number.
+    type Completed = (usize, Task, Option<Task>);
     let mut completed: Vec<Completed> = Vec::new();
     let mut code = 0;
     for abs in indices {
@@ -367,13 +369,13 @@ fn cmd_done(store: &mut Store, pos: &[String], json: bool) -> i32 {
         }
         match store.toggle_complete(abs) {
             CompleteOutcome::Completed { abs } => {
-                completed.push((abs + 1, store.tasks()[abs].clone(), None));
+                completed.push((abs, store.tasks()[abs].clone(), None));
             }
             CompleteOutcome::CompletedSpawned { abs, next } => {
                 completed.push((
-                    abs + 1,
+                    abs,
                     store.tasks()[abs].clone(),
-                    Some((next + 1, store.tasks()[next].clone())),
+                    Some(store.tasks()[next].clone()),
                 ));
             }
             CompleteOutcome::Uncompleted { .. } | CompleteOutcome::OutOfRange => {}
@@ -382,26 +384,52 @@ fn cmd_done(store: &mut Store, pos: &[String], json: bool) -> i32 {
         }
     }
     completed.reverse(); // back to ascending for display
+    let numbers = final_done_numbers(
+        &completed
+            .iter()
+            .map(|(o, _, s)| (*o, s.is_some()))
+            .collect::<Vec<_>>(),
+    );
     if json {
-        let refs: Vec<(usize, &Task)> = completed.iter().map(|(n, t, _)| (*n, t)).collect();
+        let refs: Vec<(usize, &Task)> = completed
+            .iter()
+            .zip(&numbers)
+            .map(|((_, t, _), (n, _))| (*n, t))
+            .collect();
         println!(
             "{{\"ok\":true,\"action\":\"done\",\"tasks\":{}}}",
             json::task_array(&refs)
         );
     } else {
-        for (n, t, next) in &completed {
+        for ((_, t, spawn), (n, spawn_n)) in completed.iter().zip(&numbers) {
             // todo.sh format for the completion itself.
             print_row(*n, &t.raw);
             println!("{prefix}: {n} marked as done.");
             // Recurrence is a tuxtime feature todo.sh lacks; surface the spawned
             // next instance as a freshly-added task in the same idiom.
-            if let Some((nn, nt)) = next {
-                print_row(*nn, &nt.raw);
-                println!("{prefix}: {nn} added.");
+            if let (Some(spawn_task), Some(spawn_n)) = (spawn, spawn_n) {
+                print_row(*spawn_n, &spawn_task.raw);
+                println!("{prefix}: {spawn_n} added.");
             }
         }
     }
     code
+}
+
+/// Final 1-based display numbers for a set of completions. `records` is
+/// `(original 0-based index, spawned successor)`. Each spawned successor is
+/// inserted immediately after its completed task, so a task's final number is
+/// its original number plus the count of spawns from *lower* original indices.
+fn final_done_numbers(records: &[(usize, bool)]) -> Vec<(usize, Option<usize>)> {
+    records
+        .iter()
+        .map(|&(orig, spawned)| {
+            let shifts = records.iter().filter(|&&(o, s)| o < orig && s).count();
+            let done = orig + shifts + 1;
+            let spawn = spawned.then_some(orig + 1 + shifts + 1);
+            (done, spawn)
+        })
+        .collect()
 }
 
 /// Ask the user to confirm an action on stdin (todo.sh-style). Returns false on
@@ -786,5 +814,20 @@ mod tests {
         assert!(parse_indices_desc(&argv(&["0"]), 3).is_err());
         assert!(parse_indices_desc(&argv(&["9"]), 3).is_err());
         assert!(parse_indices_desc(&argv(&["x"]), 3).is_err());
+    }
+
+    #[test]
+    fn final_done_numbers_accounts_for_spawn_shifts() {
+        // Complete indices 1 and 4 (both recurring). The spawn inserted at 1
+        // shifts the completion at 4 and its own spawn up by one each.
+        assert_eq!(
+            final_done_numbers(&[(1, true), (4, true)]),
+            vec![(2, Some(3)), (6, Some(7))]
+        );
+        // A non-recurring completion above a spawning one is still shifted.
+        assert_eq!(
+            final_done_numbers(&[(0, false), (2, true)]),
+            vec![(1, None), (3, Some(4))]
+        );
     }
 }

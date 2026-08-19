@@ -584,6 +584,41 @@ pub fn map_body_tokens(raw: &str, map: impl FnMut(&str) -> Option<String>) -> St
     }
 }
 
+/// Split a body into whitespace-delimited tokens, keeping a quoted
+/// `key:"value with spaces"` token intact (the closing quote ends the token,
+/// so internal spaces don't split it). Used where token surgery must not
+/// corrupt a quoted `note:` value — `split_whitespace` would slice the note
+/// into fragments and let a `due:`-shaped word inside it be rewritten.
+pub(crate) fn split_body_tokens(body: &str) -> Vec<&str> {
+    let bytes = body.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i].is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < bytes.len() && !bytes[i].is_ascii_whitespace() {
+            // A quoted value swallows its internal whitespace: jump to the
+            // closing quote so `note:"call ops"` stays one token.
+            if i + 1 < bytes.len() && bytes[i] == b':' && bytes[i + 1] == b'"' {
+                let mut j = i + 2;
+                while j < bytes.len() && bytes[j] != b'"' {
+                    j += 1;
+                }
+                if j < bytes.len() {
+                    i = j + 1;
+                    break;
+                }
+            }
+            i += 1;
+        }
+        out.push(&body[start..i]);
+    }
+    out
+}
+
 pub fn body_after_quoted_kv(raw: &str) -> String {
     let mut body = raw.to_string();
     while let Some(st) = body.find(r#":""#) {
@@ -969,6 +1004,31 @@ mod tests {
             let t = parse_line(raw).unwrap();
             assert_eq!(body_only_from_clean(&t.clean_raw), body_only(raw));
         }
+    }
+
+    #[test]
+    fn split_body_tokens_keeps_quoted_note_intact() {
+        let tokens = split_body_tokens(
+            "Water plants due:2026-05-06 rec:1d note:\"call ops re: due:2026-05-20\"",
+        );
+        assert_eq!(
+            tokens,
+            vec![
+                "Water",
+                "plants",
+                "due:2026-05-06",
+                "rec:1d",
+                "note:\"call ops re: due:2026-05-20\"",
+            ]
+        );
+    }
+
+    #[test]
+    fn split_body_tokens_unterminated_quote_falls_back_to_words() {
+        // No closing quote: don't swallow the rest of the line, just fall
+        // back to whitespace splitting.
+        let tokens = split_body_tokens("a note:\"oops b");
+        assert_eq!(tokens, vec!["a", "note:\"oops", "b"]);
     }
 
     // ── bill: tag ──────────────────────────────────────────────────────

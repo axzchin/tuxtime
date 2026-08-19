@@ -386,11 +386,26 @@ impl Store {
             }
         }
         // Pass 2: insert spawns at original_abs+1, descending, so later inserts
-        // can't shift earlier indices.
+        // can't shift earlier indices. Dedupe like `toggle_complete`: a spawn
+        // whose identity already has a live carrier is dropped, so
+        // bulk-completing several occurrences of the same recurring task
+        // yields a single successor rather than one per completed line.
         spawns.sort_by_key(|s| std::cmp::Reverse(s.0));
-        let spawned = spawns.len();
+        let mut live_identities: Vec<String> = self
+            .tasks
+            .iter()
+            .filter(|t| !t.done)
+            .map(|t| recurrence_identity(&t.raw))
+            .collect();
+        let mut spawned = 0usize;
         for (abs, parsed) in spawns {
+            let identity = recurrence_identity(&parsed.raw);
+            if live_identities.contains(&identity) {
+                continue;
+            }
+            live_identities.push(identity);
             self.tasks.insert(abs + 1, parsed);
+            spawned += 1;
         }
         self.resync_timer();
         let completed = to_complete.len();
@@ -535,13 +550,16 @@ fn build_next_instance(
     };
     let next_due = recurrence::advance(anchor, spec)?;
     let next_due_str = next_due.format("%Y-%m-%d").to_string();
+    // The *old* due, when parseable — used to shift an absolute `t:` by the
+    // same amount the due moved (see `shift_absolute_threshold`).
+    let old_due_date = due.and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
 
     let body = todo::body_after_priority(raw);
 
     // Substitute the first `due:` with the new value, drop later `due:` dups.
     let mut out_tokens: Vec<String> = Vec::new();
     let mut due_seen = false;
-    for tok in body.split_whitespace() {
+    for tok in todo::split_body_tokens(body) {
         if let Some(rest) = tok.strip_prefix("due:")
             && !rest.is_empty()
         {
@@ -549,6 +567,25 @@ fn build_next_instance(
                 out_tokens.push(format!("due:{next_due_str}"));
                 due_seen = true;
             }
+            continue;
+        }
+        // Shift an absolute `t:` along with the `due:` so "N days before due"
+        // stays true on the successor; relative `t:` passes through verbatim
+        // (it re-anchors against the new due at render time).
+        if let Some(rest) = tok.strip_prefix("t:")
+            && !rest.is_empty()
+        {
+            out_tokens.push(
+                shift_absolute_threshold(tok, old_due_date, next_due)
+                    .unwrap_or_else(|| tok.to_string()),
+            );
+            continue;
+        }
+        // The successor starts with no time: drop the live timer and the
+        // accumulated session tags, or the next occurrence would double-count
+        // the completed session (and a copied `start:` would violate the
+        // single-timer invariant). Matches `carry_forward_body`.
+        if tok.starts_with("start:") || tok.starts_with("dur:") || tok.starts_with("log:") {
             continue;
         }
         out_tokens.push(tok.to_string());
@@ -562,6 +599,27 @@ fn build_next_instance(
         None => format!("{today} "),
     };
     Some(format!("{prefix}{}", out_tokens.join(" ")))
+}
+
+/// Shift an absolute `t:` threshold by the same day-delta the `due:` moved, so
+/// "N days before due" survives the spawn. Relative thresholds re-anchor
+/// against the successor's `due:` on their own, and an absolute threshold with
+/// no parseable old `due:` (or a malformed `t:` value) is left untouched —
+/// returning `None` so the caller copies the token verbatim.
+fn shift_absolute_threshold(
+    tok: &str,
+    old_due: Option<chrono::NaiveDate>,
+    next_due: chrono::NaiveDate,
+) -> Option<String> {
+    let value = tok.strip_prefix("t:")?;
+    let crate::threshold::ThresholdSpec::Absolute(date) = crate::threshold::parse_threshold(value)?
+    else {
+        return None;
+    };
+    let old_due = old_due?;
+    let delta = next_due.signed_duration_since(old_due).num_days();
+    date.checked_add_signed(chrono::TimeDelta::days(delta))
+        .map(|d| format!("t:{}", d.format("%Y-%m-%d")))
 }
 
 #[cfg(test)]
@@ -686,6 +744,93 @@ mod tests {
         let next_raw = &store.tasks()[1].raw;
         assert_eq!(next_raw.matches("due:").count(), 1);
         assert!(next_raw.contains("due:2026-05-16"));
+    }
+
+    // ---- recurrence × timer interaction ----
+
+    #[test]
+    fn spawn_reshifts_running_timer_to_the_shifted_task() {
+        // Task 0 is recurring; task 1 carries a live timer (`start:`).
+        let mut store = build_store(
+            "Pay rent due:2026-05-06 rec:+1m\nDraft motion start:2026-05-06T10:00:00\n",
+        );
+        assert_eq!(store.active_timer_abs(), Some(1));
+        assert!(store.is_timer_running_on(1));
+
+        assert!(matches!(
+            store.toggle_complete(0),
+            CompleteOutcome::CompletedSpawned { .. }
+        ));
+        // The successor is inserted at index 1, pushing the timed task to 2.
+        // `resync_timer` must re-attach the timer to the task that still
+        // carries `start:`, not blindly keep index 1.
+        assert_eq!(store.tasks().len(), 3);
+        assert_eq!(store.active_timer_abs(), Some(2));
+        assert!(store.is_timer_running_on(2));
+        assert!(!store.is_timer_running_on(1), "successor must not run");
+        // Index 1 is the recurring successor, not the timed task.
+        assert_eq!(store.tasks()[1].rec.as_deref(), Some("+1m"));
+        assert_eq!(store.tasks()[1].due.as_deref(), Some("2026-06-06"));
+        // The timed task still carries its `start:` tag.
+        assert!(store.task_raw(2).unwrap().contains("start:"));
+    }
+
+    #[test]
+    fn spawn_successor_starts_with_no_time() {
+        // A recurring task completed while a timer runs (start:) and with
+        // accumulated dur:/log: must yield a successor that starts fresh:
+        // no start:, dur:, or log: — otherwise the next occurrence would
+        // double-count the completed session's time.
+        let mut store = build_store(
+            "Water plants due:2026-05-06 rec:1d dur:3600 log:2026-05-05 start:2026-05-06T10:00:00\n",
+        );
+        store.toggle_complete(0);
+        assert_eq!(store.tasks().len(), 2);
+        let next_raw = store.task_raw(1).unwrap();
+        assert!(
+            !next_raw.contains("start:"),
+            "successor must not inherit the timer: {next_raw}"
+        );
+        assert!(
+            !next_raw.contains("dur:"),
+            "successor must not inherit elapsed time: {next_raw}"
+        );
+        assert!(
+            !next_raw.contains("log:"),
+            "successor must not inherit the log date: {next_raw}"
+        );
+        // The successor keeps the recurrence and a fresh due.
+        assert_eq!(store.tasks()[1].rec.as_deref(), Some("1d"));
+        assert_eq!(store.tasks()[1].due.as_deref(), Some("2026-05-07"));
+        // The completed original keeps its accumulated time.
+        assert!(store.tasks()[0].done);
+        assert!(store.task_raw(0).unwrap().contains("dur:3600"));
+    }
+
+    #[test]
+    fn completing_running_recurring_task_keeps_timer_on_the_done_task() {
+        let mut store =
+            build_store("Water plants due:2026-05-06 rec:1d start:2026-05-06T10:00:00\n");
+        assert_eq!(store.active_timer_abs(), Some(0));
+        store.toggle_complete(0);
+        // `mark_done` preserves `start:`, so the live timer stays attached to
+        // the now-completed task (index 0) rather than being stolen by the
+        // successor. Completing a task does not stop its timer.
+        assert_eq!(store.tasks().len(), 2);
+        assert!(store.tasks()[0].done);
+        assert_eq!(store.active_timer_abs(), Some(0));
+        assert!(store.task_raw(0).unwrap().contains("start:"));
+        assert!(!store.is_timer_running_on(1));
+    }
+
+    #[test]
+    fn non_strict_spawn_anchors_to_completion_date_not_existing_due() {
+        // Without the `+` prefix the next due is computed from the completion
+        // date (today), not from the stale previous due date.
+        let mut store = build_store("Water plants due:2026-03-01 rec:1w\n");
+        store.set_today("2026-05-09".to_string());
+        store.toggle_complete(0);
+        assert_eq!(store.tasks()[1].due.as_deref(), Some("2026-05-16"));
     }
 
     #[test]
@@ -824,6 +969,98 @@ mod tests {
         assert!(store.tasks()[0].done);
         assert_eq!(store.tasks()[1].done_date.as_deref(), Some("2026-05-05"));
         assert!(store.tasks()[2].done);
+    }
+
+    #[test]
+    fn complete_many_does_not_double_spawn_same_recurring_identity() {
+        // Two live occurrences of the same strict recurring task, both
+        // selected at once. Only the latest occurrence leaves a live
+        // successor; the superseded one must not spawn a duplicate.
+        let mut store = build_store(
+            "Water plants due:2026-05-06 rec:+1d\nWater plants due:2026-05-07 rec:+1d\n",
+        );
+        let out = store.complete_many(&[0, 1]);
+        assert!(matches!(
+            out,
+            BulkCompleteOutcome::Done {
+                completed: 2,
+                spawned: 1
+            }
+        ));
+        let live: Vec<_> = store.tasks().iter().filter(|t| !t.done).collect();
+        assert_eq!(live.len(), 1, "exactly one live successor expected");
+        assert_eq!(live[0].due.as_deref(), Some("2026-05-08"));
+    }
+
+    #[test]
+    fn complete_many_skips_spawn_when_live_successor_already_exists() {
+        // Bulk-completing a recurring task whose successor already exists live
+        // must not spawn a second one (mirrors `toggle_complete`'s guard).
+        let mut store =
+            build_store("Water plants due:2026-05-06 rec:1d\nWater plants due:2026-05-07 rec:1d\n");
+        let out = store.complete_many(&[0]);
+        assert!(matches!(
+            out,
+            BulkCompleteOutcome::Done {
+                completed: 1,
+                spawned: 0
+            }
+        ));
+        assert_eq!(
+            store.tasks().iter().filter(|t| !t.done).count(),
+            1,
+            "the pre-existing successor is the only live task"
+        );
+    }
+
+    #[test]
+    fn spawn_preserves_quoted_note_verbatim() {
+        // A quoted note with internal spaces (and a `due:`-shaped word inside)
+        // must round-trip intact into the successor; a whitespace split would
+        // slice it and rewrite/drop the inner tokens.
+        let mut store = build_store(
+            "Water plants due:2026-05-06 rec:1d note:\"call ops re: due:2026-05-20\"\n",
+        );
+        store.toggle_complete(0);
+        let next = &store.tasks()[1];
+        assert_eq!(next.notes, vec!["call ops re: due:2026-05-20".to_string()]);
+        assert!(next.raw.contains("note:\"call ops re: due:2026-05-20\""));
+        assert_eq!(next.due.as_deref(), Some("2026-05-07"));
+    }
+
+    #[test]
+    fn spawn_shifts_absolute_threshold_with_due() {
+        // "3 days before due" must stay true after the due advances a month.
+        let mut store = build_store("Pay rent due:2026-05-15 t:2026-05-12 rec:+1m\n");
+        store.toggle_complete(0);
+        assert_eq!(store.tasks()[1].due.as_deref(), Some("2026-06-15"));
+        assert_eq!(store.tasks()[1].threshold.as_deref(), Some("2026-06-12"));
+    }
+
+    #[test]
+    fn spawn_shifts_absolute_threshold_across_month_end_clamp() {
+        // Jan 31 + 1m clamps to Feb 28; the 3-day-before offset must survive.
+        let mut store = build_store("Pay bill due:2026-01-31 t:2026-01-28 rec:+1m\n");
+        store.toggle_complete(0);
+        assert_eq!(store.tasks()[1].due.as_deref(), Some("2026-02-28"));
+        assert_eq!(store.tasks()[1].threshold.as_deref(), Some("2026-02-25"));
+    }
+
+    #[test]
+    fn spawn_leaves_relative_threshold_untouched() {
+        // Relative `t:` re-anchors against the new due at render time.
+        let mut store = build_store("Pay rent due:2026-05-15 t:-3d rec:+1m\n");
+        store.toggle_complete(0);
+        assert_eq!(store.tasks()[1].threshold.as_deref(), Some("-3d"));
+    }
+
+    #[test]
+    fn spawn_leaves_absolute_threshold_when_no_parseable_due() {
+        // No old due to compute a delta from: keep the absolute date verbatim
+        // rather than guessing.
+        let mut store = build_store("Standup t:2026-05-12 rec:1d\n");
+        store.toggle_complete(0);
+        assert_eq!(store.tasks()[1].threshold.as_deref(), Some("2026-05-12"));
     }
 
     #[test]

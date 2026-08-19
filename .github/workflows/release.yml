@@ -14,8 +14,28 @@ permissions:
   contents: write
 
 jobs:
+  verify:
+    name: Verify tag matches Cargo.toml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check version
+        shell: bash
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          tag="${TAG#v}"
+          crate_version="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' Cargo.toml | head -1)"
+          if [ -z "$crate_version" ] || [ "$tag" != "$crate_version" ]; then
+            echo "tag '${TAG}' does not match Cargo.toml version '${crate_version}'" >&2
+            exit 1
+          fi
+          echo "version check ok: ${tag}"
+
   build:
     name: Build ${{ matrix.target }}
+    needs: verify
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

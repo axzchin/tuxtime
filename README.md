@@ -139,6 +139,21 @@ another theme is skipped with a warning at startup.
 cargo install --git https://github.com/axzchin/tuxtime
 ```
 
+### Linux / WSL (one-line install)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/axzchin/tuxtime/main/install.sh | sh
+```
+
+Detects your architecture, downloads the matching release, verifies its
+SHA-256 checksum, and installs `tuxtime` to `~/.local/bin` (add that
+directory to your `PATH` if it isn't already there). Pin a version with
+`sh -s -- v2026.7.1`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/axzchin/tuxtime/main/install.sh | sh -s -- v2026.7.1
+```
+
 ### Prebuilt binaries
 
 Download the archive for your platform from the [latest release](https://github.com/axzchin/tuxtime/releases/latest) and put `tuxtime` on your `PATH`.
