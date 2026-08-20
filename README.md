@@ -31,6 +31,7 @@ For a more in-depth walkthrough, please watch [this video](https://www.youtube.c
 - **Saved searches.** Name the active `/`-search with `fs`, then recall it any time by cycling saved filters with `ff`. Stored as plain `filter.<name>` lines in the config — hand-editable like everything else.
 - **Five themes, three densities.** Cycle with `T` and `D`. Choices persist across runs and hot-reload when you edit `config.toml` externally.
 - **No daemon, no database, no cloud.** One file in, one file out.
+- **Safe self-update.** `tuxtime update` asks before upgrading; `--yes` enables explicit automation and `--dry-run` previews the operation. Package-manager installs delegate to Homebrew/Cargo, while downloaded Unix binaries use checksum-verified release archives.
 
 ## Privacy & confidentiality
 
@@ -184,10 +185,19 @@ tuxtime [FILE]      # launch the TUI on FILE (created if missing)
 tuxtime             # TUI on the default file (see resolution below)
 tuxtime --sample    # open the bundled sample file in the temp dir
 tuxtime <command>   # run a one-shot CLI command — see "Command-line interface"
-tuxtime update      # print upgrade instructions for your install
+tuxtime update      # preview, then confirm an upgrade
+tuxtime update --yes       # apply without an interactive prompt
+tuxtime update --dry-run   # preview without changing anything
 tuxtime --help
 tuxtime --version
 ```
+
+`tuxtime update` detects whether the binary came from Homebrew, Cargo, or a
+release archive. It previews the action and asks `Update now? [y/N]` by
+default. Use `tuxtime update --yes` for explicit non-interactive automation, or
+`tuxtime update --dry-run` to inspect the action without downloading or changing
+anything. Downloaded Linux and macOS binaries are checksum-verified before an
+atomic replacement; Windows binaries should be updated through the release page.
 
 When a newer release is available, the status bar shows `↑ <version> (tuxtime
 update)` next to the version. The check runs in the background, is cached at

@@ -41,7 +41,7 @@ fn main() -> Result<()> {
             return Ok(());
         }
         Some("update") => {
-            update::run()?;
+            update::run(&argv[1..])?;
             return Ok(());
         }
         Some("--sample") => (cli::sample_path()?, Mode::Screen(Screen::Normal)),
@@ -146,7 +146,7 @@ fn main() -> Result<()> {
 fn print_usage() {
     println!("usage: tuxtime [FILE]                 launch the TUI");
     println!("       tuxtime <command> [args]       run a one-shot command");
-    println!("       tuxtime update");
+    println!("       tuxtime update [--yes] [--dry-run]");
     println!();
     println!("Without FILE or a command, opens ./todo.txt if present; otherwise");
     println!("prompts to create ./todo.txt here or open a sample todo.txt, in");
@@ -171,10 +171,12 @@ fn print_usage() {
     println!("  listpri, lsp [PRIORITY]   list prioritized tasks");
     println!("  listproj, lsprj           list +projects");
     println!("  listcon, lsc              list @contexts");
-    println!("  update                    print instructions for upgrading tuxtime");
+    println!("  update [--yes|--dry-run]  preview or apply a tuxtime update");
     println!();
     println!("Options:");
     println!("  -f, --force      skip confirmation prompts (e.g. for del)");
+    println!("      --yes        apply `update` without confirmation");
+    println!("      --dry-run    preview `update` without changing anything");
     println!("      --json       machine-readable output for the commands above");
     println!("  -h, --help       show this message and exit");
     println!("  -V, --version    print version and exit");
