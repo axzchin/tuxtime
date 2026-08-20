@@ -168,7 +168,7 @@ impl App {
     }
 
     pub fn add_from_draft(&mut self) -> AddOutcome {
-        let text = self.draft.text().trim().to_string();
+        let mut text = self.draft.text().trim().to_string();
         if text.is_empty() {
             return AddOutcome::Empty;
         }
@@ -180,25 +180,31 @@ impl App {
             return self.save_carry_forward(from, &text);
         }
 
-        // Natural-language pre-pass. If the buffer reads like prose and the
-        // parser extracted anything structured, rewrite the draft to canonical
-        // todo.txt and bail before saving — the user's *next* Enter saves the
-        // now-canonical form through the store.
-        if nl::looks_like_natural_language(&text)
-            && let Ok(today) = chrono::NaiveDate::parse_from_str(self.store.today(), "%Y-%m-%d")
-            && let Some(parsed) = nl::try_parse(&text, today)
-        {
-            let canonical = nl::format_as_todo_txt(&parsed);
-            if canonical != text {
-                let body_was_filled = !parsed.body.trim().is_empty();
-                self.draft_set(canonical);
-                if body_was_filled {
-                    self.flash("parsed natural language; press Enter to save");
-                } else {
-                    self.flash("parsed; please edit the body, then Enter to save");
+        // Natural-language pre-pass. A leading `>` opts the buffer into NL
+        // parsing; unmarked text saves verbatim. If the marked prose extracts
+        // anything structured, rewrite the draft to canonical todo.txt and
+        // bail before saving — the user's *next* Enter saves the now-canonical
+        // form through the store.
+        if let Some(body) = nl::strip_marker(&text) {
+            let parsed = chrono::NaiveDate::parse_from_str(self.store.today(), "%Y-%m-%d")
+                .ok()
+                .and_then(|today| nl::try_parse(body, today));
+            if let Some(parsed) = parsed {
+                let canonical = nl::format_as_todo_txt(&parsed);
+                if canonical != body {
+                    let body_was_filled = !parsed.body.trim().is_empty();
+                    self.draft_set(canonical);
+                    self.flash(if body_was_filled {
+                        "parsed natural language; press Enter to save"
+                    } else {
+                        "parsed; please edit the body, then Enter to save"
+                    });
+                    return AddOutcome::Parsed;
                 }
-                return AddOutcome::Parsed;
             }
+            // Marked but nothing structured extracted (or already canonical):
+            // drop the marker so a stray `>` never lands in the saved task.
+            text = body.to_string();
         }
 
         // If entered via manual time entry (`M`), convert `dur:` values from
@@ -619,7 +625,7 @@ mod tests {
     fn add_from_draft_rewrites_nl_prose_into_canonical_draft() {
         let mut app = build_app("");
         app.draft_set(
-            "Pay rent monthly on the first of the month, show the todo 3 days before the due date. \
+            "> Pay rent monthly on the first of the month, show the todo 3 days before the due date. \
              It's part of project home and context bank"
                 .into(),
         );
@@ -639,7 +645,7 @@ mod tests {
     #[test]
     fn add_from_draft_second_call_saves_canonical_form() {
         let mut app = build_app("");
-        app.draft_set("Buy milk tomorrow".into());
+        app.draft_set("> Buy milk tomorrow".into());
         assert_eq!(app.add_from_draft(), crate::app::AddOutcome::Parsed);
         assert_eq!(app.tasks().len(), 0);
         let outcome = app.add_from_draft();
@@ -658,6 +664,19 @@ mod tests {
         assert_eq!(app.tasks().len(), 1);
         assert!(app.tasks()[0].raw.ends_with("Buy milk"));
         assert_eq!(app.flash_active(), Some("added"));
+    }
+
+    #[test]
+    fn add_from_draft_unmarked_prose_saves_verbatim() {
+        // "daily standup" must save as-is — no rec:, no dropped words — since
+        // the NL parser now requires an explicit `>` marker.
+        let mut app = build_app("");
+        app.draft_set("daily standup".into());
+        let outcome = app.add_from_draft();
+        assert_eq!(outcome, crate::app::AddOutcome::Saved);
+        assert_eq!(app.tasks().len(), 1);
+        assert!(app.tasks()[0].raw.ends_with("daily standup"));
+        assert!(app.tasks()[0].rec.is_none());
     }
 
     #[test]

@@ -16,7 +16,7 @@ expression: buffer_to_text(&buf)
    filter sidebar              on  ([ to toggle)                                                    
    detail sidebar              on  (] to toggle)                                                    
    show done in list     ┌ IDLE NUDGE (MIN) ──────────────────────────────┐                         
-   show future in list   │  ⏰ 15█                                         │                         
+   show future in list   │  ⏱ 15█                                         │                         
                          │                                                │                         
  BEHAVIOR                │                                                │                         
    default sort          └────────────────────────────────────────────────┘                         

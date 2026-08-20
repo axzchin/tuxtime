@@ -5,8 +5,8 @@ expression: buffer_to_text(&buf)
  FILTERS                   ▶▮◀ /tmp/tuxtime-snapshot.txt  •  15 ta DETAIL                           
                                                                                                     
  PROJECTS                  (2)  PRIORITY A  ────────────────────── priority  (A)                    
-   +work             4      1 [x] ▸ (A) Finish Q2 board deck +work created   2026-05-01             
-   +health           3      2 [x]   (A) Call dentist to reschedule due       2026-05-06  today      
+   +work             4      1 [x] ▸ (A) Finish Q2 board deck +wor… created   2026-05-01             
+   +health           3      2 [x]   (A) Call dentist to reschedul… due       2026-05-06  today      
    +finance          2     (3)  PRIORITY B  ────────────────────── projects  +work                  
    +home            ┌ tuxtime · command ───────────────────────────────────────┐ptop                
    +learning        │ > █                                                      │                    

@@ -292,6 +292,43 @@ fn archive_view() {
     snapshot_app("archive_view", &app);
 }
 
+/// Completed matters render a compact duration badge and a `DNB` marker for
+/// non-billable time — never the raw `dur:`/`log:`/`bill:n` prefixes.
+#[test]
+fn archive_view_with_time() {
+    let dir = std::path::Path::new("/tmp/tuxtime-snapshot-archive");
+    let _ = std::fs::remove_dir_all(dir);
+    std::fs::create_dir_all(dir).expect("create archive fixture dir");
+    let todo_path = dir.join("todo.txt");
+    let done_path = dir.join("done.txt");
+    let todo_body = "2026-05-06 Active matter +Smith\n";
+    std::fs::write(&todo_path, todo_body).expect("write todo.txt");
+    std::fs::write(
+        &done_path,
+        "x 2026-05-06 2026-05-01 Firm admin +Admin @admin dur:900 bill:n log:2026-05-01\n\
+         x 2026-05-06 2026-05-02 Draft motion +Smith @drafting dur:7200 log:2026-05-02\n",
+    )
+    .expect("write done.txt");
+
+    let mut app = App::new_with_done(
+        todo_path.clone(),
+        done_path,
+        todo_body.to_string(),
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    // Drain the startup archive loader so app.archive() is populated before
+    // the frame renders.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    while std::time::Instant::now() < deadline && app.archive().is_empty() {
+        let _ = app.poll_archive();
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    app.prefs.density = Density::Compact;
+    app.set_view(View::Archive);
+    snapshot_app("archive_view_with_time", &app);
+}
+
 #[test]
 fn help_overlay() {
     let mut app = make_app();
@@ -354,7 +391,7 @@ fn insert_dialog_after_nl_parse() {
     let mut app = make_app();
     app.nav.mode = Mode::Screen(Screen::Insert);
     app.draft_set_insert(
-        "Pay rent monthly on the first of the month, show the todo 3 days before the due date. \
+        "> Pay rent monthly on the first of the month, show the todo 3 days before the due date. \
          It's part of project home and context bank"
             .to_string(),
     );
@@ -734,6 +771,17 @@ fn settings_with_idle_nudge_prompt() {
     app.nav.mode = Mode::Prompt(Prompt::IdleNudge);
     app.draft_set_insert("15".to_string());
     snapshot_app("settings_with_idle_nudge_prompt", &app);
+}
+
+#[test]
+fn add_time_prompt() {
+    // The add-time prompt (manual time entry) shows the ⏱ sigil with a
+    // separator before the input text so the icon never sits directly on the
+    // first character.
+    let mut app = make_app();
+    app.nav.mode = Mode::Prompt(Prompt::AddTime);
+    app.draft_set_insert("30".to_string());
+    snapshot_app("add_time_prompt", &app);
 }
 
 #[test]

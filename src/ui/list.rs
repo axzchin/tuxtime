@@ -99,7 +99,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             if i == app.nav.cursor {
                 cursor_line = Some(lines.len());
             }
-            lines.push(task_row::build_line(task, opts, theme));
+            lines.push(task_row::build_line(task, opts, theme, body_area.width));
             if matches!(gk, GroupKey::None) && i != last {
                 for _ in 0..blank {
                     lines.push(Line::raw(""));

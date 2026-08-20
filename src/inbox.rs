@@ -69,10 +69,14 @@ pub fn canonicalize_line(text: &str, today: NaiveDate) -> Result<todo::Task, tod
     if text.is_empty() {
         return Err(todo::ParseError::Empty);
     }
-    if nl::looks_like_natural_language(&text)
-        && let Some(parsed) = nl::try_parse(&text, today)
-    {
-        text = nl::format_as_todo_txt(&parsed);
+    if let Some(body) = nl::strip_marker(&text) {
+        // The `>` marker opts this line into the NL pipeline. Extract what
+        // we can; if nothing structured came out, drop the marker and keep
+        // the prose verbatim so a stray `>` never lands in the saved task.
+        text = match nl::try_parse(body, today) {
+            Some(parsed) => nl::format_as_todo_txt(&parsed),
+            None => body.to_string(),
+        };
     }
     let today_str = today.format("%Y-%m-%d").to_string();
     finalize_line(&text, &today_str)
@@ -190,15 +194,26 @@ mod tests {
 
     #[test]
     fn canonicalize_rewrites_natural_language() {
-        let task = canonicalize_line("Buy milk tomorrow", today()).unwrap();
+        let task = canonicalize_line("> Buy milk tomorrow", today()).unwrap();
         assert!(task.raw.contains("Buy milk"));
         assert_eq!(task.due.as_deref(), Some("2026-05-14"));
         assert_eq!(task.created_date.as_deref(), Some("2026-05-13"));
     }
 
     #[test]
+    fn canonicalize_unmarked_prose_is_verbatim() {
+        // Without the `>` marker the line is saved byte-for-byte — "daily"
+        // stays in the body and no recurrence is invented.
+        let task = canonicalize_line("daily standup", today()).unwrap();
+        assert_eq!(task.raw, "2026-05-13 daily standup");
+        assert!(task.rec.is_none());
+        assert!(task.due.is_none());
+    }
+
+    #[test]
     fn canonicalize_preserves_canonical_input() {
-        // Already contains `due:` so NL detection skips.
+        // No `>` marker, so NL parsing is skipped and the line is saved
+        // verbatim (with the creation date prepended).
         let task = canonicalize_line("Call dentist due:2026-06-01", today()).unwrap();
         assert!(task.raw.contains("Call dentist"));
         assert_eq!(task.due.as_deref(), Some("2026-06-01"));
@@ -244,7 +259,7 @@ mod tests {
         // Prose with priority, project, recurrence, threshold — should
         // produce a fully canonical line with creation date.
         let task = canonicalize_line(
-            "Pay rent monthly on the first show 3 days before project home",
+            "> Pay rent monthly on the first show 3 days before project home",
             today(),
         )
         .unwrap();

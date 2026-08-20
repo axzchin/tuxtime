@@ -21,7 +21,7 @@ For a more in-depth walkthrough, please watch [this video](https://www.youtube.c
 
 - **Pure todo.txt.** Reads and writes the [standard format](https://github.com/todotxt/todo.txt) — every line is plain text you can edit with anything else.
 - **TUI and CLI in one binary.** Run `tuxtime` for the interactive UI, or `tuxtime <command>` for a [todo.txt-cli](https://github.com/todotxt/todo.txt-cli)-compatible command line (`add`, `ls`, `do`, `pri`, `archive`, …) — scriptable, with `--json` output and `$TODO_DIR` / `$TODO_FILE` / `$DONE_FILE` support.
-- **Natural-language add.** Type prose into the add prompt — `Pay rent monthly on the first, show 3 days before due, project home` — and tuxtime rewrites it to canonical todo.txt for you to review and save. Local, offline, no AI service.
+- **Natural-language add.** Prefix a task with `>` in the add prompt — `> Pay rent monthly on the first, show 3 days before due, project home` — and tuxtime rewrites it to canonical todo.txt for you to review and save. Local, offline, no AI service.
 - **Phone capture.** Press `s` for a QR pointing at a tiny PWA on your machine's LAN — type tasks from your phone and they appear in the list. Captures land in a sibling `inbox.txt` first, so any tool that can append a line (shell, iOS Shortcuts, cron) is also a capture source.
 - **Vim keys, no surprises.** `j` / `k` to move, `dd` to delete, `gg` / `G` to jump, `u` to undo (50 levels), chord prompts (`gg`, `dd`, `fp`, `fc`) with a 600 ms window.
 - **Command palette.** `:` or `Ctrl-P` opens a fuzzy palette over every action — type a few letters, hit Enter. Same matcher as `/` search, ranked so start-of-label hits beat word-boundary hits beat mid-word hits.
@@ -249,7 +249,7 @@ tuxtime ls --json | jq .                              # machine-readable output
 
 | Command | Aliases | Arguments | Description |
 | --- | --- | --- | --- |
-| `add` | `a` | `TEXT...` | Add a task (natural-language dates supported, same as the `n` prompt). |
+| `add` | `a` | `TEXT...` | Add a task (prefix `>` for natural-language dates, same as the `n` prompt). |
 | `append` | `app` | `N TEXT...` | Append text to task `N`. |
 | `prepend` | `prep` | `N TEXT...` | Prepend text to task `N`. |
 | `replace` | | `N TEXT...` | Replace task `N` entirely. |
@@ -516,19 +516,22 @@ Pressing `x` on the line above marks the original complete *and* inserts
 
 ## Natural-language add
 
-Press `n` to open the add prompt. Type the task in plain English. When the
-buffer contains recognized phrases (dates, weekdays, recurrence, project /
-context names, priority), pressing Enter rewrites the draft into canonical
-todo.txt — review or tweak it, then Enter again to save.
+Press `n` to open the add prompt. Prefix a task with `>` to opt it into
+natural-language parsing. When the marked buffer contains recognized phrases
+(dates, weekdays, recurrence, project / context names, priority), pressing
+Enter rewrites the draft into canonical todo.txt — review or tweak it, then
+Enter again to save. Without the `>` prefix the line is saved exactly as
+typed, so ordinary prose ("daily standup", "project report") is never
+reinterpreted.
 
 | What you type | What lands in the draft |
 | --- | --- |
-| `Pay rent monthly on the first of the month, show the todo 3 days before the due date. It's part of project home and context bank` | `Pay rent +home @bank due:2026-06-01 rec:+1m t:-3d` |
-| `Buy milk tomorrow` | `Buy milk due:2026-05-12` |
-| `Call mom every week starting Friday for project family` | `Call mom +family due:2026-05-15 rec:+1w` |
-| `Submit timesheet every other friday show 1 day before` | `Submit timesheet due:2026-05-15 rec:+2w t:-1d` |
-| `Daily standup high priority` | `(A) standup rec:+1d` |
-| `Annual review April 15 +work @office` | `Annual review +work @office due:2027-04-15` |
+| `> Pay rent monthly on the first of the month, show the todo 3 days before the due date. It's part of project home and context bank` | `Pay rent +home @bank due:2026-06-01 rec:+1m t:-3d` |
+| `> Buy milk tomorrow` | `Buy milk due:2026-05-12` |
+| `> Call mom every week starting Friday for project family` | `Call mom +family due:2026-05-15 rec:+1w` |
+| `> Submit timesheet every other friday show 1 day before` | `Submit timesheet due:2026-05-15 rec:+2w t:-1d` |
+| `> Daily standup high priority` | `(A) standup rec:+1d` |
+| `> Annual review April 15 +work @office` | `Annual review +work @office due:2027-04-15` |
 
 Recognized vocabulary:
 
@@ -538,9 +541,8 @@ Recognized vocabulary:
 - **Projects / contexts** — prose form `project home` and `context bank`, or the standard `+home` / `@bank` sigils.
 - **Priority** — `high priority` → A, `medium priority` → B, `low priority` → C, or `priority A`.
 
-Parsing is rule-based and runs locally — no network calls, no API key. If
-the buffer already contains a `due:`, `rec:`, or `t:` token, tuxtime assumes
-you've typed canonical form and saves it directly on the first Enter.
+Parsing is rule-based and runs locally — no network calls, no API key. The
+`>` prefix is consumed during the rewrite and never lands in `todo.txt`.
 
 ## Phone capture
 
@@ -551,15 +553,15 @@ Add, and within a tick it shows up in your task list.
 
 Captures never touch `todo.txt` directly. They land in a sibling
 `inbox.txt`, which tuxtime drains on every external-change poll: each line
-is run through the same natural-language pipeline as the `n` add prompt,
-given a creation date if missing, and merged into `todo.txt` as a single
+is run through the same `>`-gated natural-language pipeline as the `n` add
+prompt, given a creation date if missing, and merged into `todo.txt` as a single
 undoable batch (`u` rolls back the whole drain at once).
 
 That makes `inbox.txt` a general capture endpoint, not just a PWA backend.
 Anything that can append a line works as a producer:
 
 ```sh
-echo "Refill prescription tomorrow" >> ~/notes/inbox.txt
+echo "> Refill prescription tomorrow" >> ~/notes/inbox.txt
 echo "Call dentist due:2026-06-01" >> ~/notes/inbox.txt
 ```
 

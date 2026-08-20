@@ -140,7 +140,7 @@ pub(crate) fn handle_timesheet_keys(app: &mut App, key: KeyEvent) {
                 app.flash("no narratives to copy");
             } else {
                 let prefix = if entry.billable { "" } else { "DNB - " };
-                let joined = entry.narratives.join("; ");
+                let joined = ensure_full_stop(&entry.narratives.join("; "));
                 let payload = format!("{prefix}{joined}");
                 let key_label = if entry.billable {
                     entry.key.clone()
@@ -196,7 +196,7 @@ pub(crate) fn handle_timesheet_keys(app: &mut App, key: KeyEvent) {
                 app.flash("no narratives to copy");
             } else {
                 let prefix = if entry.billable { "" } else { "DNB - " };
-                let joined = entry.narratives.join("; ");
+                let joined = ensure_full_stop(&entry.narratives.join("; "));
                 let billable = format_billable(entry.total_secs, app.prefs.rounding_increment);
                 let payload = format!("{prefix}{joined} ({billable})");
                 let key_label = if entry.billable {
@@ -248,4 +248,38 @@ fn scroll_detail(app: &mut App, delta: i32) {
         scroll.saturating_sub((-delta) as u16)
     };
     app.nav.detail_scroll.set((cursor, next));
+}
+
+/// Ensure a joined narrative list ends with a full stop, so a copied group
+/// reads as a finished sentence. Already-terminated (or empty) text is left
+/// untouched.
+fn ensure_full_stop(joined: &str) -> String {
+    if joined.is_empty() || joined.ends_with('.') {
+        joined.to_string()
+    } else {
+        format!("{joined}.")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ensure_full_stop;
+
+    #[test]
+    fn appends_full_stop_when_missing() {
+        assert_eq!(
+            ensure_full_stop("write code; review PR"),
+            "write code; review PR."
+        );
+    }
+
+    #[test]
+    fn keeps_existing_full_stop() {
+        assert_eq!(ensure_full_stop("write code."), "write code.");
+    }
+
+    #[test]
+    fn empty_stays_empty() {
+        assert_eq!(ensure_full_stop(""), "");
+    }
 }

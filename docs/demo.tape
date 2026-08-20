@@ -36,7 +36,7 @@ Sleep 2500ms
 # Enter, the second Enter saves.
 Type "n"
 Sleep 700ms
-Type "Pay rent monthly on the first, project home"
+Type "> Pay rent monthly on the first, project home"
 Sleep 1200ms
 Enter
 Sleep 2000ms

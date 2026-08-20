@@ -25,7 +25,12 @@ pub struct RowOpts<'a> {
     pub timer_elapsed: Option<u64>,
 }
 
-pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<'a> {
+pub fn build_line<'a>(
+    task: &'a Task,
+    opts: RowOpts<'a>,
+    theme: &Theme,
+    max_width: u16,
+) -> Line<'a> {
     let mut spans: Vec<Span<'a>> = Vec::new();
 
     if opts.show_line_num {
@@ -85,6 +90,7 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
     // body — walk &str slices instead of collecting Vec<char>. Spans borrow
     // straight from `task.raw`, so most rows allocate only for the format!()
     // calls above.
+    let body_start_idx = spans.len();
     let body = body_after_priority(&task.clean_raw);
     let body_match_positions: Option<Vec<usize>> =
         opts.match_term.and_then(|n| subseq_match_ci(body, n));
@@ -110,7 +116,15 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
         }
         let tok_end = rest.find(char::is_whitespace).unwrap_or(rest.len());
         let token = &rest[..tok_end];
-        if is_hidden_kv(token, opts.hidden_keys) {
+        // A `dur:` with nothing worth showing (just-started `dur:0`, or a
+        // malformed value) is dropped like a hidden key so it never leaves
+        // a stray `dur:0` or an orphan space; a positive value renders as a
+        // compact badge in `push_token_spans`. Likewise a `bill:y` (the
+        // default, billable) is dropped; only `bill:n` renders a badge.
+        let drop_token = is_hidden_kv(token, opts.hidden_keys)
+            || (token.starts_with("dur:") && dur_badge(task).is_none())
+            || (token.starts_with("bill:") && bill_badge(task).is_none());
+        if drop_token {
             // Drop the separator we just emitted for this token...
             if pushed_ws {
                 spans.pop();
@@ -140,6 +154,28 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
         emitted_body_token = true;
         rest = &rest[tok_end..];
     }
+    // Right-align the live elapsed timer: reserve its width and truncate the
+    // body so a long narrative can never push the timer off the right edge.
+    let timer_text = if opts.timer_running {
+        opts.timer_elapsed
+            .map(|elapsed| format!(" [{}]", crate::app::format_clock(elapsed)))
+    } else {
+        None
+    };
+    let prefix_width: usize = spans[..body_start_idx]
+        .iter()
+        .map(|s| s.content.chars().count())
+        .sum();
+    let timer_width = timer_text.as_ref().map_or(0, |t| t.chars().count());
+    let body_budget = usize::from(max_width)
+        .saturating_sub(prefix_width)
+        .saturating_sub(timer_width);
+    let body_spans = spans.split_off(body_start_idx);
+    spans.extend(truncate_to_width(&body_spans, body_budget));
+    if let Some(t) = timer_text {
+        spans.push(Span::styled(t, Style::default().fg(theme.accent)));
+    }
+
     let line_style = if opts.cursor {
         Style::default().bg(theme.cursor).fg(theme.fg)
     } else if opts.selected {
@@ -147,17 +183,43 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
     } else {
         Style::default()
     };
-    let mut line = Line::from(spans).style(line_style);
+    Line::from(spans).style(line_style)
+}
 
-    // Append live elapsed timer on the right when timer is running.
-    if opts.timer_running
-        && let Some(elapsed) = opts.timer_elapsed
-    {
-        let timer_text = format!(" [{}]", crate::app::format_clock(elapsed));
-        line.spans
-            .push(Span::styled(timer_text, Style::default().fg(theme.accent)));
+/// Truncate a sequence of styled spans to at most `max` chars, keeping an
+/// ellipsis column when anything is dropped so a clipped row reads as cut
+/// rather than silently truncated. Widths are char counts, matching the rest
+/// of the renderer (see `msgbox::pad_right`).
+fn truncate_to_width<'a>(spans: &[Span<'a>], max: usize) -> Vec<Span<'a>> {
+    let total: usize = spans.iter().map(|s| s.content.chars().count()).sum();
+    if total <= max {
+        return spans.to_vec();
     }
-    line
+    if max == 0 {
+        return Vec::new();
+    }
+    let budget = max - 1; // reserve the final column for the ellipsis
+    let mut out: Vec<Span<'a>> = Vec::new();
+    let mut used = 0usize;
+    for span in spans {
+        let w = span.content.chars().count();
+        if w == 0 {
+            continue;
+        }
+        if used + w <= budget {
+            out.push(span.clone());
+            used += w;
+        } else {
+            let keep = budget.saturating_sub(used);
+            if keep > 0 {
+                let cut: String = span.content.chars().take(keep).collect();
+                out.push(Span::styled(cut, span.style));
+            }
+            break;
+        }
+    }
+    out.push(Span::raw("…"));
+    out
 }
 
 fn push_token_spans<'a>(
@@ -169,6 +231,23 @@ fn push_token_spans<'a>(
     opts: RowOpts<'a>,
     theme: &Theme,
 ) {
+    // `dur:` renders as a compact human badge (`2h 05m`, `45m`) instead of the
+    // raw second count — lawyers log in minutes/hours, not seconds. The full
+    // raw token stays available in the detail sidebar.
+    if token.starts_with("dur:") {
+        if let Some(badge) = dur_badge(task) {
+            spans.push(Span::styled(badge, dur_badge_style(task.done, theme)));
+        }
+        return;
+    }
+    // `bill:n` renders as a compact `DNB` (do-not-bill) badge; billable is the
+    // default so `bill:y` / absent render nothing.
+    if token.starts_with("bill:") {
+        if let Some(badge) = bill_badge(task) {
+            spans.push(Span::styled(badge, bill_badge_style(task.done, theme)));
+        }
+        return;
+    }
     if let Some(c) = sigil_token_color(token, task, theme) {
         spans.push(Span::styled(token, Style::default().fg(c)));
         return;
@@ -248,8 +327,35 @@ fn push_token_spans<'a>(
 
 /// The live-timer tag is never shown in a task row: it's a wall-clock
 /// timestamp (noise on a task line — the status bar already shows the
-/// running timer and its elapsed time). Hidden regardless of config.
-const ALWAYS_HIDDEN_KEYS: [&str; 1] = ["start"];
+/// running timer and its elapsed time). `log:` is also hidden: it's internal
+/// bookkeeping (which day the accumulated time belongs to) that the timesheet
+/// view owns. Both are hidden regardless of config.
+const ALWAYS_HIDDEN_KEYS: [&str; 2] = ["start", "log"];
+
+/// Compact human duration for a task's `dur:`, or `None` when there's nothing
+/// worth showing (`dur:0` from a just-started timer, or a malformed value).
+fn dur_badge(task: &Task) -> Option<String> {
+    match task.dur {
+        Some(secs) if secs > 0 => Some(crate::app::format_compact_duration(secs)),
+        _ => None,
+    }
+}
+
+fn dur_badge_style(task_done: bool, theme: &Theme) -> Style {
+    let color = if task_done { theme.done } else { theme.dim };
+    apply_dim(Style::default().fg(color), task_done)
+}
+
+/// Compact non-billable badge for a task's `bill:`, or `None` when the task
+/// is billable (the default). `bill:n` → `DNB`; `bill:y`/absent render nothing.
+fn bill_badge(task: &Task) -> Option<&'static str> {
+    (task.bill.as_deref() == Some("n")).then_some("DNB")
+}
+
+fn bill_badge_style(task_done: bool, theme: &Theme) -> Style {
+    let color = if task_done { theme.done } else { theme.due };
+    apply_dim(Style::default().fg(color), task_done)
+}
 
 /// True when `token` is a `key:value` pair whose key (case-insensitively)
 /// appears in `hidden_keys` or is always hidden (`start:`).
@@ -412,7 +518,7 @@ mod tests {
             timer_elapsed: None,
         };
         // Build must not panic; we don't assert on the rendered spans.
-        let _ = build_line(&task, opts, &MUTED);
+        let _ = build_line(&task, opts, &MUTED, 1000);
     }
 
     #[test]
@@ -434,7 +540,7 @@ mod tests {
             timer_running: false,
             timer_elapsed: None,
         };
-        let line = build_line(&task, opts, &MUTED);
+        let line = build_line(&task, opts, &MUTED, 1000);
         let highlight_bg = MUTED.matched;
         let highlighted: String = line
             .spans
@@ -464,7 +570,7 @@ mod tests {
             timer_running: false,
             timer_elapsed: None,
         };
-        let line = build_line(&task, opts, &MUTED);
+        let line = build_line(&task, opts, &MUTED, 1000);
         line.spans
             .iter()
             .map(|s| s.content.as_ref())
@@ -518,17 +624,104 @@ mod tests {
     fn start_token_always_hidden_from_rows() {
         // The live `start:` timestamp must never leak into a task row (it's
         // wall-clock noise; the status bar shows the running timer instead).
+        // `dur:` now renders as a compact badge, not raw seconds.
         assert_eq!(
             body_text(
                 "Draft motion +Smith start:2026-05-06T09:00:00 dur:3600",
                 &[],
             ),
-            "Draft motion +Smith dur:3600",
+            "Draft motion +Smith 1h 00m",
         );
         assert_eq!(
             body_text("Call dentist start:2026-05-06T09:00:00 @phone", &[]),
             "Call dentist @phone",
         );
+    }
+
+    #[test]
+    fn log_token_always_hidden_from_rows() {
+        // `log:` is internal bookkeeping (the day accumulated time belongs to)
+        // — hidden regardless of config, like `start:`.
+        assert_eq!(
+            body_text("Draft motion +Smith dur:3600 log:2026-08-06", &[]),
+            "Draft motion +Smith 1h 00m",
+        );
+    }
+
+    #[test]
+    fn dur_token_renders_compact_human_badge() {
+        // Raw second counts are meaningless to a lawyer at a glance; `dur:`
+        // renders as a compact hours/minutes badge instead.
+        assert_eq!(
+            body_text("Meeting +Client dur:2700", &[]),
+            "Meeting +Client 45m"
+        );
+        assert_eq!(
+            body_text("Review +Matter dur:4020", &[]),
+            "Review +Matter 1h 07m"
+        );
+    }
+
+    #[test]
+    fn zero_or_malformed_dur_renders_nothing() {
+        // `dur:0` (a just-started timer) and unparseable values are noise.
+        assert_eq!(body_text("Call +Smith dur:0", &[]), "Call +Smith");
+        assert_eq!(body_text("Call +Smith dur:notanumber", &[]), "Call +Smith");
+        // Mid-body `dur:0` must not leave a doubled space behind.
+        assert_eq!(body_text("Call dur:0 +Smith", &[]), "Call +Smith");
+    }
+
+    #[test]
+    fn bill_n_renders_dnb_badge() {
+        // `bill:n` → a compact `DNB` (do-not-bill) marker, not the raw token.
+        assert_eq!(
+            body_text("Firm admin +Admin dur:900 bill:n", &[]),
+            "Firm admin +Admin 15m DNB",
+        );
+    }
+
+    #[test]
+    fn billable_renders_no_badge() {
+        // Billable is the default: `bill:y` and an absent tag both render
+        // nothing (the raw `bill:y` token is dropped, not shown).
+        assert_eq!(
+            body_text("Draft +Smith dur:3600 bill:y", &[]),
+            "Draft +Smith 1h 00m",
+        );
+        assert_eq!(
+            body_text("Draft +Smith dur:3600", &[]),
+            "Draft +Smith 1h 00m"
+        );
+    }
+
+    #[test]
+    fn done_task_renders_duration_and_dnb_badges() {
+        // Archive (done.txt) rows go through the same `build_line` path, so a
+        // completed matter still shows its time and non-billable flag, with
+        // the raw dur:/log:/bill:n prefixes stripped.
+        let task =
+            parse_line("x 2026-05-06 2026-05-01 Firm admin +Admin dur:900 bill:n log:2026-05-01")
+                .unwrap();
+        let opts = RowOpts {
+            idx_label: 0,
+            cursor: false,
+            multi_mode: false,
+            multi_checked: false,
+            selected: false,
+            show_line_num: false,
+            match_term: None,
+            today: "2026-05-06",
+            hidden_keys: &[],
+            timer_running: false,
+            timer_elapsed: None,
+        };
+        let line = build_line(&task, opts, &MUTED, 1000);
+        let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(text.contains("15m"), "duration badge missing: {text:?}");
+        assert!(text.contains("DNB"), "non-billable badge missing: {text:?}");
+        assert!(!text.contains("dur:"), "raw dur: leaked: {text:?}");
+        assert!(!text.contains("log:"), "raw log: leaked: {text:?}");
+        assert!(!text.contains("bill:"), "raw bill: leaked: {text:?}");
     }
 
     #[test]
@@ -550,7 +743,7 @@ mod tests {
             timer_running: false,
             timer_elapsed: None,
         };
-        let line = build_line(&task, opts, &MUTED);
+        let line = build_line(&task, opts, &MUTED, 1000);
         let url_span = line
             .spans
             .iter()
@@ -583,7 +776,7 @@ mod tests {
             timer_running: false,
             timer_elapsed: None,
         };
-        let line = build_line(&task, opts, &MUTED);
+        let line = build_line(&task, opts, &MUTED, 1000);
         let url_span = line
             .spans
             .iter()
@@ -604,5 +797,57 @@ mod tests {
             body_text("Pay rent due:2026-05-15 uid:x", &h),
             "Pay rent due:2026-05-15",
         );
+    }
+
+    #[test]
+    fn truncate_to_width_keeps_short_input() {
+        let spans = vec![Span::raw("hello"), Span::raw(" world")];
+        let out = truncate_to_width(&spans, 20);
+        let text: String = out.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(text, "hello world");
+    }
+
+    #[test]
+    fn truncate_to_width_ellipsizes_long_input() {
+        let spans = vec![Span::raw("the quick brown fox")];
+        let out = truncate_to_width(&spans, 10);
+        let text: String = out.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(text, "the quick…");
+        assert_eq!(text.chars().count(), 10);
+    }
+
+    #[test]
+    fn truncate_to_width_zero_is_empty() {
+        assert!(truncate_to_width(&[Span::raw("abc")], 0).is_empty());
+    }
+
+    #[test]
+    fn build_line_truncates_body_to_keep_timer_visible() {
+        let task = parse_line("Draft a very long narrative that overflows the row width by a lot")
+            .unwrap();
+        let opts = RowOpts {
+            idx_label: 0,
+            cursor: false,
+            multi_mode: false,
+            multi_checked: false,
+            selected: false,
+            show_line_num: false,
+            match_term: None,
+            today: "2026-05-06",
+            hidden_keys: &[],
+            timer_running: true,
+            timer_elapsed: Some(65),
+        };
+        let line = build_line(&task, opts, &MUTED, 40);
+        let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(
+            text.contains("[00:01:05]"),
+            "timer must stay visible in the truncated row: {text:?}"
+        );
+        assert!(
+            text.chars().count() <= 40,
+            "row must not exceed max_width: {text:?}"
+        );
+        assert!(text.contains('…'), "body must be ellipsized: {text:?}");
     }
 }

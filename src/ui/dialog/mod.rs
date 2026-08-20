@@ -281,8 +281,8 @@ pub fn render_prompt(frame: &mut Frame, area: Rect, app: &App) {
             Prompt::Context => ("@", " TOGGLE CONTEXT ", theme.context),
             Prompt::SaveFilter => ("✦", " SAVE FILTER AS ", theme.accent),
             Prompt::AddTime => ("⏱", " ADD TIME ", theme.accent),
-            Prompt::IdleNudge => ("⏰", " IDLE NUDGE (MIN) ", theme.accent),
-            Prompt::LongTimerNudge => ("⏰", " LONG TIMER NUDGE (MIN) ", theme.accent),
+            Prompt::IdleNudge => ("⏱", " IDLE NUDGE (MIN) ", theme.accent),
+            Prompt::LongTimerNudge => ("⏱", " LONG TIMER NUDGE (MIN) ", theme.accent),
             Prompt::RenameProject => ("+", " RENAME PROJECT ", theme.project),
             Prompt::DayBoundary => return,
         },
@@ -316,6 +316,10 @@ pub fn render_prompt(frame: &mut Frame, area: Rect, app: &App) {
                 .fg(sigil_color)
                 .add_modifier(Modifier::BOLD),
         ),
+        // One space between the sigil and the draft text: the sigil glyph
+        // (a wide emoji in many terminals) would otherwise sit directly on
+        // the first character of the input.
+        Span::raw(" "),
     ];
     spans.extend(draft_cursor_spans(
         app.draft.text(),

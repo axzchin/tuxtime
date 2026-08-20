@@ -108,6 +108,7 @@ const SYSTEM: Section = (
 const FORMAT: Section = (
     "FORMAT",
     &[
+        ("> prose", "natural-language parse (opt-in)"),
         ("(A)", "priority A-Z"),
         ("YYYY-MM-DD", "creation / done date"),
         ("+project", "project tag(s)"),

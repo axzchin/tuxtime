@@ -363,7 +363,7 @@ mod tests {
         let (mut store, dir, todo_path) = build_store_with_dir("(A) 2026-05-01 existing\n");
         std::fs::write(
             dir.join("inbox.txt"),
-            "Buy milk tomorrow\nCall mom every friday\n",
+            "> Buy milk tomorrow\n> Call mom every friday\n",
         )
         .unwrap();
         let report = store.drain_inbox();

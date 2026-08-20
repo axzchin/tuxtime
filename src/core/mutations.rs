@@ -876,7 +876,7 @@ mod tests {
     fn add_line_runs_natural_language() {
         let mut store = build_store("");
         assert!(matches!(
-            store.add_line("Buy milk tomorrow"),
+            store.add_line("> Buy milk tomorrow"),
             AddOutcome::Added { .. }
         ));
         assert_eq!(store.tasks().len(), 1);

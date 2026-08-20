@@ -5,8 +5,8 @@ expression: buffer_to_text(&buf)
  FILTERS                   ▶▮◀ /tmp/tuxtime-snapshot.txt  •  2 tas DETAIL                           
                                                                                                     
  PROJECTS                  (2)  NO PRIORITY  ───────────────────── priority                         
-   +Smith            2      1 ▸     Draft motion +Smith @drafting  created   2026-05-06             
-                            2       Call with client +Smith @meeti projects  +Smith                 
+   +Smith            2      1 ▸     Draft motion +Smith @drafting… created   2026-05-06             
+                            2       Call with client +Smith @meet… projects  +Smith                 
  CONTEXTS                                                          contexts  @drafting              
    @drafting         1                                                                              
    @meeting          1                                             RAW                              

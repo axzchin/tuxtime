@@ -1,8 +1,7 @@
 #![allow(clippy::unwrap_used)]
 //! Unit tests for the natural-language parser. Included from `src/nl/mod.rs`
 //! via `mod tests;`, so `super::*` resolves to the `nl` module (re-exports
-//! [`ParsedNl`], `try_parse`, `format_as_todo_txt`, and
-//! `looks_like_natural_language`).
+//! [`ParsedNl`], `try_parse`, `format_as_todo_txt`, and `strip_marker`).
 
 use super::*;
 
@@ -11,26 +10,35 @@ fn d(s: &str) -> NaiveDate {
 }
 
 #[test]
-fn detection_skips_already_tokenized() {
-    assert!(!looks_like_natural_language("Buy milk due:2026-05-10"));
-    assert!(!looks_like_natural_language("Task rec:+1w"));
-    assert!(!looks_like_natural_language("Hidden t:-3d"));
+fn detection_requires_leading_marker() {
+    // Unmarked text is never rewritten, even when it reads like prose or
+    // contains former trigger words ("daily", "project").
+    assert!(strip_marker("Buy milk").is_none());
+    assert!(strip_marker("(A) Buy milk").is_none());
+    assert!(strip_marker("Buy milk +groceries @store").is_none());
+    assert!(strip_marker("Buy milk tomorrow").is_none());
+    assert!(strip_marker("Pay rent monthly").is_none());
+    assert!(strip_marker("Submit timesheet every friday").is_none());
+    assert!(strip_marker("daily standup").is_none());
+    assert!(strip_marker("project report").is_none());
+    assert!(strip_marker("Buy milk due:2026-05-10").is_none());
+    assert!(strip_marker("Task rec:+1w").is_none());
+    assert!(strip_marker("Hidden t:-3d").is_none());
+    // A leading `>` opts the whole line into NL parsing.
+    assert_eq!(
+        strip_marker("> Buy milk tomorrow"),
+        Some("Buy milk tomorrow")
+    );
+    assert_eq!(strip_marker("> daily standup"), Some("daily standup"));
 }
 
 #[test]
-fn detection_skips_plain_words() {
-    assert!(!looks_like_natural_language("Buy milk"));
-    assert!(!looks_like_natural_language("(A) Buy milk"));
-    assert!(!looks_like_natural_language("Buy milk +groceries @store"));
-}
-
-#[test]
-fn detection_fires_on_triggers() {
-    assert!(looks_like_natural_language("Buy milk tomorrow"));
-    assert!(looks_like_natural_language("Pay rent monthly"));
-    assert!(looks_like_natural_language("Submit timesheet every friday"));
-    assert!(looks_like_natural_language("Meeting in 3 days"));
-    assert!(looks_like_natural_language("Call mom on tuesday"));
+fn strip_marker_drops_leading_sigil_and_space() {
+    assert_eq!(strip_marker("> daily standup"), Some("daily standup"));
+    assert_eq!(strip_marker(">   padded"), Some("padded"));
+    assert_eq!(strip_marker(">"), Some(""));
+    assert_eq!(strip_marker("daily standup"), None);
+    assert_eq!(strip_marker(""), None);
 }
 
 #[test]
@@ -154,8 +162,9 @@ fn idempotent_on_canonical_form() {
     )
     .unwrap();
     let canonical = format_as_todo_txt(&parsed);
-    // Detection should refuse to re-parse the canonical form.
-    assert!(!looks_like_natural_language(&canonical));
+    // Canonical output never carries the `>` marker, so a second Enter on it
+    // falls through to the save path instead of re-parsing.
+    assert!(strip_marker(&canonical).is_none());
 }
 
 #[test]

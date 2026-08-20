@@ -157,7 +157,7 @@ fn print_usage() {
     println!("in a sibling inbox.txt that the TUI merges on the next poll.");
     println!();
     println!("Commands (task numbers are 1-based file lines, as shown by `list`):");
-    println!("  add, a TEXT...            add a task (natural-language dates supported)");
+    println!("  add, a TEXT...            add a task (prefix > for natural-language dates)");
     println!("  append, app N TEXT...     append text to task N");
     println!("  prepend, prep N TEXT...   prepend text to task N");
     println!("  replace N TEXT...         replace task N");

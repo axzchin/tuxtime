@@ -14,13 +14,13 @@ expression: buffer_to_text(&buf)
    +travel           1     (2)  PRIORITY C  ──────────────────────                                  
                             6   (C) Pay quarterly estimated taxes… (A) 2026-05-01 Finish Q2 board   
  CONTEXTS                   7   (C) Order new running shoes +heal… deck +work @laptop               
-   @errands     ┌ 📅  Day Boundary ─────────────────────────────────────────────────┐                
-   @home        │  "Call dentist to reschedule cleaning" has time from a previous  │                
-   @laptop      │                               day.                               │                
-   @phone       │                                                                  │                
-                │ [Enter/N]ew entry for today  [C]ontinue same entry  [Esc] cancel │                
-                │                                                                  │                
-                └──────────────────────────────────────────────────────────────────┘                
+   @errands          4     (8)  NO PRIORITY  ───────────────────── due:2026-05-06                   
+   @home             4   ┌ ADD TIME ──────────────────────────────────────┐                         
+   @laptop           4   │  ⏱ 30█                                         │                         
+   @phone            3   │                                                │                         
+                         │                                                │                         
+                         └────────────────────────────────────────────────┘                         
+                           13       Send thank-you note to mentor…                                  
                            14       Plan Saturday hike with K. @p…                                  
                            15       Replace bathroom faucet washe…                                  
                                                                                                     
@@ -33,4 +33,4 @@ expression: buffer_to_text(&buf)
                                                                                                     
                                                                                                     
                                                                                                     
- DAY BOUNDARY   j/k · n new · t timer · T interrupt · x done15 open · 2026-05-06 · tuxtime 2026.7.1
+ ADD TIME   type duration (e.g. 30, 1.5, 14:30; -30 removes)15 open · 2026-05-06 · tuxtime 2026.7.1

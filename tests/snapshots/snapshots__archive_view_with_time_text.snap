@@ -2,25 +2,19 @@
 source: tests/snapshots.rs
 expression: buffer_to_text(&buf)
 ---
- FILTERS                   ▶▮◀ /tmp/tuxtime-snapshot.txt  •  1 tasks  •  sort:priority              
+ FILTERS                   ▶▮◀ done.txt  •  2 tasks  •  sort:compl DETAIL                           
                                                                                                     
- PROJECTS                  (1)  NO PRIORITY  ───────────────────────────────────────────────────────
-   +Smith            1      1 ▶     Draft motion +Smith @drafting 1h 00m [02:01:40]                 
+ PROJECTS                  2026-05-06  2 completed                 priority                         
+   +Smith            1      1 ✓     Firm admin +Admin @admin 15m … created   2026-05-01             
+                            2 ✓     Draft motion +Smith @drafting… projects  +Admin                 
+ CONTEXTS                                                          contexts  @admin                 
+   tag with @context                                               done      2026-05-06             
                                                                                                     
- CONTEXTS                                                                                           
-   @drafting         1                                                                              
+                                                                   RAW                              
                                                                                                     
-                                                                                                    
-                                                                                                    
-                                                                                                    
-                                                                                                    
-                                                                                                    
-                    ┌ ⏰  Stale Timer ──────────────────────────────────────────┐                    
-                    │ Timer was running when tuxtime last closed — 2h 1m (2.1h)│                    
-                    │    elapsed. Log it, keep counting, or discard the gap?   │                    
-                    │                                                          │                    
-                    │       [K]eep counting  [S]top & log  [D]iscard gap       │                    
-                    └──────────────────────────────────────────────────────────┘                    
+                                                                   x 2026-05-06 2026-05-01 Firm     
+                                                                   admin +Admin @admin dur:900      
+                                                                   bill:n log:2026-05-01            
                                                                                                     
                                                                                                     
                                                                                                     
@@ -33,4 +27,10 @@ expression: buffer_to_text(&buf)
                                                                                                     
                                                                                                     
                                                                                                     
- STALE TIMER   ▶ +Smith @drafting 02:01:40  ·  j/k · n new · 1 open · 2026-05-06 · tuxtime 2026.7.1
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+ ARCHIVE   j/k · n new · t timer · T interrupt · x done ·2 archived · 2026-05-06 · tuxtime 2026.7.1
