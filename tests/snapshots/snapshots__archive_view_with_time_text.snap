@@ -5,8 +5,8 @@ expression: buffer_to_text(&buf)
  FILTERS                   ▶▮◀ done.txt  •  2 tasks  •  sort:compl DETAIL                           
                                                                                                     
  PROJECTS                  2026-05-06  2 completed                 priority                         
-   +Smith            1      1 ✓     Firm admin +Admin @admin 15m … created   2026-05-01             
-                            2 ✓     Draft motion +Smith @drafting… projects  +Admin                 
+   +Smith            1      1 ✓     Firm admin +Admin @ad… 15m DNB created   2026-05-01             
+                            2 ✓     Draft motion +Smith @d… 2h 00m projects  +Admin                 
  CONTEXTS                                                          contexts  @admin                 
    tag with @context                                               done      2026-05-06             
                                                                                                     

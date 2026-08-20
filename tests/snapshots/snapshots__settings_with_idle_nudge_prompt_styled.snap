@@ -17,17 +17,17 @@ expression: buffer_to_styled(&buf)
 {fg=#c8ccd4 bg=#1a1d23}   detail sidebar              {/}{fg=#6b7280 bg=#1a1d23}on  (] to toggle){/}{fg=#c8ccd4 bg=#1a1d23}                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}   show done in list     {/}{fg=#2a2f38 bg=#1f232b}┌{/}{fg=#8aa9c9 bg=#1f232b mod=bold} IDLE NUDGE (MIN) {/}{fg=#2a2f38 bg=#1f232b}──────────────────────────────┐{/}{fg=#c8ccd4 bg=#1a1d23}                         {/}
 {fg=#c8ccd4 bg=#1a1d23}   show future in list   {/}{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}  {/}{fg=#8aa9c9 bg=#1f232b mod=bold}⏱{/}{bg=#1f232b} {/}{fg=#c8ccd4 bg=#1f232b}15█{/}{bg=#1f232b}                                         {/}{fg=#2a2f38 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1a1d23}                         {/}
-{fg=#c8ccd4 bg=#1a1d23}                         {/}{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                {/}{fg=#2a2f38 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1a1d23}                         {/}
-{fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}BEHAVIOR{/}{fg=#c8ccd4 bg=#1a1d23}                {/}{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                {/}{fg=#2a2f38 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1a1d23}                         {/}
-{fg=#c8ccd4 bg=#1a1d23}   default sort          {/}{fg=#2a2f38 bg=#1f232b}└────────────────────────────────────────────────┘{/}{fg=#c8ccd4 bg=#1a1d23}                         {/}
+{fg=#c8ccd4 bg=#1a1d23}   duration badge inline {/}{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                {/}{fg=#2a2f38 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1a1d23}                         {/}
+{fg=#c8ccd4 bg=#1a1d23}   log date inline       {/}{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                {/}{fg=#2a2f38 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1a1d23}                         {/}
+{fg=#c8ccd4 bg=#1a1d23}                         {/}{fg=#2a2f38 bg=#1f232b}└────────────────────────────────────────────────┘{/}{fg=#c8ccd4 bg=#1a1d23}                         {/}
+{fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}BEHAVIOR{/}{fg=#c8ccd4 bg=#1a1d23}                                                                                           {/}
+{fg=#c8ccd4 bg=#1a1d23}   default sort                {/}{fg=#6b7280 bg=#1a1d23}priority (S to cycle){/}{fg=#c8ccd4 bg=#1a1d23}                                                {/}
 {fg=#c8ccd4 bg=#1a1d23}   idle nudge                  {/}{fg=#6b7280 bg=#1a1d23}15 min  (i to change){/}{fg=#c8ccd4 bg=#1a1d23}                                                {/}
 {fg=#c8ccd4 bg=#1a1d23}   long timer nudge            {/}{fg=#6b7280 bg=#1a1d23}120 min  (l to change){/}{fg=#c8ccd4 bg=#1a1d23}                                               {/}
 {fg=#c8ccd4 bg=#1a1d23}   rounding increment          {/}{fg=#6b7280 bg=#1a1d23}0.1h  (r to cycle){/}{fg=#c8ccd4 bg=#1a1d23}                                                   {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}KEYBINDINGS{/}{fg=#c8ccd4 bg=#1a1d23}                                                                                        {/}
 {fg=#c8ccd4 bg=#1a1d23}                               {/}{fg=#6b7280 bg=#1a1d23}press ? for the full list{/}{fg=#c8ccd4 bg=#1a1d23}                                            {/}
-{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
-{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}

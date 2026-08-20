@@ -117,6 +117,14 @@ pub(crate) fn handle_settings(app: &mut App, key: KeyEvent) {
             app.prefs.toggle_show_future();
             app.save_prefs();
         }
+        KeyCode::Char('I') => {
+            app.prefs.toggle_duration_inline();
+            app.save_prefs();
+        }
+        KeyCode::Char('O') => {
+            app.prefs.toggle_log_inline();
+            app.save_prefs();
+        }
         KeyCode::Char('[') => {
             app.prefs.toggle_left();
             app.save_prefs();

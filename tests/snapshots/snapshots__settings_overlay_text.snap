@@ -17,6 +17,8 @@ expression: buffer_to_text(&buf)
    detail sidebar              on  (] to toggle)                                                    
    show done in list           off  (H to toggle)                                                   
    show future in list         off  (F to toggle)                                                   
+   duration badge inline       on  (I to toggle)                                                    
+   log date inline             off  (O to toggle)                                                   
                                                                                                     
  BEHAVIOR                                                                                           
    default sort                priority (S to cycle)                                                
@@ -26,8 +28,6 @@ expression: buffer_to_text(&buf)
                                                                                                     
  KEYBINDINGS                                                                                        
                                press ? for the full list                                            
-                                                                                                    
-                                                                                                    
                                                                                                     
                                                                                                     
                                                                                                     

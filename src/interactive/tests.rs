@@ -397,6 +397,27 @@ fn build_timesheet_groups_filters_by_context() {
 }
 
 #[test]
+fn timesheet_n_toggles_dnb_only_filter() {
+    let raw = "2026-05-07 Billable work +work @dev dur:1800\n2026-05-07 DNB work +work @dev dur:600 bill:n\n";
+    let mut app = timesheet_app_with_tasks(raw);
+    app.set_view(View::Timesheet);
+
+    let all = app.build_timesheet_groups();
+    assert_eq!(all.len(), 2, "both billing classes start visible");
+
+    handle_timesheet_keys(&mut app, key('n'));
+    let dnb = app.build_timesheet_groups();
+    assert!(app.timesheet.dnb_only);
+    assert_eq!(dnb.len(), 1, "DNB filter leaves one group");
+    assert!(!dnb[0].billable);
+    assert_eq!(app.timesheet.cursor, 0);
+
+    handle_timesheet_keys(&mut app, key('n'));
+    assert!(!app.timesheet.dnb_only);
+    assert_eq!(app.build_timesheet_groups().len(), 2);
+}
+
+#[test]
 fn timesheet_project_totals_splits_billable_and_dnb() {
     // Two projects; +work has billable and non-billable time, +legal only
     // billable. The sidebar must report each project's billable secs and
@@ -1694,6 +1715,14 @@ fn settings_advertised_keys_apply_in_settings_mode() {
     );
     assert_ne!(app.prefs.layout.left, left);
     assert_ne!(app.prefs.layout.right, right);
+
+    // Inline metadata toggles are user-facing settings, not dead config keys.
+    let show_duration = app.prefs.show_duration_inline;
+    let show_log = app.prefs.show_log_inline;
+    handle_settings(&mut app, key('I'));
+    handle_settings(&mut app, key('O'));
+    assert_ne!(app.prefs.show_duration_inline, show_duration);
+    assert_ne!(app.prefs.show_log_inline, show_log);
 
     // Theme picker opens (and stays previewable).
     handle_settings(

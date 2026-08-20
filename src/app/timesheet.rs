@@ -41,6 +41,8 @@ pub struct TimesheetState {
     pub cursor: usize,
     /// Sort mode: by project, date, or duration.
     pub sort: TimesheetSort,
+    /// Show only non-billable (`DNB`) entries in the timesheet.
+    pub dnb_only: bool,
     /// Anchor date (ISO "YYYY-MM-DD"). Defaults to today.
     pub date: String,
     /// Focus date for the calendar picker (`PickTimesheetDate` mode).
@@ -61,6 +63,7 @@ impl TimesheetState {
             weekly: false,
             cursor: 0,
             sort: TimesheetSort::ProjectActivity,
+            dnb_only: false,
             date: today.to_string(),
             calendar_focus: NaiveDate::parse_from_str(today, "%Y-%m-%d")
                 .unwrap_or_else(|_| NaiveDate::from_ymd_opt(2026, 1, 1).expect("static")),
@@ -206,6 +209,7 @@ impl App {
         };
         type TimesheetGroup = (u64, Vec<String>, Vec<TimesheetTaskRef>);
         let search = self.filter.search.to_lowercase();
+        let dnb_only = self.timesheet.dnb_only;
         // Hoisted filter values: the closure below borrows `self` at call
         // sites (via `self.tasks()`), so capture the filter components as
         // owned locals to keep the closure borrowing `self` immutably.
@@ -271,6 +275,9 @@ impl App {
                     format!("{proj} {act}").trim().to_string()
                 };
                 let billable = t.bill.as_deref() != Some("n");
+                if dnb_only && billable {
+                    continue;
+                }
                 let entry = groups
                     .entry((work_date.to_string(), key.clone(), billable))
                     .or_insert_with(|| (0, Vec::new(), Vec::new()));

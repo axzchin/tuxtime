@@ -49,6 +49,11 @@ pub struct Config {
     /// task rows (list + archive). The line is stored on disk untouched;
     /// this only affects display. Serialized as `hide_keys = a, b, c`.
     pub hidden_keys: Vec<String>,
+    /// Render the compact duration badge in list/archive rows (default true).
+    /// Set `show_duration_inline = false` to keep time only in the detail view.
+    pub show_duration_inline: Option<bool>,
+    /// Render the `log:YYYY-MM-DD` bookkeeping token inline (default false).
+    pub show_log_inline: Option<bool>,
     pub week_start: Option<WeekStart>,
     /// Seconds of inactivity before nudging the user to start a timer (default 900 = 15 min).
     pub idle_nudge_seconds: Option<u64>,
@@ -224,6 +229,8 @@ fn parse(s: &str) -> Config {
                     .map(str::to_string)
                     .collect();
             }
+            "show_duration_inline" => c.show_duration_inline = parse_bool(v),
+            "show_log_inline" => c.show_log_inline = parse_bool(v),
             "week_start" => c.week_start = v.parse().ok(),
             "idle_nudge_seconds" => c.idle_nudge_seconds = v.parse().ok(),
             "long_timer_nudge_seconds" => c.long_timer_nudge_seconds = v.parse().ok(),
@@ -306,6 +313,12 @@ fn serialize(c: &Config) -> String {
     if !c.hidden_keys.is_empty() {
         let _ = writeln!(out, "hide_keys = {}", c.hidden_keys.join(", "));
     }
+    if let Some(v) = c.show_duration_inline {
+        let _ = writeln!(out, "show_duration_inline = {v}");
+    }
+    if let Some(v) = c.show_log_inline {
+        let _ = writeln!(out, "show_log_inline = {v}");
+    }
     if let Some(v) = c.week_start {
         let _ = writeln!(out, "week_start = {v}");
     }
@@ -372,6 +385,8 @@ mod tests {
             ],
             notes_dir: Some("~/notes".into()),
             hidden_keys: vec!["uid".into(), "sync".into()],
+            show_duration_inline: Some(true),
+            show_log_inline: Some(false),
             week_start: Some(WeekStart::Sunday),
             idle_nudge_seconds: Some(900),
             long_timer_nudge_seconds: Some(7200),
@@ -385,6 +400,21 @@ mod tests {
         let s = serialize(&c);
         let parsed = parse(&s);
         assert_eq!(parsed, c);
+    }
+
+    #[test]
+    fn inline_metadata_visibility_parses_with_safe_defaults() {
+        let defaults = parse("theme = Dawn\n");
+        assert_eq!(defaults.show_duration_inline, None);
+        assert_eq!(defaults.show_log_inline, None);
+
+        let configured = parse("show_duration_inline = false\nshow_log_inline = true\n");
+        assert_eq!(configured.show_duration_inline, Some(false));
+        assert_eq!(configured.show_log_inline, Some(true));
+
+        let invalid = parse("show_duration_inline = maybe\nshow_log_inline = maybe\n");
+        assert_eq!(invalid.show_duration_inline, None);
+        assert_eq!(invalid.show_log_inline, None);
     }
 
     #[test]
@@ -572,6 +602,8 @@ mod tests {
             filters: vec![("errand".into(), "@errand".into())],
             notes_dir: Some("/tmp/notes".into()),
             hidden_keys: vec!["uid".into()],
+            show_duration_inline: Some(true),
+            show_log_inline: Some(false),
             week_start: Some(WeekStart::Sunday),
             idle_nudge_seconds: None,
             long_timer_nudge_seconds: None,

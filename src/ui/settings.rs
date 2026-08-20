@@ -75,6 +75,17 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             "  show future in list",
             Some(format!("{}  (F to toggle)", on(app.prefs.show_future))),
         ),
+        (
+            "  duration badge inline",
+            Some(format!(
+                "{}  (I to toggle)",
+                on(app.prefs.show_duration_inline)
+            )),
+        ),
+        (
+            "  log date inline",
+            Some(format!("{}  (O to toggle)", on(app.prefs.show_log_inline))),
+        ),
         ("", Some(String::new())),
         ("BEHAVIOR", None),
         (

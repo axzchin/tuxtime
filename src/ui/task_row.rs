@@ -19,6 +19,10 @@ pub struct RowOpts<'a> {
     /// rendered body. Empty (the common case) means render everything,
     /// byte-for-byte as before.
     pub hidden_keys: &'a [String],
+    /// Whether a positive `dur:` token renders as a compact inline badge.
+    pub show_duration_inline: bool,
+    /// Whether the `log:` bookkeeping token renders inline.
+    pub show_log_inline: bool,
     /// True when a timer is actively running on this task.
     pub timer_running: bool,
     /// Live elapsed seconds for the running timer, if applicable.
@@ -32,6 +36,7 @@ pub fn build_line<'a>(
     max_width: u16,
 ) -> Line<'a> {
     let mut spans: Vec<Span<'a>> = Vec::new();
+    let mut metadata: Vec<Span<'a>> = Vec::new();
 
     if opts.show_line_num {
         // The line number must stay visible on the highlighted cursor row.
@@ -121,8 +126,9 @@ pub fn build_line<'a>(
         // a stray `dur:0` or an orphan space; a positive value renders as a
         // compact badge in `push_token_spans`. Likewise a `bill:y` (the
         // default, billable) is dropped; only `bill:n` renders a badge.
-        let drop_token = is_hidden_kv(token, opts.hidden_keys)
-            || (token.starts_with("dur:") && dur_badge(task).is_none())
+        let drop_token = is_hidden_kv(token, opts.hidden_keys, opts.show_log_inline)
+            || (token.starts_with("dur:")
+                && (!opts.show_duration_inline || dur_badge(task).is_none()))
             || (token.starts_with("bill:") && bill_badge(task).is_none());
         if drop_token {
             // Drop the separator we just emitted for this token...
@@ -142,15 +148,13 @@ pub fn build_line<'a>(
             continue;
         }
         let token_offset = token.as_ptr() as usize - body_start;
-        push_token_spans(
-            &mut spans,
-            token,
-            token_offset,
-            body_match_positions.as_deref(),
+        let context = TokenRenderContext {
+            body_match_positions: body_match_positions.as_deref(),
             task,
             opts,
             theme,
-        );
+        };
+        push_token_spans(&mut spans, token, token_offset, &context, &mut metadata);
         emitted_body_token = true;
         rest = &rest[tok_end..];
     }
@@ -166,12 +170,31 @@ pub fn build_line<'a>(
         .iter()
         .map(|s| s.content.chars().count())
         .sum();
+    if !metadata.is_empty() {
+        metadata.insert(0, Span::raw(" "));
+    }
+    let metadata_width: usize = metadata.iter().map(|s| s.content.chars().count()).sum();
     let timer_width = timer_text.as_ref().map_or(0, |t| t.chars().count());
     let body_budget = usize::from(max_width)
         .saturating_sub(prefix_width)
-        .saturating_sub(timer_width);
+        .saturating_sub(timer_width)
+        .saturating_sub(metadata_width);
     let body_spans = spans.split_off(body_start_idx);
-    spans.extend(truncate_to_width(&body_spans, body_budget));
+    let body_spans = truncate_to_width(&body_spans, body_budget);
+    let body_width: usize = body_spans.iter().map(|s| s.content.chars().count()).sum();
+    spans.extend(body_spans);
+    // Fill the reserved gap so metadata forms a stable right-aligned column
+    // across rows with different narrative lengths. This is intentionally
+    // inserted only when metadata exists; ordinary rows retain their natural
+    // spacing and the live timer behavior remains unchanged.
+    if metadata_width > 0 {
+        let used = prefix_width + body_width + metadata_width + timer_width;
+        let gap = usize::from(max_width).saturating_sub(used);
+        if gap > 0 {
+            spans.push(Span::raw(" ".repeat(gap)));
+        }
+    }
+    spans.extend(metadata);
     if let Some(t) = timer_text {
         spans.push(Span::styled(t, Style::default().fg(theme.accent)));
     }
@@ -222,40 +245,51 @@ fn truncate_to_width<'a>(spans: &[Span<'a>], max: usize) -> Vec<Span<'a>> {
     out
 }
 
+struct TokenRenderContext<'match_, 'task, 'opts> {
+    body_match_positions: Option<&'match_ [usize]>,
+    task: &'task Task,
+    opts: RowOpts<'opts>,
+    theme: &'task Theme,
+}
+
 fn push_token_spans<'a>(
     spans: &mut Vec<Span<'a>>,
     token: &'a str,
     token_offset_in_body: usize,
-    body_match_positions: Option<&[usize]>,
-    task: &Task,
-    opts: RowOpts<'a>,
-    theme: &Theme,
+    context: &TokenRenderContext<'_, '_, 'a>,
+    metadata: &mut Vec<Span<'a>>,
 ) {
     // `dur:` renders as a compact human badge (`2h 05m`, `45m`) instead of the
     // raw second count — lawyers log in minutes/hours, not seconds. The full
     // raw token stays available in the detail sidebar.
     if token.starts_with("dur:") {
-        if let Some(badge) = dur_badge(task) {
-            spans.push(Span::styled(badge, dur_badge_style(task.done, theme)));
+        if let Some(badge) = dur_badge(context.task) {
+            push_metadata(
+                metadata,
+                Span::styled(badge, dur_badge_style(context.task.done, context.theme)),
+            );
         }
         return;
     }
     // `bill:n` renders as a compact `DNB` (do-not-bill) badge; billable is the
     // default so `bill:y` / absent render nothing.
     if token.starts_with("bill:") {
-        if let Some(badge) = bill_badge(task) {
-            spans.push(Span::styled(badge, bill_badge_style(task.done, theme)));
+        if let Some(badge) = bill_badge(context.task) {
+            push_metadata(
+                metadata,
+                Span::styled(badge, bill_badge_style(context.task.done, context.theme)),
+            );
         }
         return;
     }
-    if let Some(c) = sigil_token_color(token, task, theme) {
+    if let Some(c) = sigil_token_color(token, context.task, context.theme) {
         spans.push(Span::styled(token, Style::default().fg(c)));
         return;
     }
     if let Some(rest) = token.strip_prefix("due:") {
         spans.push(Span::styled(
             token,
-            due_token_style(task.done, rest, opts.today, theme),
+            due_token_style(context.task.done, rest, context.opts.today, context.theme),
         ));
         return;
     }
@@ -263,7 +297,10 @@ fn push_token_spans<'a>(
     // otherwise classify as a lowercase key and steal the underline + accent
     // styling that doubles as the OSC 8 hyperlink marker (see `ui::hyperlinks`).
     if is_url_token(token) {
-        spans.push(Span::styled(token, url_token_style(task.done, theme)));
+        spans.push(Span::styled(
+            token,
+            url_token_style(context.task.done, context.theme),
+        ));
         return;
     }
     // generic key:value (lowercase key)
@@ -276,25 +313,26 @@ fn push_token_spans<'a>(
         && k.chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
     {
-        spans.push(Span::styled(token, Style::default().fg(theme.dim)));
+        spans.push(Span::styled(token, Style::default().fg(context.theme.dim)));
         return;
     }
 
     // plain word — highlight each matched subsequence char inside this token.
     // Body text stays visible on the cursor row even when the task is done.
-    let base_color = if task.done && !opts.cursor {
-        theme.done
+    let base_color = if context.task.done && !context.opts.cursor {
+        context.theme.done
     } else {
-        theme.fg
+        context.theme.fg
     };
-    let base_style = apply_dim(Style::default().fg(base_color), task.done);
+    let base_style = apply_dim(Style::default().fg(base_color), context.task.done);
     let hl_style = Style::default()
-        .fg(theme.bg)
-        .bg(theme.matched)
+        .fg(context.theme.bg)
+        .bg(context.theme.matched)
         .add_modifier(Modifier::BOLD);
 
     let token_end = token_offset_in_body + token.len();
-    let mut local_positions = body_match_positions
+    let mut local_positions = context
+        .body_match_positions
         .into_iter()
         .flatten()
         .copied()
@@ -341,6 +379,13 @@ fn dur_badge(task: &Task) -> Option<String> {
     }
 }
 
+fn push_metadata<'a>(metadata: &mut Vec<Span<'a>>, badge: Span<'a>) {
+    if !metadata.is_empty() {
+        metadata.push(Span::raw(" "));
+    }
+    metadata.push(badge);
+}
+
 fn dur_badge_style(task_done: bool, theme: &Theme) -> Style {
     let color = if task_done { theme.done } else { theme.dim };
     apply_dim(Style::default().fg(color), task_done)
@@ -359,10 +404,11 @@ fn bill_badge_style(task_done: bool, theme: &Theme) -> Style {
 
 /// True when `token` is a `key:value` pair whose key (case-insensitively)
 /// appears in `hidden_keys` or is always hidden (`start:`).
-fn is_hidden_kv(token: &str, hidden_keys: &[String]) -> bool {
+fn is_hidden_kv(token: &str, hidden_keys: &[String], show_log_inline: bool) -> bool {
     match token.split_once(':') {
         Some((k, v)) if !k.is_empty() && !v.is_empty() => {
-            ALWAYS_HIDDEN_KEYS.iter().any(|h| h.eq_ignore_ascii_case(k))
+            (ALWAYS_HIDDEN_KEYS.iter().any(|h| h.eq_ignore_ascii_case(k))
+                && !(show_log_inline && k.eq_ignore_ascii_case("log")))
                 || hidden_keys.iter().any(|h| h.eq_ignore_ascii_case(k))
         }
         _ => false,
@@ -514,6 +560,8 @@ mod tests {
             match_term: Some("a"),
             today: "2026-05-06",
             hidden_keys: &[],
+            show_duration_inline: true,
+            show_log_inline: false,
             timer_running: false,
             timer_elapsed: None,
         };
@@ -537,6 +585,8 @@ mod tests {
             match_term: Some("cade"),
             today: "2026-05-06",
             hidden_keys: &[],
+            show_duration_inline: true,
+            show_log_inline: false,
             timer_running: false,
             timer_elapsed: None,
         };
@@ -556,6 +606,16 @@ mod tests {
     /// and aren't done, so the prefix is pure leading whitespace and the
     /// "no leading body space" invariant makes `trim_start` exact.
     fn body_text(raw: &str, hidden: &[String]) -> String {
+        body_text_with_visibility(raw, hidden, true, false, 1000)
+    }
+
+    fn body_text_with_visibility(
+        raw: &str,
+        hidden: &[String],
+        show_duration_inline: bool,
+        show_log_inline: bool,
+        width: u16,
+    ) -> String {
         let task = parse_line(raw).unwrap();
         let opts = RowOpts {
             idx_label: 0,
@@ -567,16 +627,19 @@ mod tests {
             match_term: None,
             today: "2026-05-06",
             hidden_keys: hidden,
+            show_duration_inline,
+            show_log_inline,
             timer_running: false,
             timer_elapsed: None,
         };
-        let line = build_line(&task, opts, &MUTED, 1000);
+        let line = build_line(&task, opts, &MUTED, width);
         line.spans
             .iter()
             .map(|s| s.content.as_ref())
             .collect::<String>()
-            .trim_start()
-            .to_string()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 
     #[test]
@@ -695,6 +758,52 @@ mod tests {
     }
 
     #[test]
+    fn inline_duration_and_log_visibility_are_configurable() {
+        let raw = "Draft +Smith dur:3600 log:2026-05-06";
+        assert_eq!(body_text(raw, &[]), "Draft +Smith 1h 00m");
+        assert_eq!(
+            body_text_with_visibility(raw, &[], false, false, 1000),
+            "Draft +Smith"
+        );
+        assert_eq!(
+            body_text_with_visibility(raw, &[], true, true, 1000),
+            "Draft +Smith log:2026-05-06 1h 00m"
+        );
+    }
+
+    #[test]
+    fn metadata_column_stays_visible_when_body_is_truncated() {
+        let raw = "A very long narrative that must be clipped +Smith dur:7200 bill:n";
+        let task = parse_line(raw).unwrap();
+        let opts = RowOpts {
+            idx_label: 0,
+            cursor: false,
+            multi_mode: false,
+            multi_checked: false,
+            selected: false,
+            show_line_num: false,
+            match_term: None,
+            today: "2026-05-06",
+            hidden_keys: &[],
+            show_duration_inline: true,
+            show_log_inline: false,
+            timer_running: false,
+            timer_elapsed: None,
+        };
+        let line = build_line(&task, opts, &MUTED, 40);
+        let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(
+            text.ends_with("2h 00m DNB"),
+            "metadata must be rightmost: {text:?}"
+        );
+        assert!(
+            text.contains('…'),
+            "narrative should be truncated: {text:?}"
+        );
+        assert!(text.chars().count() <= 40, "row exceeds width: {text:?}");
+    }
+
+    #[test]
     fn done_task_renders_duration_and_dnb_badges() {
         // Archive (done.txt) rows go through the same `build_line` path, so a
         // completed matter still shows its time and non-billable flag, with
@@ -712,6 +821,8 @@ mod tests {
             match_term: None,
             today: "2026-05-06",
             hidden_keys: &[],
+            show_duration_inline: true,
+            show_log_inline: false,
             timer_running: false,
             timer_elapsed: None,
         };
@@ -740,6 +851,8 @@ mod tests {
             match_term: None,
             today: "2026-05-06",
             hidden_keys: &[],
+            show_duration_inline: true,
+            show_log_inline: false,
             timer_running: false,
             timer_elapsed: None,
         };
@@ -773,6 +886,8 @@ mod tests {
             match_term: None,
             today: "2026-05-06",
             hidden_keys: &[],
+            show_duration_inline: true,
+            show_log_inline: false,
             timer_running: false,
             timer_elapsed: None,
         };
@@ -835,6 +950,8 @@ mod tests {
             match_term: None,
             today: "2026-05-06",
             hidden_keys: &[],
+            show_duration_inline: true,
+            show_log_inline: false,
             timer_running: true,
             timer_elapsed: Some(65),
         };

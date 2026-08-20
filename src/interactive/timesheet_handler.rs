@@ -43,6 +43,18 @@ pub(crate) fn handle_timesheet_keys(app: &mut App, key: KeyEvent) {
             app.timesheet.invalidate_cache();
             app.flash(format!("sort: {}", app.timesheet.sort.label()));
         }
+        // Show only non-billable/DNB entries. This is deliberately separate
+        // from `b`, which changes an active task's billing metadata.
+        KeyCode::Char('n') => {
+            app.timesheet.dnb_only = !app.timesheet.dnb_only;
+            app.timesheet.cursor = 0;
+            app.timesheet.invalidate_cache();
+            app.flash(if app.timesheet.dnb_only {
+                "filter: DNB only"
+            } else {
+                "filter: all billing"
+            });
+        }
         // Day navigation
         KeyCode::Char('h') | KeyCode::Left => {
             app.timesheet_shift_days(-1);

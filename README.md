@@ -640,6 +640,26 @@ disk untouched, still serialize, and still show in the detail pane's **RAW**
 section (a deliberate escape hatch). Searches still match hidden text; the
 hidden characters just aren't drawn.
 
+### Inline time metadata
+
+Task and archive rows render tracked time as a compact human badge (`45m`,
+`2h 05m`) and render non-billable work as `DNB`. These badges are protected in
+a right-aligned metadata column, so long narratives are ellipsized before the
+billing information. The detail pane's **RAW** section remains the source of
+truth for the original `dur:`, `log:`, and `bill:` tokens.
+
+The display can be changed in Settings (`I` toggles the duration badge,
+`O` toggles the log date) or persisted directly in `config.toml`:
+
+```toml
+show_duration_inline = true
+show_log_inline = false
+```
+
+Both settings are display-only and do not alter task data. The DNB-only
+filter in Timesheet mode is toggled with `n`; press `n` again to return to all
+billing classes.
+
 ## Development
 
 ```sh

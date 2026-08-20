@@ -89,6 +89,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 match_term,
                 today: app.today(),
                 hidden_keys: &app.prefs.hidden_keys,
+                show_duration_inline: app.prefs.show_duration_inline,
+                show_log_inline: app.prefs.show_log_inline,
                 timer_running: app.is_timer_running_on(abs),
                 timer_elapsed: if app.is_timer_running_on(abs) {
                     app.timer_elapsed_secs()

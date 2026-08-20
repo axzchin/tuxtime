@@ -38,7 +38,17 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
         format!(" {} ", app.timesheet.sort.label()),
         Style::default().fg(theme.dim).bg(theme.panel),
     );
-    let title = Line::from(vec![Span::raw(" Timesheet "), view_label, sort_label]);
+    let billing_filter = if app.timesheet.dnb_only {
+        Span::styled(" DNB only ", Style::default().fg(theme.bg).bg(theme.due))
+    } else {
+        Span::raw("")
+    };
+    let title = Line::from(vec![
+        Span::raw(" Timesheet "),
+        view_label,
+        sort_label,
+        billing_filter,
+    ]);
     let inner = msgbox::frame_box(frame, area, theme.border, theme.panel, title);
 
     let groups = app.build_timesheet_groups();
@@ -51,7 +61,9 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
     // the scrollable entry list instead of scrolling off short terminals.
     let mut footer: Vec<Line> = Vec::new();
     if groups.is_empty() {
-        let msg = if app.filter().search.is_empty() {
+        let msg = if app.timesheet.dnb_only {
+            "  No non-billable (DNB) entries for this period."
+        } else if app.filter().search.is_empty() {
             "  No time entries for this period."
         } else {
             "  No entries match your search."

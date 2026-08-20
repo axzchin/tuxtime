@@ -14,7 +14,7 @@ pub(crate) fn mode_hint(app: &App) -> String {
     // otherwise. Several modes (Normal, day-boundary, theme picker, stale
     // timer, manual-entry choice) deliberately fall back to this.
     let default_hint: &'static str = if matches!(app.nav.view, View::Timesheet) {
-        "j/k navigate  ·  Enter edit  ·  b billable  ·  a archive toggle  ·  c copy text  ·  y copy time  ·  C copy both  ·  h/l ±day  ·  H/L ±week  ·  w/d view  ·  s sort  ·  f/F filter project/context  ·  / search  ·  g date  ·  t today  ·  Esc/V/q back"
+        "j/k navigate  ·  Enter edit  ·  b billable  ·  n DNB filter  ·  a archive toggle  ·  c copy text  ·  y copy time  ·  C copy both  ·  h/l ±day  ·  H/L ±week  ·  w/d view  ·  s sort  ·  f/F filter project/context  ·  / search  ·  g date  ·  t today  ·  Esc/V/q back"
     } else {
         "j/k · n new · t timer · T interrupt · x done · / search · ? help · u undo · q quit"
     };
@@ -41,7 +41,7 @@ pub(crate) fn mode_hint(app: &App) -> String {
             Screen::Visual => "space toggle · x complete · dd delete · Esc cancel".to_string(),
             Screen::Help => "? close help".to_string(),
             Screen::Settings => {
-                "Esc/ ,/ q dismiss  ·  i idle nudge  ·  l long timer nudge".to_string()
+                "Esc/ ,/ q dismiss  ·  i idle nudge  ·  l long timer nudge  ·  I duration badge  ·  O log date".to_string()
             }
             Screen::CommandPalette => "type to filter · Enter run · Esc cancel".to_string(),
             Screen::Share => "scan the QR · any key dismisses".to_string(),

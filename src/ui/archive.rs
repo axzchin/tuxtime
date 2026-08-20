@@ -96,6 +96,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             match_term: None,
             today: app.today(),
             hidden_keys: &app.prefs.hidden_keys,
+            show_duration_inline: app.prefs.show_duration_inline,
+            show_log_inline: app.prefs.show_log_inline,
             timer_running: false,
             timer_elapsed: None,
         };

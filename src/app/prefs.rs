@@ -37,6 +37,10 @@ pub struct Prefs {
     /// Metadata keys whose `key:value` tokens are hidden from task rows.
     /// Config-only (no in-app toggle); see `Config::hidden_keys`.
     pub hidden_keys: Vec<String>,
+    /// Whether positive `dur:` values render as compact badges in task rows.
+    pub show_duration_inline: bool,
+    /// Whether the `log:YYYY-MM-DD` bookkeeping token is rendered inline.
+    pub show_log_inline: bool,
     /// Seconds of inactivity before nudging the user to start a timer.
     pub idle_nudge_seconds: u64,
     /// Seconds a timer can run before nudging the user.
@@ -78,6 +82,8 @@ impl Prefs {
             show_done: cfg.show_done.unwrap_or(false),
             show_future: cfg.show_future.unwrap_or(false),
             hidden_keys: cfg.hidden_keys,
+            show_duration_inline: cfg.show_duration_inline.unwrap_or(true),
+            show_log_inline: cfg.show_log_inline.unwrap_or(false),
             idle_nudge_seconds: cfg.idle_nudge_seconds.unwrap_or(900),
             long_timer_nudge_seconds: cfg.long_timer_nudge_seconds.unwrap_or(7200),
             prompt_on_day_boundary: cfg.prompt_on_day_boundary.unwrap_or(true),
@@ -170,6 +176,16 @@ impl Prefs {
         self.show_future = !self.show_future;
     }
 
+    /// Toggle the compact duration badge in list and archive rows.
+    pub fn toggle_duration_inline(&mut self) {
+        self.show_duration_inline = !self.show_duration_inline;
+    }
+
+    /// Toggle the `log:YYYY-MM-DD` bookkeeping token in list and archive rows.
+    pub fn toggle_log_inline(&mut self) {
+        self.show_log_inline = !self.show_log_inline;
+    }
+
     /// Persist to the XDG config path. Returns the IO error so the caller
     /// can flash it (writing to stderr from inside the alt-screen would
     /// corrupt the TUI). Saving is best-effort — callers that don't care
@@ -194,6 +210,8 @@ impl Prefs {
             cfg.show_done = Some(self.show_done);
             cfg.show_future = Some(self.show_future);
             cfg.hidden_keys = self.hidden_keys.clone();
+            cfg.show_duration_inline = Some(self.show_duration_inline);
+            cfg.show_log_inline = Some(self.show_log_inline);
             cfg.week_start = Some(week_start);
             cfg.idle_nudge_seconds = Some(self.idle_nudge_seconds);
             cfg.long_timer_nudge_seconds = Some(self.long_timer_nudge_seconds);
