@@ -203,25 +203,35 @@ pub fn build_line<'a>(
     }
     let metadata_width: usize = metadata.iter().map(|s| s.content.chars().count()).sum();
     let timer_width = timer_text.as_ref().map_or(0, |t| t.chars().count());
+    // Reserving metadata here guarantees the chips survive truncation: a long
+    // narrative is clipped first, so `2h 00m`/`DNB` are never the tokens that
+    // fall off the row.
     let body_budget = usize::from(max_width)
         .saturating_sub(prefix_width)
         .saturating_sub(timer_width)
         .saturating_sub(metadata_width);
-    let body_spans = spans.split_off(body_start_idx);
-    let body_spans = truncate_to_width(&body_spans, body_budget);
+    let untruncated_body: Vec<Span<'a>> = spans.split_off(body_start_idx);
+    let untruncated_width: usize = untruncated_body
+        .iter()
+        .map(|s| s.content.chars().count())
+        .sum();
+    let truncated = untruncated_width > body_budget;
+    let body_spans = truncate_to_width(&untruncated_body, body_budget);
     let body_width: usize = body_spans.iter().map(|s| s.content.chars().count()).sum();
     spans.extend(body_spans);
-    // Fill the reserved gap so metadata forms a stable right-aligned column
-    // across rows with different narrative lengths. This is intentionally
-    // inserted only when metadata exists; ordinary rows retain their natural
-    // spacing and the live timer behavior remains unchanged.
-    if metadata_width > 0 {
+    if truncated {
+        // The narrative filled the row: fill whatever remains so the chips
+        // still land flush at the right edge instead of stranded mid-line.
         let used = prefix_width + body_width + metadata_width + timer_width;
         let gap = usize::from(max_width).saturating_sub(used);
         if gap > 0 {
             spans.push(Span::raw(" ".repeat(gap)));
         }
     }
+    // Metadata sits right after the narrative when it fits (so the reader
+    // doesn't scan to the screen edge for the time) and only right-aligns
+    // when the narrative was clipped. The metadata vec already carries its
+    // leading space from the `insert(0, Span::raw(" "))` above.
     spans.extend(metadata);
     if let Some(t) = timer_text {
         spans.push(Span::styled(t, Style::default().fg(theme.accent)));
@@ -836,6 +846,85 @@ mod tests {
     }
 
     #[test]
+    fn metadata_sits_adjacent_to_short_narrative() {
+        // The user reads the time next to the narrative, not by scanning to
+        // the screen edge. When the narrative fits, the chips must follow it
+        // immediately with a single space — no right-alignment gap.
+        let raw = "Call Jim +Smith dur:3600 bill:n";
+        let task = parse_line(raw).unwrap();
+        let opts = RowOpts {
+            idx_label: 0,
+            cursor: false,
+            multi_mode: false,
+            multi_checked: false,
+            selected: false,
+            show_line_num: false,
+            match_term: None,
+            today: "2026-05-06",
+            hidden_keys: &[],
+            show_duration_inline: true,
+            show_log_inline: false,
+            badge_theme: BadgeTheme::Semantic,
+            timer_running: false,
+            timer_elapsed: None,
+        };
+        let line = build_line(&task, opts, &MUTED, 1000);
+        let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(
+            text.trim_end(),
+            "      Call Jim +Smith 1h 00m DNB",
+            "chips must sit right after the narrative: {text:?}"
+        );
+        // Trailing whitespace is allowed (the row is padded by the terminal),
+        // but the metadata must not be floating at the far right of a wide row.
+        let total = text.chars().count();
+        assert!(
+            total < 1000,
+            "row must not be padded to max_width: {text:?}"
+        );
+    }
+
+    #[test]
+    fn metadata_stays_rightmost_when_narrative_fills_row() {
+        // A narrative too long for the row truncates; the chips must still
+        // land flush at the right edge (the user's fallback for long lines)
+        // rather than dangling mid-line after the ellipsis.
+        let raw = "A very long narrative that must be clipped +Smith dur:7200 bill:n";
+        let task = parse_line(raw).unwrap();
+        let opts = RowOpts {
+            idx_label: 0,
+            cursor: false,
+            multi_mode: false,
+            multi_checked: false,
+            selected: false,
+            show_line_num: false,
+            match_term: None,
+            today: "2026-05-06",
+            hidden_keys: &[],
+            show_duration_inline: true,
+            show_log_inline: false,
+            badge_theme: BadgeTheme::Semantic,
+            timer_running: false,
+            timer_elapsed: None,
+        };
+        let line = build_line(&task, opts, &MUTED, 40);
+        let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(
+            text.chars().count(),
+            40,
+            "a full row must use every column: {text:?}"
+        );
+        assert!(
+            text.ends_with("2h 00m DNB"),
+            "metadata must be rightmost when truncated: {text:?}"
+        );
+        assert!(
+            text.contains('…'),
+            "narrative should be truncated: {text:?}"
+        );
+    }
+
+    #[test]
     fn metadata_badges_use_distinct_tile_styles() {
         let task = parse_line("Review +Smith dur:3600 bill:n").unwrap();
         let opts = RowOpts {
@@ -1072,6 +1161,37 @@ mod tests {
     #[test]
     fn truncate_to_width_zero_is_empty() {
         assert!(truncate_to_width(&[Span::raw("abc")], 0).is_empty());
+    }
+
+    #[test]
+    fn short_narrative_with_timer_keeps_chips_adjacent_and_timer_pinned() {
+        // A short narrative with a live timer: the duration/DNB chips must
+        // stay right after the narrative (not drift to the edge), while the
+        // live timer remains the final rightmost element.
+        let task = parse_line("Call Jim +Smith dur:3600 bill:n").unwrap();
+        let opts = RowOpts {
+            idx_label: 0,
+            cursor: false,
+            multi_mode: false,
+            multi_checked: false,
+            selected: false,
+            show_line_num: false,
+            match_term: None,
+            today: "2026-05-06",
+            hidden_keys: &[],
+            show_duration_inline: true,
+            show_log_inline: false,
+            badge_theme: BadgeTheme::Semantic,
+            timer_running: true,
+            timer_elapsed: Some(65),
+        };
+        let line = build_line(&task, opts, &MUTED, 1000);
+        let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(
+            text.trim_end(),
+            "▶     Call Jim +Smith 1h 00m DNB [00:01:05]",
+            "chips adjacent to narrative, timer last: {text:?}"
+        );
     }
 
     #[test]

@@ -5,8 +5,8 @@ expression: buffer_to_text(&buf)
  ▶▮◀ /tmp/tuxtime-snapshot.txt  •  2 tasks  •  sort:priority                                        
                                                                                                     
  (2)  NO PRIORITY  ────────────────────────────────────────────────────────────────────             
-  1 ▸     Active billable +Smith @drafting                                                    1h 00m
-  2       Active DNB +Smith @drafting                                                        15m DNB
+  1 ▸     Active billable +Smith @drafting 1h 00m                                                   
+  2       Active DNB +Smith @drafting 15m DNB                                                       
                                                                                                     
                                                                                                     
                                                                                                     
