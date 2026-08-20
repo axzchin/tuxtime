@@ -4,6 +4,47 @@ use super::types::{Density, Sort};
 use crate::config::Config;
 use crate::theme::{self, Theme};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BadgeTheme {
+    /// Use semantic colors: accent for duration and amber/due for DNB.
+    #[default]
+    Semantic,
+    /// Use subdued theme-neutral colors for a quieter row layout.
+    Monochrome,
+}
+
+impl BadgeTheme {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Semantic => "semantic",
+            Self::Monochrome => "monochrome",
+        }
+    }
+
+    #[must_use]
+    pub fn from_config(value: Option<&str>) -> Self {
+        match value {
+            Some("monochrome") => Self::Monochrome,
+            _ => Self::Semantic,
+        }
+    }
+
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Semantic => "semantic",
+            Self::Monochrome => "monochrome",
+        }
+    }
+}
+
+impl std::fmt::Display for BadgeTheme {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Layout {
     pub left: bool,
@@ -41,6 +82,8 @@ pub struct Prefs {
     pub show_duration_inline: bool,
     /// Whether the `log:YYYY-MM-DD` bookkeeping token is rendered inline.
     pub show_log_inline: bool,
+    /// Palette used by duration and non-billable metadata chips.
+    pub badge_theme: BadgeTheme,
     /// Seconds of inactivity before nudging the user to start a timer.
     pub idle_nudge_seconds: u64,
     /// Seconds a timer can run before nudging the user.
@@ -84,6 +127,7 @@ impl Prefs {
             hidden_keys: cfg.hidden_keys,
             show_duration_inline: cfg.show_duration_inline.unwrap_or(true),
             show_log_inline: cfg.show_log_inline.unwrap_or(false),
+            badge_theme: BadgeTheme::from_config(cfg.badge_theme.as_deref()),
             idle_nudge_seconds: cfg.idle_nudge_seconds.unwrap_or(900),
             long_timer_nudge_seconds: cfg.long_timer_nudge_seconds.unwrap_or(7200),
             prompt_on_day_boundary: cfg.prompt_on_day_boundary.unwrap_or(true),
@@ -156,6 +200,15 @@ impl Prefs {
         format!("sort: {}", self.sort)
     }
 
+    /// Cycle between semantic and subdued monochrome metadata chips.
+    pub fn cycle_badge_theme(&mut self) -> String {
+        self.badge_theme = match self.badge_theme {
+            BadgeTheme::Semantic => BadgeTheme::Monochrome,
+            BadgeTheme::Monochrome => BadgeTheme::Semantic,
+        };
+        format!("badge theme: {}", self.badge_theme)
+    }
+
     pub fn toggle_left(&mut self) {
         self.layout.left = !self.layout.left;
     }
@@ -212,6 +265,7 @@ impl Prefs {
             cfg.hidden_keys = self.hidden_keys.clone();
             cfg.show_duration_inline = Some(self.show_duration_inline);
             cfg.show_log_inline = Some(self.show_log_inline);
+            cfg.badge_theme = Some(self.badge_theme.as_str().to_string());
             cfg.week_start = Some(week_start);
             cfg.idle_nudge_seconds = Some(self.idle_nudge_seconds);
             cfg.long_timer_nudge_seconds = Some(self.long_timer_nudge_seconds);

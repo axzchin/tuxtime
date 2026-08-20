@@ -125,6 +125,7 @@ pub(crate) fn handle_settings(app: &mut App, key: KeyEvent) {
             app.prefs.toggle_log_inline();
             app.save_prefs();
         }
+        KeyCode::Char('B') => app.cycle_badge_theme(),
         KeyCode::Char('[') => {
             app.prefs.toggle_left();
             app.save_prefs();

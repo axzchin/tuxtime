@@ -12,7 +12,7 @@ use crate::app::App;
 use crate::ui::calendar_utils::{calendar_cells, calendar_footer, format_focused, month_name};
 use crate::ui::msgbox;
 use crate::ui::overlay::timesheet_calendar_rect;
-use crate::ui::task_row::bill_badge_style;
+use crate::ui::task_row::{bill_badge_style, dur_badge_style};
 
 pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
@@ -147,35 +147,40 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                     .bg(theme.panel)
                     .add_modifier(Modifier::BOLD)
             };
-            // Keep the DNB chip inside the center pane on narrow terminals:
-            // the billable-unit parenthetical is redundant for a non-billable
-            // group because the chip already communicates its status.
-            let group_label = if entry.billable {
-                format!("  {}  —  {} ({billable_str})", entry.key, formatted)
+            // Keep duration and billing status as compact chips, matching
+            // list/archive rows. The billable-unit parenthetical remains plain
+            // text because it is a copy-oriented value, not row metadata.
+            let group_prefix = format!("  {}  — ", entry.key);
+            let mut group_spans = vec![Span::styled(group_prefix, group_style)];
+            if copy_flash_active {
+                group_spans.push(Span::styled(
+                    format!(" {formatted} "),
+                    Style::default()
+                        .fg(theme.bg)
+                        .bg(theme.fg)
+                        .add_modifier(Modifier::BOLD),
+                ));
             } else {
-                format!("  {}  —  {}", entry.key, formatted)
-            };
-            let group_line = if entry.billable {
-                Line::from(Span::styled(group_label, group_style))
-            } else if copy_flash_active {
-                Line::from(vec![
-                    Span::styled(group_label, group_style),
-                    Span::raw(" "),
-                    Span::styled(
-                        "DNB",
-                        Style::default()
-                            .fg(theme.bg)
-                            .bg(theme.fg)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                ])
+                group_spans.push(Span::styled(
+                    format!(" {formatted} "),
+                    dur_badge_style(false, theme, app.prefs.badge_theme),
+                ));
+            }
+            if entry.billable {
+                group_spans.push(Span::styled(format!(" ({billable_str})"), group_style));
             } else {
-                Line::from(vec![
-                    Span::styled(group_label, group_style),
-                    Span::raw(" "),
-                    Span::styled("DNB", bill_badge_style(false, theme)),
-                ])
-            };
+                group_spans.push(Span::raw(" "));
+                let dnb_style = if copy_flash_active {
+                    Style::default()
+                        .fg(theme.bg)
+                        .bg(theme.fg)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    bill_badge_style(false, theme, app.prefs.badge_theme)
+                };
+                group_spans.push(Span::styled("DNB", dnb_style));
+            }
+            let group_line = Line::from(group_spans);
             lines.push(group_line);
 
             for (ni, n) in entry.narratives.iter().enumerate() {

@@ -4,7 +4,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-use crate::app::{App, View, format_billable};
+use crate::app::{App, BadgeTheme, View, format_billable};
 use crate::theme::Theme;
 use crate::todo::Task;
 use crate::ui::msgbox::wrap_words;
@@ -139,17 +139,15 @@ fn build_timesheet_body<'a>(theme: &Theme, app: &'a App, wrap_w: usize) -> Vec<L
     let dur = format_billable(total_secs, increment);
     // The duration is the *group* total (all narratives sharing this
     // project+activity+day), so label it as such rather than implying it
-    // belongs to the single narrative under the cursor.
-    let detail_value = if billable {
-        format!("{dur} · billable")
-    } else {
-        format!("{dur} ·")
-    };
-    rows.push(label_value_badge_row(
+    // belongs to the single narrative under the cursor. Keep it as a chip
+    // so the detail pane uses the same visual language as task rows.
+    rows.push(label_value_duration_row(
         theme,
         "group dur",
-        detail_value,
+        dur,
+        if billable { "billable" } else { "" },
         (!billable).then_some("DNB"),
+        app.prefs.badge_theme,
     ));
     if let Some(narrative) = narrative {
         rows.push(line_panel(theme, vec![Span::raw(" ")]));
@@ -175,14 +173,26 @@ fn build_timesheet_body<'a>(theme: &Theme, app: &'a App, wrap_w: usize) -> Vec<L
 }
 
 fn label_value_row<'a>(theme: &Theme, label: &'a str, value: String) -> Line<'a> {
-    label_value_badge_row(theme, label, value, None)
+    let mut padded = format!(" {label}");
+    if padded.chars().count() < 14 {
+        padded.push_str(&" ".repeat(14 - padded.chars().count()));
+    }
+    line_panel(
+        theme,
+        vec![
+            Span::styled(padded, Style::default().fg(theme.dim)),
+            Span::styled(value, Style::default().fg(theme.fg)),
+        ],
+    )
 }
 
-fn label_value_badge_row<'a>(
+fn label_value_duration_row<'a>(
     theme: &Theme,
     label: &'a str,
-    value: String,
+    duration: String,
+    suffix: &'a str,
     badge: Option<&'static str>,
+    badge_theme: BadgeTheme,
 ) -> Line<'a> {
     let mut padded = format!(" {label}");
     if padded.chars().count() < 14 {
@@ -190,11 +200,23 @@ fn label_value_badge_row<'a>(
     }
     let mut spans = vec![
         Span::styled(padded, Style::default().fg(theme.dim)),
-        Span::styled(value, Style::default().fg(theme.fg)),
+        Span::styled(
+            format!(" {duration} "),
+            crate::ui::task_row::dur_badge_style(false, theme, badge_theme),
+        ),
     ];
+    if !suffix.is_empty() {
+        spans.push(Span::styled(
+            format!(" · {suffix}"),
+            Style::default().fg(theme.fg),
+        ));
+    }
     if let Some(badge) = badge {
         spans.push(Span::raw(" "));
-        spans.push(Span::styled(badge, bill_badge_style(false, theme)));
+        spans.push(Span::styled(
+            badge,
+            bill_badge_style(false, theme, badge_theme),
+        ));
     }
     line_panel(theme, spans)
 }

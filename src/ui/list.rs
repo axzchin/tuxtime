@@ -91,6 +91,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 hidden_keys: &app.prefs.hidden_keys,
                 show_duration_inline: app.prefs.show_duration_inline,
                 show_log_inline: app.prefs.show_log_inline,
+                badge_theme: app.prefs.badge_theme,
                 timer_running: app.is_timer_running_on(abs),
                 timer_elapsed: if app.is_timer_running_on(abs) {
                     app.timer_elapsed_secs()

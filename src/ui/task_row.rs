@@ -1,6 +1,7 @@
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 
+use crate::app::BadgeTheme;
 use crate::search::subseq_match_ci;
 use crate::theme::Theme;
 use crate::todo::{Task, body_after_priority};
@@ -23,6 +24,8 @@ pub struct RowOpts<'a> {
     pub show_duration_inline: bool,
     /// Whether the `log:` bookkeeping token renders inline.
     pub show_log_inline: bool,
+    /// Palette used for duration and DNB metadata chips.
+    pub badge_theme: BadgeTheme,
     /// True when a timer is actively running on this task.
     pub timer_running: bool,
     /// Live elapsed seconds for the running timer, if applicable.
@@ -168,7 +171,7 @@ pub fn build_line<'a>(
     {
         push_metadata(
             &mut metadata,
-            Span::styled(badge, dur_badge_style(task.done, theme)),
+            Span::styled(badge, dur_badge_style(task.done, theme, opts.badge_theme)),
         );
     }
     if let Some(badge) = bill_badge(task)
@@ -179,7 +182,7 @@ pub fn build_line<'a>(
     {
         push_metadata(
             &mut metadata,
-            Span::styled(badge, bill_badge_style(task.done, theme)),
+            Span::styled(badge, bill_badge_style(task.done, theme, opts.badge_theme)),
         );
     }
 
@@ -389,10 +392,18 @@ fn push_metadata<'a>(metadata: &mut Vec<Span<'a>>, badge: Span<'a>) {
     metadata.push(badge);
 }
 
-pub(crate) fn dur_badge_style(task_done: bool, theme: &Theme) -> Style {
-    let background = if task_done { theme.done } else { theme.accent };
+pub(crate) fn dur_badge_style(task_done: bool, theme: &Theme, badge_theme: BadgeTheme) -> Style {
+    let background = match (badge_theme, task_done) {
+        (_, true) => theme.done,
+        (BadgeTheme::Semantic, false) => theme.accent,
+        (BadgeTheme::Monochrome, false) => theme.border,
+    };
+    let foreground = match badge_theme {
+        BadgeTheme::Semantic => theme.bg,
+        BadgeTheme::Monochrome => theme.fg,
+    };
     Style::default()
-        .fg(theme.bg)
+        .fg(foreground)
         .bg(background)
         .add_modifier(Modifier::BOLD)
 }
@@ -403,10 +414,18 @@ fn bill_badge(task: &Task) -> Option<&'static str> {
     (task.bill.as_deref() == Some("n")).then_some("DNB")
 }
 
-pub(crate) fn bill_badge_style(task_done: bool, theme: &Theme) -> Style {
-    let background = if task_done { theme.done } else { theme.due };
+pub(crate) fn bill_badge_style(task_done: bool, theme: &Theme, badge_theme: BadgeTheme) -> Style {
+    let background = match (badge_theme, task_done) {
+        (_, true) => theme.done,
+        (BadgeTheme::Semantic, false) => theme.due,
+        (BadgeTheme::Monochrome, false) => theme.dim,
+    };
+    let foreground = match badge_theme {
+        BadgeTheme::Semantic => theme.bg,
+        BadgeTheme::Monochrome => theme.fg,
+    };
     Style::default()
-        .fg(theme.bg)
+        .fg(foreground)
         .bg(background)
         .add_modifier(Modifier::BOLD)
 }
@@ -571,6 +590,7 @@ mod tests {
             hidden_keys: &[],
             show_duration_inline: true,
             show_log_inline: false,
+            badge_theme: BadgeTheme::Semantic,
             timer_running: false,
             timer_elapsed: None,
         };
@@ -596,6 +616,7 @@ mod tests {
             hidden_keys: &[],
             show_duration_inline: true,
             show_log_inline: false,
+            badge_theme: BadgeTheme::Semantic,
             timer_running: false,
             timer_elapsed: None,
         };
@@ -638,6 +659,7 @@ mod tests {
             hidden_keys: hidden,
             show_duration_inline,
             show_log_inline,
+            badge_theme: BadgeTheme::Semantic,
             timer_running: false,
             timer_elapsed: None,
         };
@@ -796,6 +818,7 @@ mod tests {
             hidden_keys: &[],
             show_duration_inline: true,
             show_log_inline: false,
+            badge_theme: BadgeTheme::Semantic,
             timer_running: false,
             timer_elapsed: None,
         };
@@ -827,6 +850,7 @@ mod tests {
             hidden_keys: &[],
             show_duration_inline: true,
             show_log_inline: false,
+            badge_theme: BadgeTheme::Semantic,
             timer_running: false,
             timer_elapsed: None,
         };
@@ -850,6 +874,42 @@ mod tests {
     }
 
     #[test]
+    fn monochrome_badge_theme_uses_neutral_tiles() {
+        let task = parse_line("Review +Smith dur:3600 bill:n").unwrap();
+        let opts = RowOpts {
+            idx_label: 0,
+            cursor: false,
+            multi_mode: false,
+            multi_checked: false,
+            selected: false,
+            show_line_num: false,
+            match_term: None,
+            today: "2026-05-06",
+            hidden_keys: &[],
+            show_duration_inline: true,
+            show_log_inline: false,
+            badge_theme: BadgeTheme::Monochrome,
+            timer_running: false,
+            timer_elapsed: None,
+        };
+        let line = build_line(&task, opts, &MUTED, 1000);
+        let duration = line
+            .spans
+            .iter()
+            .find(|span| span.content == "1h 00m")
+            .expect("duration badge");
+        let dnb = line
+            .spans
+            .iter()
+            .find(|span| span.content == "DNB")
+            .expect("DNB badge");
+        assert_eq!(duration.style.bg, Some(MUTED.border));
+        assert_eq!(dnb.style.bg, Some(MUTED.dim));
+        assert_eq!(duration.style.fg, Some(MUTED.fg));
+        assert_eq!(dnb.style.fg, Some(MUTED.fg));
+    }
+
+    #[test]
     fn structured_metadata_survives_body_token_cleanup() {
         // Metadata comes from parsed fields, not from whether the raw token
         // happened to survive body cleanup. This mirrors legacy or hand-edited
@@ -868,6 +928,7 @@ mod tests {
             hidden_keys: &[],
             show_duration_inline: true,
             show_log_inline: false,
+            badge_theme: BadgeTheme::Semantic,
             timer_running: false,
             timer_elapsed: None,
         };
@@ -897,6 +958,7 @@ mod tests {
             hidden_keys: &[],
             show_duration_inline: true,
             show_log_inline: false,
+            badge_theme: BadgeTheme::Semantic,
             timer_running: false,
             timer_elapsed: None,
         };
@@ -927,6 +989,7 @@ mod tests {
             hidden_keys: &[],
             show_duration_inline: true,
             show_log_inline: false,
+            badge_theme: BadgeTheme::Semantic,
             timer_running: false,
             timer_elapsed: None,
         };
@@ -962,6 +1025,7 @@ mod tests {
             hidden_keys: &[],
             show_duration_inline: true,
             show_log_inline: false,
+            badge_theme: BadgeTheme::Semantic,
             timer_running: false,
             timer_elapsed: None,
         };
@@ -1026,6 +1090,7 @@ mod tests {
             hidden_keys: &[],
             show_duration_inline: true,
             show_log_inline: false,
+            badge_theme: BadgeTheme::Semantic,
             timer_running: true,
             timer_elapsed: Some(65),
         };

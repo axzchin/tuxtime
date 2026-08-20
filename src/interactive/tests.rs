@@ -1758,6 +1758,12 @@ fn settings_advertised_keys_apply_in_settings_mode() {
     assert_ne!(app.prefs.show_duration_inline, show_duration);
     assert_ne!(app.prefs.show_log_inline, show_log);
 
+    // Badge palette cycles independently of the global theme.
+    let badge_theme = app.prefs.badge_theme;
+    handle_settings(&mut app, key('B'));
+    assert_ne!(app.prefs.badge_theme, badge_theme);
+    assert_eq!(app.prefs.badge_theme, crate::app::BadgeTheme::Monochrome);
+
     // Theme picker opens (and stays previewable).
     handle_settings(
         &mut app,

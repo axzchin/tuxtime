@@ -664,11 +664,14 @@ The display can be changed in Settings (`I` toggles the duration badge,
 ```toml
 show_duration_inline = true
 show_log_inline = false
+# Badge palette: `semantic` (colored) or `monochrome` (subdued).
+badge_theme = "semantic"
 ```
 
-Both settings are display-only and do not alter task data. The DNB-only
-filter in Timesheet mode is toggled with `n`; press `n` again to return to all
-billing classes.
+Both settings are display-only and do not alter task data. Press `B` in
+Settings to cycle the badge palette; the choice applies consistently to list,
+archive, timesheet, and detail views. The DNB-only filter in Timesheet mode is
+toggled with `n`; press `n` again to return to all billing classes.
 
 ## Development
 

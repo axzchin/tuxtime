@@ -4,18 +4,18 @@ expression: buffer_to_text(&buf)
 ---
  FILTERS                  ┌ Timesheet  Wed 2026-05-06  by project┐ DETAIL · TIMESHEET               
                           │                                      │                                  
- MATTERS · BILLABLE       │  +Smith @drafting  —  15m (0.3h)  DNB│ PERIOD                           
-   +Smith           1h 00m│    • Non-billable work               │ billable     1.0h                
-                          │  +Smith @drafting  —  1h 0m (1.0h)  (│ non-billable 0.3h                
- NON-BILLABLE             │    • Billable work                   │ total        1.3h                
+ MATTERS · BILLABLE       │  +Smith @call  —  1h 0m (1.0h)  (1.0h│ PERIOD                           
+   +Smith           1h 00m│    • Client call                     │ billable     1.0h                
+                          │  +Smith @drafting  —  15m (0.3h)  DNB│ non-billable 0.3h                
+ NON-BILLABLE             │    • Quiet review                    │ total        1.3h                
    +Smith              15m│                                      │                                  
                           │                                      │ ENTRY                            
  TOTALS                   │                                      │2026-05-06                        
-   billable         1h 00m│                                      │+Smith @drafting                  
-   non-billable        15m│                                      │ group dur     0.3h  DNB          
+   billable         1h 00m│                                      │+Smith @call                      
+   non-billable        15m│                                      │ group dur     1.0h  · billable   
    total            1h 15m│                                      │                                  
                           │                                      │ NARRATIVE 1/1                    
-                          │                                      │  Non-billable work               
+                          │                                      │  Client call                     
                           │                                      │                                  
                           │                                      │                                  
                           │                                      │                                  

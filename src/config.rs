@@ -54,6 +54,9 @@ pub struct Config {
     pub show_duration_inline: Option<bool>,
     /// Render the `log:YYYY-MM-DD` bookkeeping token inline (default false).
     pub show_log_inline: Option<bool>,
+    /// Badge palette for duration and non-billable chips: `semantic` or
+    /// `monochrome`. Omitted values use the semantic default.
+    pub badge_theme: Option<String>,
     pub week_start: Option<WeekStart>,
     /// Seconds of inactivity before nudging the user to start a timer (default 900 = 15 min).
     pub idle_nudge_seconds: Option<u64>,
@@ -231,6 +234,9 @@ fn parse(s: &str) -> Config {
             }
             "show_duration_inline" => c.show_duration_inline = parse_bool(v),
             "show_log_inline" => c.show_log_inline = parse_bool(v),
+            "badge_theme" if matches!(v, "semantic" | "monochrome") => {
+                c.badge_theme = Some(v.to_string());
+            }
             "week_start" => c.week_start = v.parse().ok(),
             "idle_nudge_seconds" => c.idle_nudge_seconds = v.parse().ok(),
             "long_timer_nudge_seconds" => c.long_timer_nudge_seconds = v.parse().ok(),
@@ -319,6 +325,9 @@ fn serialize(c: &Config) -> String {
     if let Some(v) = c.show_log_inline {
         let _ = writeln!(out, "show_log_inline = {v}");
     }
+    if let Some(v) = &c.badge_theme {
+        let _ = writeln!(out, "badge_theme = {v}");
+    }
     if let Some(v) = c.week_start {
         let _ = writeln!(out, "week_start = {v}");
     }
@@ -387,6 +396,7 @@ mod tests {
             hidden_keys: vec!["uid".into(), "sync".into()],
             show_duration_inline: Some(true),
             show_log_inline: Some(false),
+            badge_theme: Some("monochrome".into()),
             week_start: Some(WeekStart::Sunday),
             idle_nudge_seconds: Some(900),
             long_timer_nudge_seconds: Some(7200),
@@ -408,11 +418,15 @@ mod tests {
         assert_eq!(defaults.show_duration_inline, None);
         assert_eq!(defaults.show_log_inline, None);
 
-        let configured = parse("show_duration_inline = false\nshow_log_inline = true\n");
+        let configured = parse(
+            "show_duration_inline = false\nshow_log_inline = true\nbadge_theme = monochrome\n",
+        );
         assert_eq!(configured.show_duration_inline, Some(false));
         assert_eq!(configured.show_log_inline, Some(true));
+        assert_eq!(configured.badge_theme.as_deref(), Some("monochrome"));
 
-        let invalid = parse("show_duration_inline = maybe\nshow_log_inline = maybe\n");
+        let invalid =
+            parse("show_duration_inline = maybe\nshow_log_inline = maybe\nbadge_theme = vivid\n");
         assert_eq!(invalid.show_duration_inline, None);
         assert_eq!(invalid.show_log_inline, None);
     }
@@ -604,6 +618,7 @@ mod tests {
             hidden_keys: vec!["uid".into()],
             show_duration_inline: Some(true),
             show_log_inline: Some(false),
+            badge_theme: Some("monochrome".into()),
             week_start: Some(WeekStart::Sunday),
             idle_nudge_seconds: None,
             long_timer_nudge_seconds: None,

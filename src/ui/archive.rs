@@ -98,6 +98,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             hidden_keys: &app.prefs.hidden_keys,
             show_duration_inline: app.prefs.show_duration_inline,
             show_log_inline: app.prefs.show_log_inline,
+            badge_theme: app.prefs.badge_theme,
             timer_running: false,
             timer_elapsed: None,
         };

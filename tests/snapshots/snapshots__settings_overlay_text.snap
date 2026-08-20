@@ -19,6 +19,7 @@ expression: buffer_to_text(&buf)
    show future in list         off  (F to toggle)                                                   
    duration badge inline       on  (I to toggle)                                                    
    log date inline             off  (O to toggle)                                                   
+   badge theme                 semantic  (B to cycle)                                               
                                                                                                     
  BEHAVIOR                                                                                           
    default sort                priority (S to cycle)                                                
@@ -28,7 +29,6 @@ expression: buffer_to_text(&buf)
                                                                                                     
  KEYBINDINGS                                                                                        
                                press ? for the full list                                            
-                                                                                                    
                                                                                                     
                                                                                                     
                                                                                                     

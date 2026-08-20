@@ -19,7 +19,8 @@ expression: buffer_to_text(&buf)
    show future in list   │  ⏱ 15█                                         │                         
    duration badge inline │                                                │                         
    log date inline       │                                                │                         
-                         └────────────────────────────────────────────────┘                         
+   badge theme           └────────────────────────────────────────────────┘                         
+                                                                                                    
  BEHAVIOR                                                                                           
    default sort                priority (S to cycle)                                                
    idle nudge                  15 min  (i to change)                                                
@@ -28,7 +29,6 @@ expression: buffer_to_text(&buf)
                                                                                                     
  KEYBINDINGS                                                                                        
                                press ? for the full list                                            
-                                                                                                    
                                                                                                     
                                                                                                     
                                                                                                     

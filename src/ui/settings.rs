@@ -86,6 +86,10 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             "  log date inline",
             Some(format!("{}  (O to toggle)", on(app.prefs.show_log_inline))),
         ),
+        (
+            "  badge theme",
+            Some(format!("{}  (B to cycle)", app.prefs.badge_theme)),
+        ),
         ("", Some(String::new())),
         ("BEHAVIOR", None),
         (

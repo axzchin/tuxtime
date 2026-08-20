@@ -69,7 +69,7 @@ pub use env::Env;
 pub use flash::Flash;
 pub use navigation::Navigation;
 pub use palette::CommandPaletteState;
-pub use prefs::{Layout, Prefs};
+pub use prefs::{BadgeTheme, Layout, Prefs};
 pub use project_manager::ProjectManager;
 pub use saved_filter_picker::SavedFilterPicker;
 pub use selection::Selection;
@@ -285,6 +285,13 @@ impl App {
 
     pub fn cycle_density(&mut self) {
         let msg = self.prefs.cycle_density();
+        self.flash(msg);
+        self.save_prefs();
+    }
+
+    /// Cycle the duration/DNB badge palette and persist it.
+    pub fn cycle_badge_theme(&mut self) {
+        let msg = self.prefs.cycle_badge_theme();
         self.flash(msg);
         self.save_prefs();
     }

@@ -21,8 +21,9 @@ use ratatui::buffer::Buffer;
 use ratatui::style::{Color, Modifier};
 
 use tuxtime::app::{
-    App, BuilderField, CalendarState, CalendarTarget, Density, DraftOverlay, Mode, Nudge, Picker,
-    PriorityChooserState, Prompt, RecurrenceBuilderState, Screen, SlashMenuState, View,
+    App, BadgeTheme, BuilderField, CalendarState, CalendarTarget, Density, DraftOverlay, Mode,
+    Nudge, Picker, PriorityChooserState, Prompt, RecurrenceBuilderState, Screen, SlashMenuState,
+    View,
 };
 use tuxtime::config::Config;
 use tuxtime::recurrence::RecUnit;
@@ -576,6 +577,28 @@ fn timesheet_with_dnb_badge() {
     app.prefs.density = Density::Compact;
     app.set_view(View::Timesheet);
     snapshot_app("timesheet_with_dnb_badge", &app);
+}
+
+/// The alternate badge palette is visible in the real timesheet frame, not
+/// only in the row-level renderer tests.
+#[test]
+fn timesheet_with_monochrome_badges() {
+    let body = concat!(
+        "2026-05-06 Quiet review +Smith @drafting dur:900 bill:n\n",
+        "2026-05-06 Client call +Smith @call dur:3600\n",
+    );
+    std::fs::write(FIXTURE_PATH, body).expect("seed monochrome timesheet fixture");
+    let mut app = App::new(
+        PathBuf::from(FIXTURE_PATH),
+        body.to_string(),
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.env.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.prefs.density = Density::Compact;
+    app.prefs.badge_theme = BadgeTheme::Monochrome;
+    app.set_view(View::Timesheet);
+    snapshot_app("timesheet_with_monochrome_badges", &app);
 }
 
 #[test]
