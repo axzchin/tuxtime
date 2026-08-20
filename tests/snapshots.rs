@@ -557,6 +557,27 @@ fn project_management_search() {
     snapshot_app("project_management_search", &app);
 }
 
+/// The timesheet center and detail pane both expose non-billable time as a
+/// compact DNB chip, rather than relying on a prose-only suffix.
+#[test]
+fn timesheet_with_dnb_badge() {
+    let body = concat!(
+        "2026-05-06 Non-billable work +Smith @drafting dur:900 bill:n\n",
+        "2026-05-06 Billable work +Smith @drafting dur:3600\n",
+    );
+    std::fs::write(FIXTURE_PATH, body).expect("seed DNB timesheet fixture");
+    let mut app = App::new(
+        PathBuf::from(FIXTURE_PATH),
+        body.to_string(),
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.env.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.prefs.density = Density::Compact;
+    app.set_view(View::Timesheet);
+    snapshot_app("timesheet_with_dnb_badge", &app);
+}
+
 #[test]
 fn timesheet_weekly_with_daily_subtotals() {
     // Build an app with dur tasks on two different days so the weekly view

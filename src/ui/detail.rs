@@ -8,7 +8,9 @@ use crate::app::{App, View, format_billable};
 use crate::theme::Theme;
 use crate::todo::Task;
 use crate::ui::msgbox::wrap_words;
-use crate::ui::task_row::{due_label, due_token_style, is_url_token, url_token_style};
+use crate::ui::task_row::{
+    bill_badge_style, due_label, due_token_style, is_url_token, url_token_style,
+};
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
@@ -135,14 +137,19 @@ fn build_timesheet_body<'a>(theme: &Theme, app: &'a App, wrap_w: usize) -> Vec<L
     ];
     let increment = app.prefs.rounding_increment;
     let dur = format_billable(total_secs, increment);
-    let status = if billable { "billable" } else { "non-billable" };
     // The duration is the *group* total (all narratives sharing this
     // project+activity+day), so label it as such rather than implying it
     // belongs to the single narrative under the cursor.
-    rows.push(label_value_row(
+    let detail_value = if billable {
+        format!("{dur} · billable")
+    } else {
+        format!("{dur} ·")
+    };
+    rows.push(label_value_badge_row(
         theme,
         "group dur",
-        format!("{dur} · {status}"),
+        detail_value,
+        (!billable).then_some("DNB"),
     ));
     if let Some(narrative) = narrative {
         rows.push(line_panel(theme, vec![Span::raw(" ")]));
@@ -168,17 +175,28 @@ fn build_timesheet_body<'a>(theme: &Theme, app: &'a App, wrap_w: usize) -> Vec<L
 }
 
 fn label_value_row<'a>(theme: &Theme, label: &'a str, value: String) -> Line<'a> {
+    label_value_badge_row(theme, label, value, None)
+}
+
+fn label_value_badge_row<'a>(
+    theme: &Theme,
+    label: &'a str,
+    value: String,
+    badge: Option<&'static str>,
+) -> Line<'a> {
     let mut padded = format!(" {label}");
     if padded.chars().count() < 14 {
         padded.push_str(&" ".repeat(14 - padded.chars().count()));
     }
-    line_panel(
-        theme,
-        vec![
-            Span::styled(padded, Style::default().fg(theme.dim)),
-            Span::styled(value, Style::default().fg(theme.fg)),
-        ],
-    )
+    let mut spans = vec![
+        Span::styled(padded, Style::default().fg(theme.dim)),
+        Span::styled(value, Style::default().fg(theme.fg)),
+    ];
+    if let Some(badge) = badge {
+        spans.push(Span::raw(" "));
+        spans.push(Span::styled(badge, bill_badge_style(false, theme)));
+    }
+    line_panel(theme, spans)
 }
 
 fn build_lines<'a>(

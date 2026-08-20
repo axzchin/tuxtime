@@ -12,6 +12,7 @@ use crate::app::App;
 use crate::ui::calendar_utils::{calendar_cells, calendar_footer, format_focused, month_name};
 use crate::ui::msgbox;
 use crate::ui::overlay::timesheet_calendar_rect;
+use crate::ui::task_row::bill_badge_style;
 
 pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
@@ -146,18 +147,36 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                     .bg(theme.panel)
                     .add_modifier(Modifier::BOLD)
             };
-            let dnb_suffix = if entry.billable {
-                ""
+            // Keep the DNB chip inside the center pane on narrow terminals:
+            // the billable-unit parenthetical is redundant for a non-billable
+            // group because the chip already communicates its status.
+            let group_label = if entry.billable {
+                format!("  {}  —  {} ({billable_str})", entry.key, formatted)
             } else {
-                " (non-billable)"
+                format!("  {}  —  {}", entry.key, formatted)
             };
-            lines.push(Line::from(Span::styled(
-                format!(
-                    "  {}  —  {} ({billable_str}){dnb_suffix}",
-                    entry.key, formatted
-                ),
-                group_style,
-            )));
+            let group_line = if entry.billable {
+                Line::from(Span::styled(group_label, group_style))
+            } else if copy_flash_active {
+                Line::from(vec![
+                    Span::styled(group_label, group_style),
+                    Span::raw(" "),
+                    Span::styled(
+                        "DNB",
+                        Style::default()
+                            .fg(theme.bg)
+                            .bg(theme.fg)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                ])
+            } else {
+                Line::from(vec![
+                    Span::styled(group_label, group_style),
+                    Span::raw(" "),
+                    Span::styled("DNB", bill_badge_style(false, theme)),
+                ])
+            };
+            lines.push(group_line);
 
             for (ni, n) in entry.narratives.iter().enumerate() {
                 let is_narr_cursor = is_selected && selected_narrative == Some(ni);

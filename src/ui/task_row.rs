@@ -389,9 +389,12 @@ fn push_metadata<'a>(metadata: &mut Vec<Span<'a>>, badge: Span<'a>) {
     metadata.push(badge);
 }
 
-fn dur_badge_style(task_done: bool, theme: &Theme) -> Style {
-    let color = if task_done { theme.done } else { theme.dim };
-    apply_dim(Style::default().fg(color), task_done)
+pub(crate) fn dur_badge_style(task_done: bool, theme: &Theme) -> Style {
+    let background = if task_done { theme.done } else { theme.accent };
+    Style::default()
+        .fg(theme.bg)
+        .bg(background)
+        .add_modifier(Modifier::BOLD)
 }
 
 /// Compact non-billable badge for a task's `bill:`, or `None` when the task
@@ -400,9 +403,12 @@ fn bill_badge(task: &Task) -> Option<&'static str> {
     (task.bill.as_deref() == Some("n")).then_some("DNB")
 }
 
-fn bill_badge_style(task_done: bool, theme: &Theme) -> Style {
-    let color = if task_done { theme.done } else { theme.due };
-    apply_dim(Style::default().fg(color), task_done)
+pub(crate) fn bill_badge_style(task_done: bool, theme: &Theme) -> Style {
+    let background = if task_done { theme.done } else { theme.due };
+    Style::default()
+        .fg(theme.bg)
+        .bg(background)
+        .add_modifier(Modifier::BOLD)
 }
 
 /// True when `token` is a `key:value` pair whose key (case-insensitively)
@@ -804,6 +810,43 @@ mod tests {
             "narrative should be truncated: {text:?}"
         );
         assert!(text.chars().count() <= 40, "row exceeds width: {text:?}");
+    }
+
+    #[test]
+    fn metadata_badges_use_distinct_tile_styles() {
+        let task = parse_line("Review +Smith dur:3600 bill:n").unwrap();
+        let opts = RowOpts {
+            idx_label: 0,
+            cursor: false,
+            multi_mode: false,
+            multi_checked: false,
+            selected: false,
+            show_line_num: false,
+            match_term: None,
+            today: "2026-05-06",
+            hidden_keys: &[],
+            show_duration_inline: true,
+            show_log_inline: false,
+            timer_running: false,
+            timer_elapsed: None,
+        };
+        let line = build_line(&task, opts, &MUTED, 1000);
+        let duration = line
+            .spans
+            .iter()
+            .find(|span| span.content == "1h 00m")
+            .expect("duration badge");
+        let dnb = line
+            .spans
+            .iter()
+            .find(|span| span.content == "DNB")
+            .expect("DNB badge");
+        assert_eq!(duration.style.bg, Some(MUTED.accent));
+        assert_eq!(duration.style.fg, Some(MUTED.bg));
+        assert_eq!(dnb.style.bg, Some(MUTED.due));
+        assert_eq!(dnb.style.fg, Some(MUTED.bg));
+        assert!(duration.style.add_modifier.contains(Modifier::BOLD));
+        assert!(dnb.style.add_modifier.contains(Modifier::BOLD));
     }
 
     #[test]
