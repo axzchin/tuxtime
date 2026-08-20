@@ -653,10 +653,11 @@ hidden characters just aren't drawn.
 ### Inline time metadata
 
 Task and archive rows render tracked time as a compact human badge (`45m`,
-`2h 05m`) and render non-billable work as `DNB`. These badges are protected in
-a right-aligned metadata column, so long narratives are ellipsized before the
-billing information. The detail pane's **RAW** section remains the source of
-truth for the original `dur:`, `log:`, and `bill:` tokens.
+`2h 05m`) and render non-billable work as `DNB`. The badges sit right after
+the narrative when it fits and fall back to the right edge when the line is
+full, so the chips are never ellipsized away. The detail pane's **RAW**
+section remains the source of truth for the original `dur:`, `log:`, and
+`bill:` tokens.
 
 The display can be changed in Settings (`I` toggles the duration badge,
 `O` toggles the log date) or persisted directly in `config.toml`:
@@ -664,7 +665,8 @@ The display can be changed in Settings (`I` toggles the duration badge,
 ```toml
 show_duration_inline = true
 show_log_inline = false
-# Badge palette: `semantic` (colored) or `monochrome` (subdued).
+# Badge palette: `semantic` (colored chips), `monochrome` (subdued chips),
+# or `plain` (colored text, no chip background).
 badge_theme = "semantic"
 ```
 

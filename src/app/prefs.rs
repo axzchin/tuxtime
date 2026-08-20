@@ -11,6 +11,8 @@ pub enum BadgeTheme {
     Semantic,
     /// Use subdued theme-neutral colors for a quieter row layout.
     Monochrome,
+    /// Bold colored text with no background chip at all.
+    Plain,
 }
 
 impl BadgeTheme {
@@ -19,6 +21,7 @@ impl BadgeTheme {
         match self {
             Self::Semantic => "semantic",
             Self::Monochrome => "monochrome",
+            Self::Plain => "plain",
         }
     }
 
@@ -26,15 +29,8 @@ impl BadgeTheme {
     pub fn from_config(value: Option<&str>) -> Self {
         match value {
             Some("monochrome") => Self::Monochrome,
+            Some("plain") => Self::Plain,
             _ => Self::Semantic,
-        }
-    }
-
-    #[must_use]
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::Semantic => "semantic",
-            Self::Monochrome => "monochrome",
         }
     }
 }
@@ -200,11 +196,13 @@ impl Prefs {
         format!("sort: {}", self.sort)
     }
 
-    /// Cycle between semantic and subdued monochrome metadata chips.
+    /// Cycle through the badge palettes: colored chips → subdued chips →
+    /// plain text → colored chips.
     pub fn cycle_badge_theme(&mut self) -> String {
         self.badge_theme = match self.badge_theme {
             BadgeTheme::Semantic => BadgeTheme::Monochrome,
-            BadgeTheme::Monochrome => BadgeTheme::Semantic,
+            BadgeTheme::Monochrome => BadgeTheme::Plain,
+            BadgeTheme::Plain => BadgeTheme::Semantic,
         };
         format!("badge theme: {}", self.badge_theme)
     }

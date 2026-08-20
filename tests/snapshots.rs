@@ -579,6 +579,28 @@ fn timesheet_with_dnb_badge() {
     snapshot_app("timesheet_with_dnb_badge", &app);
 }
 
+/// The plain badge palette (text only, no chip background) renders in the
+/// real timesheet frame without any background on the duration/DNB badges.
+#[test]
+fn timesheet_with_plain_badges() {
+    let body = concat!(
+        "2026-05-06 Quiet review +Smith @drafting dur:900 bill:n\n",
+        "2026-05-06 Client call +Smith @call dur:3600\n",
+    );
+    std::fs::write(FIXTURE_PATH, body).expect("seed plain timesheet fixture");
+    let mut app = App::new(
+        PathBuf::from(FIXTURE_PATH),
+        body.to_string(),
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.env.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.prefs.density = Density::Compact;
+    app.prefs.badge_theme = BadgeTheme::Plain;
+    app.set_view(View::Timesheet);
+    snapshot_app("timesheet_with_plain_badges", &app);
+}
+
 /// The alternate badge palette is visible in the real timesheet frame, not
 /// only in the row-level renderer tests.
 #[test]

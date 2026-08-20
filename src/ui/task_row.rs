@@ -403,14 +403,14 @@ fn push_metadata<'a>(metadata: &mut Vec<Span<'a>>, badge: Span<'a>) {
 }
 
 pub(crate) fn dur_badge_style(task_done: bool, theme: &Theme, badge_theme: BadgeTheme) -> Style {
-    let background = match (badge_theme, task_done) {
-        (_, true) => theme.done,
-        (BadgeTheme::Semantic, false) => theme.accent,
-        (BadgeTheme::Monochrome, false) => theme.border,
-    };
-    let foreground = match badge_theme {
-        BadgeTheme::Semantic => theme.bg,
-        BadgeTheme::Monochrome => theme.fg,
+    let (foreground, background) = match badge_theme {
+        // Plain: colored bold text on the row's own background — no chip.
+        BadgeTheme::Plain => {
+            let color = if task_done { theme.done } else { theme.accent };
+            return Style::default().fg(color).add_modifier(Modifier::BOLD);
+        }
+        BadgeTheme::Semantic => (theme.bg, if task_done { theme.done } else { theme.accent }),
+        BadgeTheme::Monochrome => (theme.fg, if task_done { theme.done } else { theme.border }),
     };
     Style::default()
         .fg(foreground)
@@ -425,14 +425,14 @@ fn bill_badge(task: &Task) -> Option<&'static str> {
 }
 
 pub(crate) fn bill_badge_style(task_done: bool, theme: &Theme, badge_theme: BadgeTheme) -> Style {
-    let background = match (badge_theme, task_done) {
-        (_, true) => theme.done,
-        (BadgeTheme::Semantic, false) => theme.due,
-        (BadgeTheme::Monochrome, false) => theme.dim,
-    };
-    let foreground = match badge_theme {
-        BadgeTheme::Semantic => theme.bg,
-        BadgeTheme::Monochrome => theme.fg,
+    let (foreground, background) = match badge_theme {
+        // Plain: colored bold text on the row's own background — no chip.
+        BadgeTheme::Plain => {
+            let color = if task_done { theme.done } else { theme.due };
+            return Style::default().fg(color).add_modifier(Modifier::BOLD);
+        }
+        BadgeTheme::Semantic => (theme.bg, if task_done { theme.done } else { theme.due }),
+        BadgeTheme::Monochrome => (theme.fg, if task_done { theme.done } else { theme.dim }),
     };
     Style::default()
         .fg(foreground)
@@ -996,6 +996,50 @@ mod tests {
         assert_eq!(dnb.style.bg, Some(MUTED.dim));
         assert_eq!(duration.style.fg, Some(MUTED.fg));
         assert_eq!(dnb.style.fg, Some(MUTED.fg));
+    }
+
+    #[test]
+    fn plain_badge_theme_renders_text_without_background() {
+        let task = parse_line("Review +Smith dur:3600 bill:n").unwrap();
+        let opts = RowOpts {
+            idx_label: 0,
+            cursor: false,
+            multi_mode: false,
+            multi_checked: false,
+            selected: false,
+            show_line_num: false,
+            match_term: None,
+            today: "2026-05-06",
+            hidden_keys: &[],
+            show_duration_inline: true,
+            show_log_inline: false,
+            badge_theme: BadgeTheme::Plain,
+            timer_running: false,
+            timer_elapsed: None,
+        };
+        let line = build_line(&task, opts, &MUTED, 1000);
+        let duration = line
+            .spans
+            .iter()
+            .find(|span| span.content == "1h 00m")
+            .expect("duration badge");
+        let dnb = line
+            .spans
+            .iter()
+            .find(|span| span.content == "DNB")
+            .expect("DNB badge");
+        assert_eq!(
+            duration.style.bg, None,
+            "plain duration must have no background: {duration:?}"
+        );
+        assert_eq!(
+            dnb.style.bg, None,
+            "plain DNB must have no background: {dnb:?}"
+        );
+        assert_eq!(duration.style.fg, Some(MUTED.accent));
+        assert_eq!(dnb.style.fg, Some(MUTED.due));
+        assert!(duration.style.add_modifier.contains(Modifier::BOLD));
+        assert!(dnb.style.add_modifier.contains(Modifier::BOLD));
     }
 
     #[test]

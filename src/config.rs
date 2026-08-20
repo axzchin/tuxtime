@@ -234,7 +234,7 @@ fn parse(s: &str) -> Config {
             }
             "show_duration_inline" => c.show_duration_inline = parse_bool(v),
             "show_log_inline" => c.show_log_inline = parse_bool(v),
-            "badge_theme" if matches!(v, "semantic" | "monochrome") => {
+            "badge_theme" if matches!(v, "semantic" | "monochrome" | "plain") => {
                 c.badge_theme = Some(v.to_string());
             }
             "week_start" => c.week_start = v.parse().ok(),
@@ -418,12 +418,14 @@ mod tests {
         assert_eq!(defaults.show_duration_inline, None);
         assert_eq!(defaults.show_log_inline, None);
 
-        let configured = parse(
-            "show_duration_inline = false\nshow_log_inline = true\nbadge_theme = monochrome\n",
-        );
+        let configured =
+            parse("show_duration_inline = false\nshow_log_inline = true\nbadge_theme = plain\n");
         assert_eq!(configured.show_duration_inline, Some(false));
         assert_eq!(configured.show_log_inline, Some(true));
-        assert_eq!(configured.badge_theme.as_deref(), Some("monochrome"));
+        assert_eq!(configured.badge_theme.as_deref(), Some("plain"));
+
+        let mono = parse("badge_theme = monochrome\n");
+        assert_eq!(mono.badge_theme.as_deref(), Some("monochrome"));
 
         let invalid =
             parse("show_duration_inline = maybe\nshow_log_inline = maybe\nbadge_theme = vivid\n");
