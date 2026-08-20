@@ -1,0 +1,36 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(&buf)
+---
+ ▶▮◀ /tmp/tuxtime-snapshot.txt  •  2 tasks  •  sort:priority                                        
+                                                                                                    
+ (2)  NO PRIORITY  ────────────────────────────────────────────────────────────────────             
+  1 ▸     Active billable +Smith @drafting                                                    1h 00m
+  2       Active DNB +Smith @drafting                                                        15m DNB
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+ NORMAL   j/k · n new · t timer · T interrupt · x done · / se2 open · 2026-05-06 · tuxtime 2026.7.3

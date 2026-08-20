@@ -121,15 +121,16 @@ pub fn build_line<'a>(
         }
         let tok_end = rest.find(char::is_whitespace).unwrap_or(rest.len());
         let token = &rest[..tok_end];
-        // A `dur:` with nothing worth showing (just-started `dur:0`, or a
-        // malformed value) is dropped like a hidden key so it never leaves
-        // a stray `dur:0` or an orphan space; a positive value renders as a
-        // compact badge in `push_token_spans`. Likewise a `bill:y` (the
-        // default, billable) is dropped; only `bill:n` renders a badge.
+        // Raw time/billing tokens are omitted so they never consume narrative
+        // width or leak into the row. A positive duration and `bill:n` are
+        // rendered as compact metadata below; zero/malformed duration and
+        // billable defaults render no badge.
+        // Time/billing metadata is rendered from the parsed task fields below,
+        // not from this token scan. Always omit the raw tokens here so a row
+        // cannot lose a badge when token order or raw-body cleanup changes.
         let drop_token = is_hidden_kv(token, opts.hidden_keys, opts.show_log_inline)
-            || (token.starts_with("dur:")
-                && (!opts.show_duration_inline || dur_badge(task).is_none()))
-            || (token.starts_with("bill:") && bill_badge(task).is_none());
+            || token.starts_with("dur:")
+            || token.starts_with("bill:");
         if drop_token {
             // Drop the separator we just emitted for this token...
             if pushed_ws {
@@ -154,10 +155,34 @@ pub fn build_line<'a>(
             opts,
             theme,
         };
-        push_token_spans(&mut spans, token, token_offset, &context, &mut metadata);
+        push_token_spans(&mut spans, token, token_offset, &context);
         emitted_body_token = true;
         rest = &rest[tok_end..];
     }
+    // Metadata is derived from structured fields rather than the raw token
+    // scan above. This keeps the compact tiles visible after mutations and
+    // for legacy/hand-edited lines whose parsed fields are valid even when
+    // their body representation is unusual.
+    if opts.show_duration_inline
+        && let Some(badge) = dur_badge(task)
+    {
+        push_metadata(
+            &mut metadata,
+            Span::styled(badge, dur_badge_style(task.done, theme)),
+        );
+    }
+    if let Some(badge) = bill_badge(task)
+        && !opts
+            .hidden_keys
+            .iter()
+            .any(|key| key.eq_ignore_ascii_case("bill"))
+    {
+        push_metadata(
+            &mut metadata,
+            Span::styled(badge, bill_badge_style(task.done, theme)),
+        );
+    }
+
     // Right-align the live elapsed timer: reserve its width and truncate the
     // body so a long narrative can never push the timer off the right edge.
     let timer_text = if opts.timer_running {
@@ -257,31 +282,9 @@ fn push_token_spans<'a>(
     token: &'a str,
     token_offset_in_body: usize,
     context: &TokenRenderContext<'_, '_, 'a>,
-    metadata: &mut Vec<Span<'a>>,
 ) {
-    // `dur:` renders as a compact human badge (`2h 05m`, `45m`) instead of the
-    // raw second count — lawyers log in minutes/hours, not seconds. The full
-    // raw token stays available in the detail sidebar.
-    if token.starts_with("dur:") {
-        if let Some(badge) = dur_badge(context.task) {
-            push_metadata(
-                metadata,
-                Span::styled(badge, dur_badge_style(context.task.done, context.theme)),
-            );
-        }
-        return;
-    }
-    // `bill:n` renders as a compact `DNB` (do-not-bill) badge; billable is the
-    // default so `bill:y` / absent render nothing.
-    if token.starts_with("bill:") {
-        if let Some(badge) = bill_badge(context.task) {
-            push_metadata(
-                metadata,
-                Span::styled(badge, bill_badge_style(context.task.done, context.theme)),
-            );
-        }
-        return;
-    }
+    // `dur:` and `bill:` are handled from structured task fields in
+    // `build_line`, so they never reach this presentation path.
     if let Some(c) = sigil_token_color(token, context.task, context.theme) {
         spans.push(Span::styled(token, Style::default().fg(c)));
         return;
@@ -801,6 +804,34 @@ mod tests {
             "narrative should be truncated: {text:?}"
         );
         assert!(text.chars().count() <= 40, "row exceeds width: {text:?}");
+    }
+
+    #[test]
+    fn structured_metadata_survives_body_token_cleanup() {
+        // Metadata comes from parsed fields, not from whether the raw token
+        // happened to survive body cleanup. This mirrors legacy or hand-edited
+        // tasks and prevents a valid duration/DNB state from disappearing.
+        let mut task = parse_line("Review +Smith dur:3600 bill:n").unwrap();
+        task.clean_raw = "Review +Smith".to_string();
+        let opts = RowOpts {
+            idx_label: 0,
+            cursor: false,
+            multi_mode: false,
+            multi_checked: false,
+            selected: false,
+            show_line_num: false,
+            match_term: None,
+            today: "2026-05-06",
+            hidden_keys: &[],
+            show_duration_inline: true,
+            show_log_inline: false,
+            timer_running: false,
+            timer_elapsed: None,
+        };
+        let line = build_line(&task, opts, &MUTED, 1000);
+        let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(text.contains("1h 00m"), "duration badge missing: {text:?}");
+        assert!(text.contains("DNB"), "DNB badge missing: {text:?}");
     }
 
     #[test]

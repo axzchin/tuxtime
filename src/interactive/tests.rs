@@ -6,6 +6,8 @@ use crate::app::{App, Mode, Nudge, Picker, Prompt, Screen, Sort, View};
 use crate::config::Config;
 use crate::keybinds::KeyBindings;
 use chrono::NaiveDate;
+use ratatui::Terminal;
+use ratatui::backend::TestBackend;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 fn key(c: char) -> KeyEvent {
@@ -1523,6 +1525,38 @@ fn toggle_billable_adds_bill_n_tag() {
     app.toggle_billable_at(0);
     let updated = app.task_raw(0).unwrap();
     assert!(updated.contains("bill:n"), "expected bill:n tag: {updated}");
+}
+
+#[test]
+fn toggling_billable_updates_the_rendered_dnb_badge() {
+    let raw = "2026-05-07 Write code +work @dev dur:3600\n";
+    let path = std::env::temp_dir().join(format!(
+        "tuxtime-bill-render-{}-{:?}.txt",
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    let _ = std::fs::write(&path, raw);
+    let mut app = App::new(path, raw.into(), "2026-05-07".into(), Config::default());
+    app.prefs.layout.left = false;
+    app.prefs.layout.right = false;
+    app.prefs.density = crate::app::Density::Compact;
+
+    app.toggle_billable_at(0);
+    let backend = TestBackend::new(100, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal.draw(|frame| crate::ui::draw(frame, &app)).unwrap();
+    let rendered: String = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(ratatui::buffer::Cell::symbol)
+        .collect();
+    assert!(
+        rendered.contains("1h 00m"),
+        "duration badge missing: {rendered}"
+    );
+    assert!(rendered.contains("DNB"), "DNB badge missing: {rendered}");
 }
 
 #[test]

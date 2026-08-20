@@ -1,0 +1,36 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_styled(&buf)
+---
+{bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}▶{/}{fg=#e07a7a bg=#1f232b}▮{/}{fg=#8aa9c9 bg=#1f232b}◀{/}{bg=#1f232b} {/}{fg=#c8ccd4 bg=#1f232b mod=bold}/tmp/tuxtime-snapshot.txt{/}{fg=#6b7280 bg=#1f232b}  •  2 tasks  •  {/}{fg=#8aa9c9 bg=#1f232b}sort:priority{/}{bg=#1f232b}                                        {/}
+{bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23} {/}{fg=#6b7280 bg=#1a1d23}(2){/}{fg=#c8ccd4 bg=#1a1d23}  {/}{fg=#6b7280 bg=#1a1d23 mod=bold}NO PRIORITY{/}{fg=#c8ccd4 bg=#1a1d23}  {/}{fg=#2a2f38 bg=#1a1d23}────────────────────────────────────────────────────────────────────{/}{fg=#c8ccd4 bg=#1a1d23}             {/}
+{fg=#c8ccd4 bg=#3a4150}  1 {/}{fg=#8aa9c9 bg=#3a4150 mod=bold}▸ {/}{fg=#c8ccd4 bg=#3a4150}    Active billable {/}{fg=#7fb3a8 bg=#3a4150}+Smith{/}{fg=#c8ccd4 bg=#3a4150} {/}{fg=#c89a6e bg=#3a4150}@drafting{/}{fg=#c8ccd4 bg=#3a4150}                                                    {/}{fg=#6b7280 bg=#3a4150}1h 00m{/}
+{fg=#6b7280 bg=#1a1d23}  2 {/}{fg=#8aa9c9 bg=#1a1d23}  {/}{fg=#c8ccd4 bg=#1a1d23}    Active DNB {/}{fg=#7fb3a8 bg=#1a1d23}+Smith{/}{fg=#c8ccd4 bg=#1a1d23} {/}{fg=#c89a6e bg=#1a1d23}@drafting{/}{fg=#c8ccd4 bg=#1a1d23}                                                        {/}{fg=#6b7280 bg=#1a1d23}15m{/}{fg=#c8ccd4 bg=#1a1d23} {/}{fg=#d4b06a bg=#1a1d23}DNB{/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#1a1d23 bg=#8aa9c9 mod=bold} NORMAL {/}{bg=#252a33}  {/}{fg=#a8b0bc bg=#252a33}j/k · n new · t timer · T interrupt · x done · / se{/}{fg=#6b7280 bg=#252a33}2 open · 2026-05-06 · tuxtime 2026.7.3 {/}

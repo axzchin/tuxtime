@@ -236,6 +236,29 @@ fn list_default() {
     snapshot_app("list_default", &make_app());
 }
 
+/// Active rows render the same compact duration/DNB metadata as archive rows.
+/// This exercises the full list renderer and preference plumbing, not just the
+/// lower-level task-row formatter.
+#[test]
+fn list_view_with_time() {
+    let body = concat!(
+        "2026-05-06 Active billable +Smith @drafting dur:3600\n",
+        "2026-05-06 Active DNB +Smith @drafting dur:900 bill:n\n",
+    );
+    std::fs::write(FIXTURE_PATH, body).expect("seed timed list fixture");
+    let mut app = App::new(
+        PathBuf::from(FIXTURE_PATH),
+        body.to_string(),
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.env.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.prefs.density = Density::Compact;
+    app.prefs.layout.left = false;
+    app.prefs.layout.right = false;
+    snapshot_app("list_view_with_time", &app);
+}
+
 #[test]
 fn list_with_search() {
     let mut app = make_app();
