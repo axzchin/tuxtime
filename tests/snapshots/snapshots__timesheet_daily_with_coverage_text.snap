@@ -4,15 +4,16 @@ expression: buffer_to_text(&buf)
 ---
  FILTERS                  ┌ Timesheet  Tue 2026-05-05  by project┐ DETAIL · TIMESHEET               
                           │                                      │                                  
- MATTERS · BILLABLE       │  +Smith @drafting  —  2h 0m (2.0h)  (│ PERIOD                           
-   +Smith           3h 00m│    • Draft motion                    │ billable     3.0h                
-                          │  +Smith @research  —  1h 0m (1.0h)  (│ non-billable 0.0h                
+ MATTERS · BILLABLE       │  +Smith @drafting  —  2h 0m  (2.0h)  │ PERIOD                           
+   +Smith           3h 00m│    ▸ Draft motion                    │ billable     3.0h                
+                          │  +Smith @research  —  1h 0m  (1.0h)  │ non-billable 0.0h                
  TOTALS                   │    • Review discovery                │ total        3.0h                
    billable         3h 00m│                                      │                                  
    non-billable         0m│                                      │ ENTRY                            
    total            3h 00m│                                      │2026-05-05                        
                           │                                      │+Smith @drafting                  
                           │                                      │ group dur     2.0h  · billable   
+                          │                                      │ status       open                
                           │                                      │                                  
                           │                                      │ NARRATIVE 1/1                    
                           │                                      │  Draft motion                    
@@ -28,9 +29,8 @@ expression: buffer_to_text(&buf)
                           │                                      │                                  
                           │                                      │                                  
                           │                                      │                                  
-                          │                                      │                                  
-                          │  Billable:     3h 0m (3.0h) (3.0h)   │                                  
-                          │  Total:        3h 0m (3.0h) (3.0h)   │                                  
+                          │  Billable:     3h 0m (3.0h)          │                                  
+                          │  Total:        3h 0m (3.0h)          │                                  
                           │  Unaccounted: 6h 0m of 9h 0m         │                                  
                           └──────────────────────────────────────┘                                  
- TIMESHEET   j/k navigate  ·  Enter edit  ·  b billable  ·  n2 open · 2026-05-06 · tuxtime 2026.7.4
+ TIMESHEET   j/k navigate  ·  J/K group  ·  Enter edit  ·  b 2 open · 2026-05-06 · tuxtime 2026.7.4

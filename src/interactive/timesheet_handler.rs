@@ -100,6 +100,12 @@ pub(crate) fn handle_timesheet_keys(app: &mut App, key: KeyEvent) {
         KeyCode::Char('k') | KeyCode::Up => {
             app.timesheet.cursor = app.timesheet.cursor.saturating_sub(1);
         }
+        // Group-level navigation: J/K jump between groups instead of walking
+        // narrative by narrative. J lands on the first narrative of the next
+        // group; K on the last narrative of the previous group (mirroring
+        // vim's }/{ paragraph motion over groups).
+        KeyCode::Char('J') => app.timesheet_group_step(1),
+        KeyCode::Char('K') => app.timesheet_group_step(-1),
         KeyCode::Char('b') => {
             if let Some((_gi, _ni, task_ref)) = app.timesheet_narrative_at(app.timesheet.cursor) {
                 match task_ref {
@@ -152,7 +158,7 @@ pub(crate) fn handle_timesheet_keys(app: &mut App, key: KeyEvent) {
                 app.flash("no narratives to copy");
             } else {
                 let prefix = if entry.billable { "" } else { "DNB - " };
-                let joined = ensure_full_stop(&entry.narratives.join("; "));
+                let joined = format_narratives_for_copy(&entry.narratives);
                 let payload = format!("{prefix}{joined}");
                 let key_label = if entry.billable {
                     entry.key.clone()
@@ -208,7 +214,7 @@ pub(crate) fn handle_timesheet_keys(app: &mut App, key: KeyEvent) {
                 app.flash("no narratives to copy");
             } else {
                 let prefix = if entry.billable { "" } else { "DNB - " };
-                let joined = ensure_full_stop(&entry.narratives.join("; "));
+                let joined = format_narratives_for_copy(&entry.narratives);
                 let billable = format_billable(entry.total_secs, app.prefs.rounding_increment);
                 let payload = format!("{prefix}{joined} ({billable})");
                 let key_label = if entry.billable {
@@ -273,9 +279,52 @@ fn ensure_full_stop(joined: &str) -> String {
     }
 }
 
+/// Collapse runs of whitespace to single spaces (and trim the edges), so a
+/// hand-typed narrative with stray double spaces doesn't land on an invoice
+/// looking ragged.
+fn collapse_spaces(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut prev_space = false;
+    for c in s.chars() {
+        if c.is_whitespace() {
+            if !prev_space {
+                out.push(' ');
+            }
+            prev_space = true;
+        } else {
+            out.push(c);
+            prev_space = false;
+        }
+    }
+    out.trim().to_string()
+}
+
+/// Uppercase the first character of `s` when it's lowercase. Digits,
+/// symbols, and already-uppercase starts are left untouched, so "API design"
+/// or "2026 budget call" survive intact.
+fn capitalize_first(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(c) if c.is_lowercase() => c.to_uppercase().collect::<String>() + chars.as_str(),
+        _ => s.to_string(),
+    }
+}
+
+/// Invoice-ready narrative text: collapse stray whitespace, capitalize the
+/// first letter of each narrative, join with "; ", and end with a full stop
+/// so the copied group reads as finished prose.
+fn format_narratives_for_copy(narratives: &[String]) -> String {
+    let joined = narratives
+        .iter()
+        .map(|n| capitalize_first(&collapse_spaces(n)))
+        .collect::<Vec<_>>()
+        .join("; ");
+    ensure_full_stop(&joined)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::ensure_full_stop;
+    use super::{capitalize_first, collapse_spaces, ensure_full_stop, format_narratives_for_copy};
 
     #[test]
     fn appends_full_stop_when_missing() {
@@ -293,5 +342,42 @@ mod tests {
     #[test]
     fn empty_stays_empty() {
         assert_eq!(ensure_full_stop(""), "");
+    }
+
+    #[test]
+    fn collapse_spaces_squashes_runs_and_trims() {
+        assert_eq!(collapse_spaces("  drafted   the  brief  "), "drafted the brief");
+        assert_eq!(collapse_spaces("single  spaced\t\ttext"), "single spaced text");
+        assert_eq!(collapse_spaces("plain"), "plain");
+    }
+
+    #[test]
+    fn capitalize_first_uppercases_lowercase_start() {
+        assert_eq!(capitalize_first("drafted the brief"), "Drafted the brief");
+    }
+
+    #[test]
+    fn capitalize_first_leaves_uppercase_digits_symbols_alone() {
+        assert_eq!(capitalize_first("API design"), "API design");
+        assert_eq!(capitalize_first("2026 budget call"), "2026 budget call");
+        assert_eq!(capitalize_first("(follow-up) call"), "(follow-up) call");
+    }
+
+    #[test]
+    fn copy_formatting_capitalizes_each_narrative_and_collapses_spaces() {
+        let narratives = vec![
+            "  drafted   the  brief  ".to_string(),
+            "reviewed discovery responses".to_string(),
+        ];
+        assert_eq!(
+            format_narratives_for_copy(&narratives),
+            "Drafted the brief; Reviewed discovery responses."
+        );
+    }
+
+    #[test]
+    fn copy_formatting_keeps_existing_full_stop() {
+        let narratives = vec!["draft motion.".to_string()];
+        assert_eq!(format_narratives_for_copy(&narratives), "Draft motion.");
     }
 }

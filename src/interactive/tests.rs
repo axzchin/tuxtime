@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::action::Action;
-use crate::app::{App, Mode, Nudge, Picker, Prompt, Screen, Sort, View};
+use crate::app::{App, DialogInputMode, Mode, Nudge, Picker, Prompt, Screen, Sort, View};
 use crate::config::Config;
 use crate::keybinds::KeyBindings;
 use chrono::NaiveDate;
@@ -129,6 +129,7 @@ fn plain_keys_resolve_to_their_actions() {
     assert_eq!(resolve(&mut app, key('a')), Some(Action::ToggleArchiveView),);
     assert_eq!(resolve(&mut app, key('A')), Some(Action::ArchiveCompleted),);
     assert_eq!(resolve(&mut app, key('S')), Some(Action::CycleSort),);
+    assert_eq!(resolve(&mut app, key('m')), Some(Action::ManualTimeEntry));
 }
 
 #[test]
@@ -266,6 +267,45 @@ fn timesheet_sort_cycles_modes() {
         crate::app::TimesheetSort::ProjectActivity
     );
     assert!(app.flash_active().is_some_and(|m| m.contains("by project")));
+}
+
+#[test]
+fn timesheet_j_and_k_jump_between_groups() {
+    let mut app = build_timesheet_app();
+    app.set_view(View::Timesheet);
+    // Daily view anchored 2026-05-07, ProjectActivity sort: two groups,
+    // "+legal @research" (1 narrative) then "+work @dev" (2 narratives).
+    let groups = app.build_timesheet_groups();
+    assert_eq!(groups.len(), 2);
+    assert_eq!(groups[0].key, "+legal @research");
+    assert_eq!(groups[0].task_indices.len(), 1);
+    assert_eq!(groups[1].key, "+work @dev");
+    assert_eq!(groups[1].task_indices.len(), 2);
+
+    // J jumps to the first narrative of the next group.
+    assert_eq!(app.timesheet.cursor, 0);
+    handle_timesheet_keys(&mut app, key('J'));
+    assert_eq!(
+        app.timesheet.cursor, 1,
+        "J lands on the next group's first narrative"
+    );
+    // J at the last group flashes instead of wrapping.
+    handle_timesheet_keys(&mut app, key('J'));
+    assert_eq!(app.timesheet.cursor, 1);
+    assert_eq!(app.flash_active(), Some("last group"));
+
+    // K from the last narrative of a group lands on the previous group's
+    // last narrative (vim's { paragraph motion).
+    app.timesheet.cursor = 2; // "Meeting notes" in +work @dev
+    handle_timesheet_keys(&mut app, key('K'));
+    assert_eq!(
+        app.timesheet.cursor, 0,
+        "K lands on the previous group's last narrative"
+    );
+    // K at the first group flashes instead of wrapping.
+    handle_timesheet_keys(&mut app, key('K'));
+    assert_eq!(app.timesheet.cursor, 0);
+    assert_eq!(app.flash_active(), Some("first group"));
 }
 
 #[test]
@@ -1449,6 +1489,93 @@ fn ctrl_h_deletes_instead_of_inserting_in_insert_mode() {
     assert_eq!(app.draft.text(), "a");
 }
 
+// ---- insert dialog vim counts (5h, 3w, 2dw, …) ----
+
+fn insert_normal_app(draft: &str) -> App {
+    let mut app = build_app();
+    app.nav.mode = Mode::Screen(Screen::Insert);
+    app.draft_set(draft.to_string()); // `e`-style: Normal mode, cursor at end
+    app
+}
+
+#[test]
+fn insert_normal_count_prefix_repeats_char_motion() {
+    let mut app = insert_normal_app("hello world"); // 11 chars, cursor at 11
+    handle_insert(&mut app, key('5'));
+    handle_insert(&mut app, key('h'));
+    assert_eq!(app.draft.cursor(), 6, "5h moves left 5 chars");
+    assert_eq!(app.draft.pending_count(), 0, "count is consumed by the motion");
+}
+
+#[test]
+fn insert_normal_count_prefix_repeats_word_motion() {
+    // Cursor at the end; vim's `b` lands on the word under the cursor first,
+    // so 2b from "three" stops at the start of "two" (index 4).
+    let mut app = insert_normal_app("one two three");
+    handle_insert(&mut app, key('2'));
+    handle_insert(&mut app, key('b'));
+    assert_eq!(app.draft.cursor(), 4, "2b lands at the start of 'two'");
+}
+
+#[test]
+fn insert_normal_count_prefix_repeats_delete_char() {
+    let mut app = insert_normal_app("abcdef");
+    app.draft_home();
+    handle_insert(&mut app, key('3'));
+    handle_insert(&mut app, key('x'));
+    assert_eq!(app.draft.text(), "def");
+}
+
+#[test]
+fn insert_normal_multidigit_count_accumulates() {
+    let mut app = insert_normal_app("0123456789"); // 10 chars
+    handle_insert(&mut app, key('1'));
+    handle_insert(&mut app, key('0'));
+    handle_insert(&mut app, key('h'));
+    assert_eq!(app.draft.cursor(), 0, "10h moves 10 chars");
+}
+
+#[test]
+fn insert_normal_zero_without_count_moves_home() {
+    let mut app = insert_normal_app("hello");
+    handle_insert(&mut app, key('0'));
+    assert_eq!(app.draft.cursor(), 0);
+    assert_eq!(app.draft.pending_count(), 0);
+}
+
+#[test]
+fn insert_normal_dw_chord_repeats_with_count() {
+    let mut app = insert_normal_app("one two three");
+    app.draft_home();
+    handle_insert(&mut app, key('2'));
+    handle_insert(&mut app, key('d'));
+    handle_insert(&mut app, key('w'));
+    assert_eq!(app.draft.text(), "three", "2dw deletes two words");
+}
+
+#[test]
+fn insert_normal_cw_chord_repeats_and_enters_insert() {
+    let mut app = insert_normal_app("one two three");
+    app.draft_home();
+    handle_insert(&mut app, key('2'));
+    handle_insert(&mut app, key('c'));
+    handle_insert(&mut app, key('w'));
+    assert_eq!(app.draft.text(), "three", "2cw changes two words");
+    assert_eq!(app.draft.input_mode(), DialogInputMode::Insert);
+}
+
+#[test]
+fn insert_normal_count_cleared_when_entering_insert() {
+    let mut app = insert_normal_app("hello");
+    handle_insert(&mut app, key('5'));
+    handle_insert(&mut app, key('i'));
+    assert_eq!(app.draft.input_mode(), DialogInputMode::Insert);
+    assert_eq!(app.draft.pending_count(), 0);
+    // A subsequent 'h' now types a literal char instead of moving.
+    handle_insert(&mut app, key('h'));
+    assert_eq!(app.draft.text(), "helloh");
+}
+
 #[test]
 fn ctrl_u_clears_to_start_in_search_mode() {
     // Ctrl+U in the search box wipes back to the start and re-runs the
@@ -1935,13 +2062,13 @@ fn idle_nudge_s_opens_start_timer_picker() {
     );
 }
 
-/// `M` from the idle nudge opens the task picker in add-time mode.
+/// `m` from the idle nudge opens the task picker in add-time mode.
 #[test]
 fn idle_nudge_m_opens_add_time_picker() {
     let mut app = build_app();
     app.nav.mode = Mode::Nudge(Nudge::Idle);
 
-    handle_idle_nudge(&mut app, key('M'));
+    handle_idle_nudge(&mut app, key('m'));
 
     assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
     assert_eq!(
@@ -2422,7 +2549,7 @@ fn nudge_select_stale_view_exits_before_key() {
     );
 }
 
-/// `M` from the start-timer selection deliberately switches recovery
+/// `m` from the start-timer selection deliberately switches recovery
 /// action — manual entry — so the selection ends (unlike `+`/`c`/`fs`,
 /// which are detours on the way to the same choice).
 #[test]
@@ -2432,12 +2559,12 @@ fn nudge_select_m_still_abandons_to_manual_entry() {
     handle_idle_nudge(&mut app, key('s'));
     assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
 
-    handle_pick_nudge_task(&mut app, key('M'), &KeyBindings::default());
+    handle_pick_nudge_task(&mut app, key('m'), &KeyBindings::default());
 
     assert_eq!(app.nav.mode, Mode::Nudge(Nudge::ManualEntryChoice));
     assert!(
         app.session.nudge_picker.is_none(),
-        "M ends the selection: it is a different recovery action"
+        "m ends the selection: it is a different recovery action"
     );
 }
 
@@ -2557,14 +2684,14 @@ fn plain_insert_esc_exits_to_normal() {
     assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
 }
 
-/// `M` → picker → Enter (add-time prompt): Esc from that prompt must return
+/// `m` → picker → Enter (add-time prompt): Esc from that prompt must return
 /// to the nudge, mirroring the N insert's cancel behavior.
 #[test]
 fn idle_nudge_m_add_time_esc_returns_to_nudge() {
     let mut app = build_app();
     app.nav.mode = Mode::Nudge(Nudge::Idle);
 
-    handle_idle_nudge(&mut app, key('M'));
+    handle_idle_nudge(&mut app, key('m'));
     assert_eq!(app.nav.mode, Mode::Picker(Picker::NudgeTask));
     // Commit the picker → the add-time prompt.
     handle_pick_nudge_task(
@@ -2593,7 +2720,7 @@ fn idle_nudge_m_add_time_invalid_duration_returns_to_nudge() {
     let mut app = build_app();
     app.nav.mode = Mode::Nudge(Nudge::Idle);
 
-    handle_idle_nudge(&mut app, key('M'));
+    handle_idle_nudge(&mut app, key('m'));
     handle_pick_nudge_task(
         &mut app,
         KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
@@ -2630,7 +2757,7 @@ fn idle_nudge_m_add_time_valid_exits_to_normal() {
     let mut app = build_app();
     app.nav.mode = Mode::Nudge(Nudge::Idle);
 
-    handle_idle_nudge(&mut app, key('M'));
+    handle_idle_nudge(&mut app, key('m'));
     handle_pick_nudge_task(
         &mut app,
         KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
@@ -2661,7 +2788,7 @@ fn idle_nudge_m_add_time_day_boundary_invalid_returns_to_nudge() {
     let mut app = build_app_with_archive("Draft +Smith dur:7200 log:2026-05-05\n", None);
     app.nav.mode = Mode::Nudge(Nudge::Idle);
 
-    handle_idle_nudge(&mut app, key('M'));
+    handle_idle_nudge(&mut app, key('m'));
     handle_pick_nudge_task(
         &mut app,
         KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
@@ -2698,7 +2825,7 @@ fn idle_nudge_m_add_time_day_boundary_new_entry_invalid_returns_to_nudge() {
     let mut app = build_app_with_archive("Draft +Smith dur:7200 log:2026-05-05\n", None);
     app.nav.mode = Mode::Nudge(Nudge::Idle);
 
-    handle_idle_nudge(&mut app, key('M'));
+    handle_idle_nudge(&mut app, key('m'));
     handle_pick_nudge_task(
         &mut app,
         KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
@@ -2737,7 +2864,7 @@ fn idle_nudge_m_add_time_day_boundary_esc_returns_to_nudge() {
     let mut app = build_app_with_archive("Draft +Smith dur:7200 log:2026-05-05\n", None);
     app.nav.mode = Mode::Nudge(Nudge::Idle);
 
-    handle_idle_nudge(&mut app, key('M'));
+    handle_idle_nudge(&mut app, key('m'));
     handle_pick_nudge_task(
         &mut app,
         KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
@@ -2786,7 +2913,7 @@ fn plain_add_time_invalid_exits_to_normal() {
     assert_eq!(app.tasks().len(), 3, "nothing may be saved");
 }
 
-/// `M` → `N` (new blank entry) is manual time entry: a typed `dur:` is read
+/// `m` → `N` (new blank entry) is manual time entry: a typed `dur:` is read
 /// as flexible input (minutes/hours/clock time), so `dur:30` logs 30 *minutes*
 /// — not the 30 raw seconds the on-disk token would otherwise mean.
 #[test]
@@ -2798,7 +2925,7 @@ fn manual_entry_new_converts_dur_minutes_to_seconds() {
     assert_eq!(app.nav.mode, Mode::Screen(Screen::Insert));
     assert!(
         app.session.manual_time_entry,
-        "M→N must enable dur: conversion"
+        "m→N must enable dur: conversion"
     );
 
     app.draft_set_insert("Call +client dur:30".into());

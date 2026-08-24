@@ -52,6 +52,10 @@ pub struct DraftState {
     /// user is just editing text.
     overlay: Option<DraftOverlay>,
     input_mode: DialogInputMode,
+    /// Vim-style pending motion count accumulated in the dialog's Normal
+    /// mode (`5` of `5h`). `0` means none. Consumed by the next motion or
+    /// operator, cleared on mode changes and draft reset.
+    pending_count: u32,
 }
 
 impl DraftState {
@@ -97,12 +101,40 @@ impl DraftState {
         self.input_mode = mode;
     }
 
+    /// The pending vim motion count (`0` when none is armed).
+    #[must_use]
+    pub fn pending_count(&self) -> u32 {
+        self.pending_count
+    }
+
+    /// Append a decimal digit to the pending motion count (`5` then `5` →
+    /// 55), saturating so a runaway run of digits can't overflow.
+    pub fn add_count_digit(&mut self, digit: u32) {
+        self.pending_count = self
+            .pending_count
+            .saturating_mul(10)
+            .saturating_add(digit)
+            .min(99_999);
+    }
+
+    /// Read and reset the pending motion count (used by the next motion).
+    pub fn take_pending_count(&mut self) -> u32 {
+        std::mem::take(&mut self.pending_count)
+    }
+
+    /// Drop the pending motion count without consuming it (mode switches,
+    /// chord-operator arms that didn't fire).
+    pub fn clear_pending_count(&mut self) {
+        self.pending_count = 0;
+    }
+
     pub fn clear(&mut self) {
         self.text.clear();
         self.cursor = DraftCursor::zero();
         self.reset_autocomplete();
         self.overlay = None;
         self.input_mode = DialogInputMode::Insert;
+        self.pending_count = 0;
     }
 
     /// Replace the text and park the cursor at the end. Used when entering
@@ -115,6 +147,7 @@ impl DraftState {
         self.reset_autocomplete();
         self.overlay = None;
         self.input_mode = mode;
+        self.pending_count = 0;
     }
 
     pub fn insert_char(&mut self, c: char) {

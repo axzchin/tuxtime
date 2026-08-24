@@ -117,7 +117,7 @@ fn builtin_action(key: KeyEvent, mut chord: Option<&mut Chord>) -> Option<Action
         KeyCode::Esc => Action::EscapeStack,
         KeyCode::Char('W') => Action::ChangeWeekStart,
         KeyCode::Char('t') => Action::TimerStartStop,
-        KeyCode::Char('M') => Action::ManualTimeEntry,
+        KeyCode::Char('m') => Action::ManualTimeEntry,
         KeyCode::Char('Z') => Action::OpenThemePicker,
         KeyCode::Char('V') => Action::OpenTimesheet,
         KeyCode::Char('P') => Action::OpenProjectManager,

@@ -74,7 +74,7 @@ pub struct Session {
     /// The view the user was in before the idle nudge fired, so Dismiss
     /// can restore it. `None` when no nudge is active.
     pub pre_nudge_view: Option<View>,
-    /// True when the current Insert session was entered via `M` (manual time
+    /// True when the current Insert session was entered via `m` (manual time
     /// entry). Drives `dur:` value conversion on save.
     pub manual_time_entry: bool,
     /// Day-boundary prompt state: the task being started + what "new entry"
@@ -100,7 +100,7 @@ pub struct Session {
     /// so it fires at most once per day.
     pub review_nudge_date: Option<String>,
     /// True while a recovery flow opened from the idle nudge is active: the
-    /// `N` new-entry insert, or the add-time prompt reached via the `M`
+    /// `N` new-entry insert, or the add-time prompt reached via the `m`
     /// task picker. Any exit to Normal with this flag still set means the
     /// recovery was abandoned or failed (Esc-cancel, invalid duration, write
     /// error) — the UI returns to the nudge popup instead of dropping to

@@ -123,7 +123,7 @@ pub enum Picker {
     Theme,
     /// Calendar picker → jump the timesheet to a selected date.
     TimesheetDate,
-    /// Nudge task picker — choose which task to time (`S`/`M` from the idle
+    /// Nudge task picker — choose which task to time (`S`/`m` from the idle
     /// nudge). `j/k` navigate, `Enter` commits, `Esc` returns to the nudge.
     NudgeTask,
 }
@@ -134,7 +134,7 @@ pub enum Nudge {
     /// Idle nudge — no timer has been running for the configured duration.
     Idle,
     /// Long-timer nudge — a timer has run past the configured threshold.
-    /// `[S]top timer / [D]ismiss`.
+    /// `[s]top timer / [d]ismiss`.
     LongTimer,
     /// Stale-timer startup prompt — a timer was left running when the app
     /// last closed (or was killed) and has since exceeded the long-timer
@@ -142,7 +142,7 @@ pub enum Nudge {
     /// zombie session never silently bills the away time.
     StaleTimer,
     /// End-of-day review nudge — reconcile the day's entries.
-    /// `[V]iew timesheet / [M] add time / [s]kip for today`.
+    /// `[v]iew timesheet / [m] add time / [s]kip for today`.
     Review,
     /// Manual-entry choice popup — current task description or new blank entry.
     ManualEntryChoice,

@@ -237,7 +237,7 @@ long_timer_nudge_seconds = 7200
 
 ### 4.4 Manual Time Entry
 
-**Keybinding:** `M` (Shift+m) in Normal mode, or accessible via command palette, or from the idle nudge popup
+**Keybinding:** `m` in Normal mode, or accessible via command palette, or from the idle nudge popup
 
 **Flow:**
 1. Opens a small popup/dialog
@@ -364,7 +364,7 @@ Parse from `idle_nudge_seconds` and `long_timer_nudge_seconds` keys. Serialize b
 ### 6.4 `src/action.rs` — New Actions
 ```rust
 TimerStartStop,     // 't' — toggle timer on selected task
-ManualTimeEntry,    // 'M' — open manual entry dialog
+ManualTimeEntry,    // 'm' — open manual entry dialog
 CopyNarratives,     // 'C' — copy today's narratives for project+activity
 OpenTimesheet,      // command palette / keybinding
 DismissNudge,       // dismiss the idle-nudge popup
@@ -431,7 +431,7 @@ DismissNudge,       // dismiss the idle-nudge popup
 | Key | Action | Mode |
 |-----|--------|------|
 | `t` | Start/stop timer on selected task | Normal, Visual |
-| `M` | Manual time entry dialog | Normal |
+| `m` | Manual time entry dialog | Normal |
 | `C` | Copy narratives (redirect to Timesheet) | Normal |
 | `V` (or command palette) | Open timesheet view | Normal |
 | `S` (in nudge popup) | Start timer | IdleNudge |

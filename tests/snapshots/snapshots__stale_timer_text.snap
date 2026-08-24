@@ -19,7 +19,7 @@ expression: buffer_to_text(&buf)
                     │ Timer was running when tuxtime last closed — 2h 1m (2.1h)│                    
                     │    elapsed. Log it, keep counting, or discard the gap?   │                    
                     │                                                          │                    
-                    │       [K]eep counting  [S]top & log  [D]iscard gap       │                    
+                    │       [k]eep counting  [s]top & log  [d]iscard gap       │                    
                     └──────────────────────────────────────────────────────────┘                    
                                                                                                     
                                                                                                     

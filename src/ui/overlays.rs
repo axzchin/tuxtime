@@ -195,7 +195,7 @@ pub(crate) fn draw_overlays(
                     theme,
                     " ⏰ Idle Nudge ",
                     message,
-                    "[S]tart timer  [M] add time  [N] new entry  [D]ismiss",
+                    "[s]tart timer  [m] add time  [n] new entry  [d]ismiss",
                 );
             }
             Nudge::Review => {
@@ -215,7 +215,7 @@ pub(crate) fn draw_overlays(
                     theme,
                     " ⏰ End-of-Day Review ",
                     &message,
-                    "[V]iew timesheet  [M] add time  [S]kip for today",
+                    "[v]iew timesheet  [m] add time  [s]kip for today",
                 );
             }
             Nudge::LongTimer => {
@@ -231,7 +231,7 @@ pub(crate) fn draw_overlays(
                     theme,
                     " ⏰ Long Timer Nudge ",
                     message,
-                    "[S]top timer  [D]ismiss",
+                    "[s]top timer  [d]ismiss",
                 );
             }
             Nudge::StaleTimer => {
@@ -255,7 +255,7 @@ pub(crate) fn draw_overlays(
                     theme,
                     " ⏰ Stale Timer ",
                     &message,
-                    "[K]eep counting  [S]top & log  [D]iscard gap",
+                    "[k]eep counting  [s]top & log  [d]iscard gap",
                 );
             }
             Nudge::ManualEntryChoice => {
@@ -271,7 +271,7 @@ pub(crate) fn draw_overlays(
                     theme,
                     " ✏ Manual Time Entry ",
                     message,
-                    "[N]ew blank entry  [A]dd to current task  [Esc] cancel",
+                    "[n]ew blank entry  [a]dd to current task  [Esc] cancel",
                 );
             }
         },

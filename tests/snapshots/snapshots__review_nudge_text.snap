@@ -18,7 +18,7 @@ expression: buffer_to_text(&buf)
                     ┌ ⏰  End-of-Day Review ────────────────────────────────────┐                    
                     │  You've tracked 2h 30m (2.5h) today — anything missing?  │                    
                     │                                                          │                    
-                    │     [V]iew timesheet  [M] add time  [S]kip for today     │                    
+                    │     [v]iew timesheet  [m] add time  [s]kip for today     │                    
                     │                                                          │                    
                     └──────────────────────────────────────────────────────────┘                    
                                                                                                     
@@ -33,4 +33,4 @@ expression: buffer_to_text(&buf)
                                                                                                     
                                                                                                     
                                                                                                     
- END-OF-DAY   V view timesheet · M add time · S skip         2 open · 2026-05-06 · tuxtime 2026.7.4
+ END-OF-DAY   v view timesheet · m add time · s skip         2 open · 2026-05-06 · tuxtime 2026.7.4

@@ -18,7 +18,7 @@ expression: buffer_to_text(&buf)
    @home            ┌ ✏ Manual Time Entry ─────────────────────────────────────┐                    
    @laptop          │        How would you like to describe this entry?        │                    
    @phone           │                                                          │                    
-                    │  [N]ew blank entry  [A]dd to current task  [Esc] cancel  │                    
+                    │  [n]ew blank entry  [a]dd to current task  [Esc] cancel  │                    
                     │                                                          │                    
                     └──────────────────────────────────────────────────────────┘                    
                            14       Plan Saturday hike with K. @p…                                  

@@ -481,6 +481,44 @@ impl App {
             .sum()
     }
 
+    /// Move the timesheet cursor to the adjacent group without walking the
+    /// narratives in between: `dir > 0` lands on the first narrative of the
+    /// next group, `dir < 0` on the last narrative of the previous group
+    /// (vim's `}`/`{` paragraph motion over groups). Flashes at either end
+    /// of the list instead of wrapping.
+    pub fn timesheet_group_step(&mut self, dir: i32) {
+        let groups = self.build_timesheet_groups();
+        let Some((gi, _, _)) = self.timesheet_narrative_at(self.timesheet.cursor) else {
+            return;
+        };
+        let target = if dir > 0 {
+            if gi + 1 >= groups.len() {
+                self.flash("last group");
+                return;
+            }
+            // First narrative of the next group = one past the group's tail.
+            groups[..=gi].iter().map(|g| g.task_indices.len()).sum()
+        } else {
+            if gi == 0 {
+                self.flash("first group");
+                return;
+            }
+            // Last narrative of the previous group.
+            groups[..gi].iter().map(|g| g.task_indices.len()).sum::<usize>() - 1
+        };
+        self.timesheet.cursor = target;
+    }
+
+    /// Resolve a [`TimesheetTaskRef`] to the underlying task (active or
+    /// archived). Returns `None` when the index is out of range — defensive
+    /// for stale cursors after external file edits.
+    pub fn timesheet_task(&self, task_ref: TimesheetTaskRef) -> Option<&crate::todo::Task> {
+        match task_ref {
+            TimesheetTaskRef::Active(abs) => self.store.tasks().get(abs),
+            TimesheetTaskRef::Archived(abs) => self.store.archive().tasks().get(abs),
+        }
+    }
+
     /// Resolve a narrative-level cursor position to the underlying group and
     /// task. Returns `(group_idx, narrative_idx_in_group, task_ref)`.
     pub fn timesheet_narrative_at(
@@ -573,6 +611,30 @@ mod tests {
             ..Config::default()
         };
         build_app_with_config("2026-05-06 Work +X @dev dur:3600 log:2026-05-06\n", cfg)
+    }
+
+    /// Completing a task in the tracking list hides it there, but the
+    /// timesheet is the view of every task with time allocated: a done task
+    /// must keep appearing with its accumulated duration (and resolve to its
+    /// task ref so the sidebar can show status + task dur).
+    #[test]
+    fn completed_tasks_stay_in_timesheet_with_duration() {
+        let raw = concat!(
+            "x 2026-05-06 2026-05-06 Draft done +Smith @drafting dur:3600\n",
+            "2026-05-06 Open work +Smith @drafting dur:900\n",
+        );
+        let app = build_app_with_config(raw, Config::default());
+        let groups = app.build_timesheet_groups();
+        // Same day + key + billable → one group carrying both narratives.
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].total_secs, 4500);
+        assert_eq!(groups[0].narratives.len(), 2);
+        // The done task resolves to its task ref with its duration intact.
+        let (gi, ni, task_ref) = app.timesheet_narrative_at(0).expect("first narrative");
+        assert_eq!((gi, ni), (0, 0));
+        let task = app.timesheet_task(task_ref).expect("task resolves");
+        assert!(task.done, "the completed task must resolve as done");
+        assert_eq!(task.dur, Some(3600));
     }
 
     #[test]

@@ -14,6 +14,18 @@ use crate::ui::msgbox;
 use crate::ui::overlay::timesheet_calendar_rect;
 use crate::ui::task_row::{bill_badge_style, dur_badge_style};
 
+/// Plain `1h 5m` / `45m` without the billable parenthetical that
+/// [`crate::app::format_duration`] embeds. Used wherever the invoice-correct
+/// units figure is appended separately (group rows, day subtotals, the pinned
+/// footer) so a billable number never appears twice on one line.
+fn h_m(secs: u64) -> String {
+    if secs >= 3600 {
+        format!("{}h {}m", secs / 3600, (secs % 3600) / 60)
+    } else {
+        format!("{}m", secs / 60)
+    }
+}
+
 pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
 
@@ -51,6 +63,8 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
         billing_filter,
     ]);
     let inner = msgbox::frame_box(frame, area, theme.border, theme.panel, title);
+    let [_pad_top, body_rect] =
+        Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(inner);
 
     let groups = app.build_timesheet_groups();
     // Billable rounding increment (decimal hours) from prefs — 0.1 default,
@@ -98,7 +112,7 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                     lines.push(Line::from(Span::styled(
                         format!(
                             "    ──  {} ({})",
-                            crate::app::format_duration(day_total, increment),
+                            h_m(day_total),
                             crate::app::format_billable_units(day_billable_units, increment)
                         ),
                         Style::default().fg(theme.dim).bg(theme.panel),
@@ -122,7 +136,7 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                 last_date = Some(&entry.date);
             }
 
-            let formatted = crate::app::format_duration(entry.total_secs, increment);
+            let formatted = h_m(entry.total_secs);
             let billable_str = crate::app::format_billable(entry.total_secs, increment);
             // Copy-flash: briefly highlight the entire group white after copy.
             let copy_flash_active = app
@@ -148,8 +162,8 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                     .add_modifier(Modifier::BOLD)
             };
             // Keep duration and billing status as compact chips, matching
-            // list/archive rows. The billable-unit parenthetical remains plain
-            // text because it is a copy-oriented value, not row metadata.
+            // list/archive rows. The billable-unit parenthetical is appended
+            // once (the badge carries plain h/m) so the figure isn't doubled.
             let group_prefix = format!("  {}  — ", entry.key);
             let mut group_spans = vec![Span::styled(group_prefix, group_style)];
             if copy_flash_active {
@@ -206,22 +220,97 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                     Style::default().fg(theme.bg).bg(theme.fg)
                 } else if is_selected {
                     if is_narr_cursor {
+                        // Full-line highlight, matching the list view's
+                        // cursor row: `theme.cursor` background over the whole
+                        // line (not just the bullet) so the current narrative
+                        // is unmistakable, with `theme.fg` text for contrast.
                         Style::default()
                             .fg(theme.fg)
-                            .bg(theme.selection)
+                            .bg(theme.cursor)
                             .add_modifier(Modifier::BOLD)
-                    } else {
+                    } else if is_archived || is_done || !entry.billable {
+                        // Dim keeps a single meaning: completed / archived /
+                        // non-billable. "Which narrative am I on" is the
+                        // triangle + full-line highlight, so open siblings
+                        // stay at the normal foreground instead of looking
+                        // done.
                         Style::default().fg(theme.dim).bg(theme.selection)
+                    } else {
+                        Style::default().fg(theme.fg).bg(theme.selection)
                     }
                 } else if is_archived || is_done || !entry.billable {
                     Style::default().fg(theme.dim).bg(theme.panel)
                 } else {
                     Style::default().fg(theme.fg).bg(theme.panel)
                 };
-                lines.push(Line::from(Span::styled(
-                    format!("    • {n}{status_suffix}"),
-                    narr_style,
-                )));
+                // The cursor narrative's bullet becomes a `▸` indicator
+                // triangle (the list view's cursor glyph), accent-colored so
+                // it reads at a glance on the highlighted row. Same column as
+                // the `•` bullets — both are single-width, so nothing shifts.
+                let bullet = if is_narr_cursor {
+                    // The triangle keeps the cursor background explicitly:
+                    // with only an accent foreground it would inherit the
+                    // paragraph's panel background and punch a gap in the
+                    // full-line highlight.
+                    Span::styled(
+                        "▸",
+                        Style::default()
+                            .fg(theme.accent)
+                            .bg(theme.cursor)
+                            .add_modifier(Modifier::BOLD),
+                    )
+                } else {
+                    Span::styled("•", narr_style)
+                };
+                // Per-task duration as a quiet secondary label, shown only
+                // when the group merges several tasks — a single-task group's
+                // badge already is that task's time, so a second figure would
+                // just duplicate it. Dim plain text (no chip, no billable
+                // parenthetical) keeps the loud accent badge on the group
+                // header visually primary.
+                let task_dur = entry
+                    .task_indices
+                    .get(ni)
+                    .and_then(|r| app.timesheet_task(*r).and_then(|t| t.dur));
+                let mut narr_spans = vec![
+                    // The indent is styled like the row so the full-line
+                    // cursor highlight fills the leading gutter too.
+                    Span::styled("    ", narr_style),
+                    bullet,
+                    Span::styled(format!(" {n}{status_suffix}"), narr_style),
+                ];
+                if entry.task_indices.len() > 1
+                    && let Some(d) = task_dur
+                {
+                    let dur_text = if d >= 3600 {
+                        format!("{}h {}m", d / 3600, (d % 3600) / 60)
+                    } else {
+                        format!("{}m", d / 60)
+                    };
+                    let dur_style = if copy_flash_active {
+                        Style::default().fg(theme.bg).bg(theme.fg)
+                    } else if is_narr_cursor {
+                        // The duration sits on the highlighted row: dim text
+                        // on the cursor background so the full-line highlight
+                        // runs through it, not around it.
+                        Style::default()
+                            .fg(theme.dim)
+                            .bg(theme.cursor)
+                            .add_modifier(Modifier::BOLD)
+                    } else if is_selected {
+                        Style::default().fg(theme.dim).bg(theme.selection)
+                    } else {
+                        Style::default().fg(theme.dim).bg(theme.panel)
+                    };
+                    // Right-pad to a fixed-width block so the per-task
+                    // figures read as a tidy column instead of ending ragged.
+                    narr_spans.push(Span::styled(format!(" {:>7}", dur_text), dur_style));
+                }
+                // No trailing padding: the highlight stops at the end of the
+                // narrative (or the per-task duration in a multi-task group),
+                // so the cursor bar is exactly as wide as the row's content
+                // instead of bleeding to the pane's right edge.
+                lines.push(Line::from(narr_spans));
             }
             let units = crate::app::billable_units(entry.total_secs, increment);
             day_total += entry.total_secs;
@@ -234,7 +323,7 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
             lines.push(Line::from(Span::styled(
                 format!(
                     "    ──  {} ({})",
-                    crate::app::format_duration(day_total, increment),
+                    h_m(day_total),
                     crate::app::format_billable_units(day_billable_units, increment)
                 ),
                 Style::default().fg(theme.dim).bg(theme.panel),
@@ -253,7 +342,7 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
         footer.push(Line::from(Span::styled(
             format!(
                 "  Billable:     {} ({billable_str})",
-                crate::app::format_duration(totals.billable_secs, increment),
+                h_m(totals.billable_secs),
             ),
             Style::default()
                 .fg(theme.accent)
@@ -265,7 +354,7 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
             footer.push(Line::from(Span::styled(
                 format!(
                     "  Non-billable: {} ({dnb_str})",
-                    crate::app::format_duration(totals.non_billable_secs, increment)
+                    h_m(totals.non_billable_secs)
                 ),
                 Style::default()
                     .fg(theme.dim)
@@ -277,7 +366,7 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
         footer.push(Line::from(Span::styled(
             format!(
                 "  Total:        {} ({total_str}){search_note}",
-                crate::app::format_duration(totals.total_secs, increment)
+                h_m(totals.total_secs)
             ),
             Style::default()
                 .fg(theme.accent)
@@ -318,8 +407,6 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
     // Scroll if content exceeds space. The footer stays pinned: the entry list
     // gets whatever height remains after the footer's own rows are reserved,
     // so the billable/total figures can never be clipped away.
-    let [_pad_top, body_rect] =
-        Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(inner);
     let footer_h = footer.len() as u16;
     let [list_rect, footer_rect] =
         Layout::vertical([Constraint::Min(0), Constraint::Length(footer_h)]).areas(body_rect);

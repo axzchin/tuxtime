@@ -63,7 +63,7 @@ pub enum Action {
     ChangeWeekStart,
     /// `t` — start/stop timer on the selected task.
     TimerStartStop,
-    /// `M` — open the manual time entry dialog.
+    /// `m` — open the manual time entry dialog.
     ManualTimeEntry,
     /// `C` — copy today's narratives for the current project+activity.
     CopyNarratives,

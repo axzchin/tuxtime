@@ -28,8 +28,8 @@ expression: buffer_to_text(&buf)
      │    o / O             open / create note        t                 jump to today         │     
      │                                                g                 calendar date picker  │     
      │  TIMER                                         j / k             next / prev narrative │     
-     │    t                 start / stop timer        Enter             edit narrative        │     
-     │    M                 manual time entry         b                 toggle billable       │     
+     │    t                 start / stop timer        J / K             next / prev group     │     
+     │    m                 manual time entry         Enter             edit narrative        │     
      │────────────────────────────────────────────────────────────────────────────────────────│     
      └────────────────────────────────────────────────────────────────────────────────────────┘     
                                                                                                     

@@ -360,7 +360,7 @@ mod tests {
         assert_eq!(message_rect_for(rect(100, 30), 1), Rect::new(20, 12, 60, 6));
         assert_eq!(message_wrap_w(rect(100, 30)), 58);
         // The stale-timer message wraps to three rows: the box grows to 7 so
-        // the [K]/[S]/[D] footer is never clipped.
+        // the [k]/[s]/[d] footer is never clipped.
         assert_eq!(message_rect_for(rect(100, 30), 3), Rect::new(20, 11, 60, 7));
         // Narrow terminal shrinks the width and the wrap width with it.
         assert_eq!(message_rect_for(rect(50, 30), 3), Rect::new(0, 11, 50, 7));

@@ -1,4 +1,4 @@
-//! Nudge task picker: the `S`/`M` selection opened from the idle nudge. Runs
+//! Nudge task picker: the `S`/`m` selection opened from the idle nudge. Runs
 //! on the real list view (full navigation/search/filter while choosing) and
 //! forces the user to deliberately highlight a task before a timer is started
 //! or time is added — the popup must never grab the row under the cursor. The

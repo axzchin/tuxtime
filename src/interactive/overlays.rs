@@ -446,14 +446,14 @@ pub(crate) fn handle_manage_projects(app: &mut App, key: KeyEvent) {
 // Idle nudge (popup when no timer and idle too long)
 // ---------------------------------------------------------------------------
 
-/// Idle-nudge popup. The recovery actions (`S` start timer, `M` add time)
+/// Idle-nudge popup. The recovery actions (`s` start timer, `m` add time)
 /// route through the task picker so they never hit a random task the cursor
-/// happens to be on; `N` opens a blank new entry; `D`/`Esc` dismisses.
+/// happens to be on; `n` opens a blank new entry; `d`/`Esc` dismisses.
 pub(crate) fn handle_idle_nudge(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Char('s' | 'S') => app.enter_nudge_picker(crate::app::NudgePickAction::StartTimer),
         KeyCode::Char('m' | 'M') => app.enter_nudge_picker(crate::app::NudgePickAction::AddTime),
-        KeyCode::Char('N' | 'n') => {
+        KeyCode::Char('n' | 'N') => {
             // Remember the insert came from the nudge so an Esc-cancel
             // returns to the popup (the reminder survives an aborted
             // recovery) while a save exits to Normal.
@@ -465,7 +465,7 @@ pub(crate) fn handle_idle_nudge(app: &mut App, key: KeyEvent) {
             app.selection.exit_edit();
             app.session.last_timer_activity = std::time::Instant::now();
         }
-        KeyCode::Char('D') | KeyCode::Esc => {
+        KeyCode::Char('d' | 'D') | KeyCode::Esc => {
             // Dismissing the nudge ends any recovery flow for good, and
             // escalates the reminder (each dismissal halves the next wait)
             // so the popup can't be snoozed indefinitely.
@@ -476,8 +476,8 @@ pub(crate) fn handle_idle_nudge(app: &mut App, key: KeyEvent) {
     }
 }
 
-/// End-of-day review nudge: `V` opens the timesheet (today), `M` opens the
-/// manual-entry choice, `S`/`Esc` skips — the review won't re-fire today.
+/// End-of-day review nudge: `v` opens the timesheet (today), `m` opens the
+/// manual-entry choice, `s`/`Esc` skips — the review won't re-fire today.
 pub(crate) fn handle_review_nudge(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Char('v' | 'V') => {
@@ -586,9 +586,9 @@ fn maybe_finish_nudge_selection(app: &mut App) {
 }
 
 /// Stale-timer startup prompt: a timer was running when the app last closed
-/// (or was killed) and has since exceeded the long-timer threshold. `S` stops
-/// and logs everything, `D` discards the unrecorded gap (no time credited),
-/// `K`/`Esc` keep it counting — the safe default that never destroys time
+/// (or was killed) and has since exceeded the long-timer threshold. `s` stops
+/// and logs everything, `d` discards the unrecorded gap (no time credited),
+/// `k`/`Esc` keep it counting — the safe default that never destroys time
 /// without an explicit choice.
 pub(crate) fn handle_stale_timer(app: &mut App, key: KeyEvent) {
     match key.code {
@@ -608,15 +608,15 @@ pub(crate) fn handle_stale_timer(app: &mut App, key: KeyEvent) {
 }
 
 /// Long-timer nudge popup: the running timer has exceeded the configured
-/// threshold. `S` stops it (capturing the elapsed time), `D`/`Esc` dismisses
+/// threshold. `s` stops it (capturing the elapsed time), `d`/`Esc` dismisses
 /// and keeps the timer running. Both return to the pre-nudge view.
 pub(crate) fn handle_long_timer_nudge(app: &mut App, key: KeyEvent) {
     match key.code {
-        KeyCode::Char('S' | 's') => {
+        KeyCode::Char('s' | 'S') => {
             app.stop_running_timer();
             app.dismiss_nudge();
         }
-        KeyCode::Char('D') | KeyCode::Esc => {
+        KeyCode::Char('d' | 'D') | KeyCode::Esc => {
             app.dismiss_nudge();
         }
         _ => {}
@@ -646,7 +646,7 @@ pub(crate) fn handle_manual_entry_choice(app: &mut App, key: KeyEvent) {
                 app.flash(format!("add time to: {body}"));
             } else {
                 app.nav.enter_normal();
-                app.flash("no task selected — navigate and press M A");
+                app.flash("no task selected — navigate and press m a");
                 app.session.last_timer_activity = std::time::Instant::now();
             }
         }

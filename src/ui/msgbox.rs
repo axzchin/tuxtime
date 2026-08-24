@@ -121,7 +121,7 @@ pub(crate) fn render_message_box(
 
 /// Render a footer string with every `[Key]` token bolded and the rest dim.
 /// This is the single place message-box key legends get their styling, so the
-/// `[S]tart timer` / `[M] add time` / `[Esc] cancel` family renders
+/// `[s]tart timer` / `[m] add time` / `[Esc] cancel` family renders
 /// consistently across every prompt instead of drifting per call site.
 fn footer_line<'a>(theme: &Theme, footer: &'a str) -> Line<'a> {
     let dim = Style::default().fg(theme.dim).bg(theme.panel);
@@ -194,7 +194,7 @@ mod tests {
     #[test]
     fn footer_line_bolds_keys_and_dims_the_rest() {
         let theme = &crate::theme::MUTED;
-        let line = footer_line(theme, "[S]tart timer  [M] add time  [Esc] cancel");
+        let line = footer_line(theme, "[s]tart timer  [m] add time  [Esc] cancel");
         // Key tokens are bolded; the action words and separators are not.
         let bold: Vec<&str> = line
             .spans
@@ -202,7 +202,7 @@ mod tests {
             .filter(|s| s.style.add_modifier.contains(Modifier::BOLD))
             .map(|s| s.content.as_ref())
             .collect();
-        assert_eq!(bold, vec!["[S]", "[M]", "[Esc]"]);
+        assert_eq!(bold, vec!["[s]", "[m]", "[Esc]"]);
         let plain: String = line
             .spans
             .iter()

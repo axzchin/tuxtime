@@ -207,7 +207,7 @@ impl App {
             text = body.to_string();
         }
 
-        // If entered via manual time entry (`M`), convert `dur:` values from
+        // If entered via manual time entry (`m`), convert `dur:` values from
         // flexible user input (minutes, decimal hours, clock time) to raw seconds.
         let was_manual = self.session.manual_time_entry;
         let text = if was_manual {

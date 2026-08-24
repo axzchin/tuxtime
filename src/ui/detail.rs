@@ -4,7 +4,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-use crate::app::{App, BadgeTheme, View, format_billable};
+use crate::app::{App, BadgeTheme, TimesheetTaskRef, View, format_billable};
 use crate::theme::Theme;
 use crate::todo::Task;
 use crate::ui::msgbox::wrap_words;
@@ -100,7 +100,7 @@ fn build_timesheet_totals<'a>(theme: &Theme, app: &'a App) -> Vec<Line<'a>> {
 fn build_timesheet_body<'a>(theme: &Theme, app: &'a App, wrap_w: usize) -> Vec<Line<'a>> {
     // All rendered strings are owned so `rows` never references the local
     // `groups` (which is built from `app` and dropped at the end).
-    let Some((gi, ni, _)) = app.timesheet_narrative_at(app.timesheet.cursor) else {
+    let Some((gi, ni, task_ref)) = app.timesheet_narrative_at(app.timesheet.cursor) else {
         return vec![line_panel(
             theme,
             vec![Span::styled(
@@ -149,6 +149,42 @@ fn build_timesheet_body<'a>(theme: &Theme, app: &'a App, wrap_w: usize) -> Vec<L
         (!billable).then_some("DNB"),
         app.prefs.badge_theme,
     ));
+    // Task status for the narrative under the cursor. The tracking list
+    // hides completed tasks, so the timesheet sidebar is where a finished
+    // task's state stays visible.
+    let status = match task_ref {
+        TimesheetTaskRef::Active(abs) => app
+            .tasks()
+            .get(abs)
+            .map_or("open", |t| if t.done { "completed" } else { "open" }),
+        TimesheetTaskRef::Archived(_) => "archived",
+    };
+    let status_color = match status {
+        "completed" => theme.done,
+        "archived" => theme.dim,
+        _ => theme.fg,
+    };
+    rows.push(label_value_styled_row(
+        theme,
+        "status",
+        Span::styled(status, Style::default().fg(status_color)),
+    ));
+    // The narrative's own accumulated time, distinct from the group total
+    // above. Mirrors the center list's "only when needed" rule: in a
+    // single-task group the task dur IS the group dur, so showing both would
+    // be duplication.
+    if entry_narrative_count > 1
+        && let Some(secs) = app.timesheet_task(task_ref).and_then(|t| t.dur)
+    {
+        rows.push(label_value_duration_row(
+            theme,
+            "task dur",
+            format_billable(secs, increment),
+            "",
+            None,
+            app.prefs.badge_theme,
+        ));
+    }
     if let Some(narrative) = narrative {
         rows.push(line_panel(theme, vec![Span::raw(" ")]));
         let total_in_group = entry_narrative_count;
@@ -173,6 +209,12 @@ fn build_timesheet_body<'a>(theme: &Theme, app: &'a App, wrap_w: usize) -> Vec<L
 }
 
 fn label_value_row<'a>(theme: &Theme, label: &'a str, value: String) -> Line<'a> {
+    label_value_styled_row(theme, label, Span::styled(value, Style::default().fg(theme.fg)))
+}
+
+/// `label_value_row` with a caller-chosen value color (e.g. the status row
+/// tints completed vs open vs archived differently).
+fn label_value_styled_row<'a>(theme: &Theme, label: &'a str, value: Span<'a>) -> Line<'a> {
     let mut padded = format!(" {label}");
     if padded.chars().count() < 14 {
         padded.push_str(&" ".repeat(14 - padded.chars().count()));
@@ -181,7 +223,7 @@ fn label_value_row<'a>(theme: &Theme, label: &'a str, value: String) -> Line<'a>
         theme,
         vec![
             Span::styled(padded, Style::default().fg(theme.dim)),
-            Span::styled(value, Style::default().fg(theme.fg)),
+            value,
         ],
     )
 }

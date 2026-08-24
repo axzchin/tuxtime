@@ -14,7 +14,7 @@ expression: buffer_to_text(&buf)
    +travel           1     (2)  PRIORITY C  ──────────────────────                                  
                             6   (C) Pay quarterly estimated taxes… (A) 2026-05-01 Finish Q2 board   
  CONTEXTS                   7   (C) Order new running shoes +heal… deck +work @laptop               
-   @errands          4     (8)┌ ADD TASK ────────────────────────────┐:2026-05-06                   
+   @errands          4     (8)┌ ADD TASK  · NORMAL ──────────────────┐:2026-05-06                   
    @home             4      8 │                                      │                              
    @laptop           4      9 │  › bank due:2026-06-01 rec:+1m t:-3d█│                              
    @phone            3     10 │  ok · due 2026-06-01 · 1 +project 1 @│                              
@@ -33,4 +33,4 @@ expression: buffer_to_text(&buf)
                                                                                                     
                                                                                                     
                                                                                                     
- NORMAL · parsed natural language; press Enter to save   h/l navigate · w/b/…-06 · tuxtime 2026.7.4
+ NORMAL · parsed natural language; press Enter to save   h/l w/b/e word · 5h…-06 · tuxtime 2026.7.4

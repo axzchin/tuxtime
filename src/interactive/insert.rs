@@ -224,30 +224,85 @@ pub(crate) fn handle_insert_normal(app: &mut App, key: KeyEvent) {
         KeyCode::Esc => {
             exit_insert(app, true);
         }
-        KeyCode::Char('h') | KeyCode::Left => app.draft_left(),
-        KeyCode::Char('l') | KeyCode::Right => app.draft_right(),
-        KeyCode::Char('w') if app.chord.consume('d') => app.draft_delete_word_forward(),
+        // Vim-style count prefix: digits accumulate into the draft's pending
+        // count and repeat the next motion or operator (`5h` = left five). A
+        // bare `0` with nothing pending jumps to the start of the line, like
+        // vim; `0` mid-count is just another digit (`10h`).
+        KeyCode::Char(c) if c.is_ascii_digit() => {
+            if c == '0' && app.draft.pending_count() == 0 {
+                app.draft_home();
+            } else {
+                app.draft.add_count_digit(c.to_digit(10).unwrap_or(0));
+            }
+        }
+        KeyCode::Char('h') | KeyCode::Left => {
+            for _ in 0..take_motion_count(app) {
+                app.draft_left();
+            }
+        }
+        KeyCode::Char('l') | KeyCode::Right => {
+            for _ in 0..take_motion_count(app) {
+                app.draft_right();
+            }
+        }
+        KeyCode::Char('w') if app.chord.consume('d') => {
+            for _ in 0..take_motion_count(app) {
+                app.draft_delete_word_forward();
+            }
+        }
         KeyCode::Char('w') if app.chord.consume('c') => {
-            app.draft_delete_word_forward();
+            for _ in 0..take_motion_count(app) {
+                app.draft_delete_word_forward();
+            }
             app.draft.set_input_mode(DialogInputMode::Insert);
         }
-        KeyCode::Char('w') => app.draft_word_forward(),
-        KeyCode::Char('b') => app.draft_word_backward(),
-        KeyCode::Char('e') => app.draft_word_end(),
+        KeyCode::Char('w') => {
+            for _ in 0..take_motion_count(app) {
+                app.draft_word_forward();
+            }
+        }
+        KeyCode::Char('b') => {
+            for _ in 0..take_motion_count(app) {
+                app.draft_word_backward();
+            }
+        }
+        KeyCode::Char('e') => {
+            for _ in 0..take_motion_count(app) {
+                app.draft_word_end();
+            }
+        }
+        // `d` / `c` arm the delete/change word chords; the pending count
+        // survives so `5dw` deletes five words (as does `d5w`).
         KeyCode::Char('d') => app.chord.arm('d'),
         KeyCode::Char('c') => app.chord.arm('c'),
-        KeyCode::Char('x') => app.draft_delete_forward(),
-        KeyCode::Char('i') => app.draft.set_input_mode(DialogInputMode::Insert),
+        KeyCode::Char('x') => {
+            for _ in 0..take_motion_count(app) {
+                app.draft_delete_forward();
+            }
+        }
+        KeyCode::Char('i') => {
+            app.draft.clear_pending_count();
+            app.draft.set_input_mode(DialogInputMode::Insert);
+        }
         KeyCode::Char('a') => {
+            app.draft.clear_pending_count();
             app.draft_right();
             app.draft.set_input_mode(DialogInputMode::Insert);
         }
         KeyCode::Char('A') => {
+            app.draft.clear_pending_count();
             app.draft_end();
             app.draft.set_input_mode(DialogInputMode::Insert);
         }
         _ => {}
     }
+}
+
+/// Read and reset the pending vim motion count from the dialog's Normal mode,
+/// defaulting to a single repeat. A count of zero (no digits typed) is a
+/// plain one-shot motion; a leftover count clamps to at least 1.
+fn take_motion_count(app: &mut App) -> u32 {
+    app.draft.take_pending_count().max(1)
 }
 
 pub(crate) fn handle_insert(app: &mut App, key: KeyEvent) {

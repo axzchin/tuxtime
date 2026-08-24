@@ -9,7 +9,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph};
 
-use crate::app::{App, DraftOverlay, Mode, Prompt, TokenKind};
+use crate::app::{App, DialogInputMode, DraftOverlay, Mode, Prompt, TokenKind};
 use crate::theme::Theme;
 use crate::todo::{SegmentKind, classify_draft};
 use crate::ui::{msgbox, overlay};
@@ -115,22 +115,51 @@ pub fn draft_cursor_spans(draft: &str, cursor: usize, fg: Color, bg: Color) -> V
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
-    let title = if app.selection.editing().is_some() {
+    let base = if app.selection.editing().is_some() {
         " EDIT TASK "
     } else {
         " ADD TASK "
     };
+    // Explicit editor sub-mode in the box title: NORMAL is dim text, INSERT
+    // is a filled accent chip, so it's obvious at a glance which mode the
+    // dialog is in. A pending vim motion count (`5` in `5h`) is shown after
+    // the mode so the user sees the repeat they've armed.
+    let mut title_spans = vec![Span::styled(
+        base,
+        Style::default()
+            .fg(theme.accent)
+            .add_modifier(Modifier::BOLD),
+    )];
+    match app.draft.input_mode() {
+        DialogInputMode::Normal => title_spans.push(Span::styled(
+            " · NORMAL ",
+            Style::default()
+                .fg(theme.dim)
+                .add_modifier(Modifier::BOLD),
+        )),
+        DialogInputMode::Insert => title_spans.push(Span::styled(
+            " · INSERT ",
+            Style::default()
+                .fg(theme.bg)
+                .bg(theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+    }
+    let count = app.draft.pending_count();
+    if count > 0 {
+        title_spans.push(Span::styled(
+            format!(" · {count} "),
+            Style::default()
+                .fg(theme.today)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
     let inner = msgbox::frame_box(
         frame,
         area,
         theme.border,
         theme.panel,
-        Line::from(vec![Span::styled(
-            title,
-            Style::default()
-                .fg(theme.accent)
-                .add_modifier(Modifier::BOLD),
-        )]),
+        Line::from(title_spans),
     );
 
     let [_p1, input_area, preview_area, _p2, hint_area, _p3] = Layout::vertical([
@@ -566,6 +595,40 @@ mod tests {
         assert!(
             row.contains(tail),
             "input row should scroll so the cursor end ({tail}) stays visible:\n{row}"
+        );
+    }
+
+    /// The dialog box title advertises the editor sub-mode so users can
+    /// tell Insert from Normal at a glance, and shows an armed vim motion
+    /// count (the `5` in `5h`) while one is pending.
+    #[test]
+    fn dialog_title_shows_editor_mode_and_pending_count() {
+        // `build_insert_app` seeds via draft_set_insert → Insert mode.
+        let app = build_insert_app("plain\n", "Buy milk");
+        let backend = TestBackend::new(80, 30);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| crate::ui::draw(f, &app)).unwrap();
+        let text = dialog_inner_text(terminal.backend().buffer());
+        assert!(
+            text.contains("INSERT"),
+            "title must show INSERT mode:\n{text}"
+        );
+
+        // `e`-style seed lands in Normal mode; arm a count and re-render.
+        let mut app = build_insert_app("plain\n", "Buy milk");
+        app.draft_set("Buy milk".into());
+        app.draft.add_count_digit(5);
+        let backend = TestBackend::new(80, 30);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| crate::ui::draw(f, &app)).unwrap();
+        let text = dialog_inner_text(terminal.backend().buffer());
+        assert!(
+            text.contains("NORMAL"),
+            "title must show NORMAL mode:\n{text}"
+        );
+        assert!(
+            text.contains("· 5"),
+            "title must show the pending motion count:\n{text}"
         );
     }
 

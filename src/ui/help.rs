@@ -45,7 +45,7 @@ const TIMER: Section = (
     "TIMER",
     &[
         ("t", "start / stop timer"),
-        ("M", "manual time entry"),
+        ("m", "manual time entry"),
         ("T", "quick interrupt"),
         ("N", "new session from task"),
     ],
@@ -81,6 +81,7 @@ const TIMESHEET: Section = (
         ("t", "jump to today"),
         ("g", "calendar date picker"),
         ("j / k", "next / prev narrative"),
+        ("J / K", "next / prev group"),
         ("Enter", "edit narrative"),
         ("b", "toggle billable"),
         ("a", "unarchive entry (from done.txt)"),

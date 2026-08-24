@@ -46,7 +46,7 @@
 - `TimerQuitOutcome` for graceful shutdown
 - Restore active timer from `start:` tag on startup
 
-### 5. Manual Time Entry (`M` key)
+### 5. Manual Time Entry (`m` key)
 - Opens insert dialog pre-populated for time entry
 - Duration input: `90` (min), `1.5h` (decimal hours), `14:30` (clock time), `9am` (am/pm)
 - `parse_duration_input()` converts flexible user input to seconds
@@ -77,7 +77,7 @@
 - Hot-reload via `config_watcher` (`notify` crate, preserves symlinks)
 
 ### 10. New Actions & Keybindings
-- `TimerStartStop` (`t`), `ManualTimeEntry` (`M`), `CopyNarratives` (`C`)
+- `TimerStartStop` (`t`), `ManualTimeEntry` (`m`), `CopyNarratives` (`C`)
 - `OpenTimesheet` (`V`), `DismissNudge`
 - Command palette entries for all new actions
 - Keybinding names in `src/keybinds.rs`
@@ -197,20 +197,20 @@
 
 **Files**: `tests/snapshots.rs`, `tests/snapshots/snapshots__timesheet_weekly_with_daily_subtotals_*.snap`
 
-### 24. Two-Step Manual Entry (`M` key)
-- Pressing `M` now opens a **choice popup** (`Mode::ManualEntryChoice`) instead of directly entering Insert
+### 24. Two-Step Manual Entry (`m` key)
+- Pressing `m` now opens a **choice popup** (`Mode::ManualEntryChoice`) instead of directly entering Insert
 - Popup: `[N]ew blank entry  [A]dd to current task  [Esc] cancel`
 - `N` → opens Insert dialog with just `"dur:"` for a fresh manual entry
 - `A` → enters `PromptAddTime` mode to add time to the existing cursor task's `dur:`
 - `Esc` → cancels, returns to Normal
-- Replaces the old behavior where `M` always prepopulated with the current task's body
-- The idle nudge's `M` key also goes through this choice flow via `apply_action(Action::ManualTimeEntry)`
+- Replaces the old behavior where `m` always prepopulated with the current task's body
+- The idle nudge's `m` key also goes through this choice flow via `apply_action(Action::ManualTimeEntry)`
 
 **Files**: `src/app/types.rs`, `src/main.rs`, `src/ui/mod.rs`, `src/ui/status.rs`
 
-### 25. Add Time to Current Task (`M → A`)
+### 25. Add Time to Current Task (`m → A`)
 - When a lawyer forgets to start the timer but can estimate how long they worked
-- `M` → `A` → type duration (e.g. `30`, `1.5`, `14:30`) → `Enter`
+- `m` → `A` → type duration (e.g. `30`, `1.5`, `14:30`) → `Enter`
 - A leading `-` **removes** time instead — the correction for a timer left
   running too long: `-30` removes 30 minutes, `-1.5` removes 1.5 hours. The
   result is clamped at zero so a task never goes negative; flash says
@@ -225,7 +225,7 @@
 **Files**: `src/app/types.rs`, `src/app/mod.rs`, `src/main.rs`, `src/ui/mod.rs`, `src/ui/dialog.rs`, `src/ui/status.rs`
 
 ### 26. Removed Duplicate `[C]urrent` Option
-- Removed the `[C]urrent task` option from the `M` popup (it created a duplicate task, rarely useful)
+- Removed the `[C]urrent task` option from the `m` popup (it created a duplicate task, rarely useful)
 - Popup now has two clear options: `[N]ew blank entry` and `[A]dd to current task`
 
 **Files**: `src/main.rs`, `src/ui/mod.rs`
@@ -233,9 +233,9 @@
 ### 27. A Key: Task Context Flash
 - When `A` is pressed from the manual entry choice popup and a task is selected:
   - Flash `"add time to: {body}"` so the user sees which task will receive the time
-  - Enter `PromptAddTime` directly — the common flow stays fast (M→A→type duration→Enter = 3 keystrokes)
+  - Enter `PromptAddTime` directly — the common flow stays fast (m→A→type duration→Enter = 3 keystrokes)
 - When no task is under cursor (e.g., after idle nudge with cursor in a weird state):
-  - Flash `"no task selected — navigate and press M A"` and dismiss to Normal
+  - Flash `"no task selected — navigate and press m A"` and dismiss to Normal
   - Resets `last_timer_activity` so the idle nudge doesn't re-fire
 - Addresses the idle nudge complaint: the user can see whether A will target the right task, and Esc+re-navigate if not
 
@@ -244,7 +244,7 @@
 ### 28. New Session from Current Task (`N` key)
 - `N` (shift-n) in Normal mode creates a fresh Insert session pre-filled with the current task's body and `"dur:"`
 - For tracking work across multiple days: Monday's "Draft motion" → `N` → Tuesday's entry with same body
-- Uses the same `manual_time_entry` flag + `convert_dur_in_text()` pipeline as `M→N` manual entry
+- Uses the same `manual_time_entry` flag + `convert_dur_in_text()` pipeline as `m→N` manual entry
 - `Action::BeginSessionFromCurrent` variant; keybinding name `"begin_session_from_current"` / `"new_session"`
 - Guarded: flashes `"no task to start session from"` when cursor has no task
 
@@ -355,7 +355,7 @@ lawyer's day:
   grace period after hours spent outside the app. The popup says "Nothing
   tracked yet today" (vs. the ordinary "No timer running!").
 - **Idle nudge recovery actions** — the popup offers `[S]tart timer` and
-  `[M] add time`; both open a **task picker** (`Mode::PickNudgeTask`) that
+  `[m] add time`; both open a **task picker** (`Mode::PickNudgeTask`) that
   runs on the real list view, so the timer never blind-starts whatever task
   the cursor happened to be on. All list functionality stays live while
   choosing — `j`/`k` navigation, `/` search, `fp`/`fc`/`ff` filter pickers,
@@ -368,7 +368,7 @@ lawyer's day:
   The selection survives every detour that stays on the same choice
   (search, filters, tags, saving a filter) and ends only on a commit, an
   `Esc`, a timer start, or a deliberate switch to a different recovery
-  action or view (`M` manual entry, `n`/`e`/`i` edits, `,` settings, `?`
+  action or view (`m` manual entry, `n`/`e`/`i` edits, `,` settings, `?`
   help, `P` projects, `V` timesheet, `a` archive). A view switch is a
   clean dismissal: the pre-nudge filter is restored and the idle-nudge
   clock resets, so the reminder doesn't re-fire over the timesheet or
@@ -379,7 +379,7 @@ lawyer's day:
   reminder reaches the user when the terminal is unfocused (in another app).
 - **End-of-day review nudge** (`Mode::ReviewNudge`, config `review_time =
   "17:00"`) — once per day after the configured time (when something is
-  tracked today), asks `[V]iew timesheet / [M] add time / [s]kip`. Fires
+  tracked today), asks `[V]iew timesheet / [m] add time / [s]kip`. Fires
   from Normal mode only, at most once per day.
 - **Workday coverage line** — with `workday_start`/`workday_end` configured
   (`"09:00"`/`"18:00"`), the daily timesheet shows
@@ -400,7 +400,7 @@ lawyer's day:
 | Key | Action | Context |
 |---|---|---|
 | `t` | Start/stop timer | Normal, Visual |
-| `M` | Manual entry choice popup | Normal |
+| `m` | Manual entry choice popup | Normal |
 | `N` | New session from current task body | Normal |
 | `N` (in popup) | New blank manual entry | ManualEntryChoice |
 | `A` (in popup) | Add time to current task | ManualEntryChoice |
@@ -425,20 +425,21 @@ lawyer's day:
 | `g` | Open calendar picker (type date directly) | Timesheet |
 | `s` | Cycle sort mode (project/date/duration) | Timesheet |
 | `/` | Search/filter narratives | Timesheet |
-| `j`/`k` | Navigate groups | Timesheet |
+| `j`/`k` | Navigate narratives | Timesheet |
+| `J`/`K` | Jump between groups | Timesheet |
 | `Esc`/`V`/`q` | Dismiss Timesheet (V toggles back to List) | Timesheet |
-| `S` (in nudge) | List selection → start timer on highlighted | IdleNudge |
-| `M` (in nudge) | List selection → add time to highlighted | IdleNudge |
-| `N` (in nudge) | New blank entry | IdleNudge |
-| `D`/`Esc` (in nudge) | Dismiss nudge | IdleNudge |
+| `s` (in nudge) | List selection → start timer on highlighted | IdleNudge |
+| `m` (in nudge) | List selection → add time to highlighted | IdleNudge |
+| `n` (in nudge) | New blank entry | IdleNudge |
+| `d`/`Esc` (in nudge) | Dismiss nudge | IdleNudge |
 | `j`/`k` | Navigate the list | PickNudgeTask |
 | `/` | Search/filter the list | PickNudgeTask |
 | `t` | Start timer on highlighted (completes selection) | PickNudgeTask |
 | `Enter` | Commit highlighted task | PickNudgeTask |
 | `Esc` | Back to idle nudge | PickNudgeTask |
-| `K`/`S`/`D` | Keep counting / stop & log / discard gap | StaleTimer |
-| `V` | Open timesheet (today) | ReviewNudge |
-| `M` | Manual entry choice | ReviewNudge |
+| `k`/`s`/`d` | Keep counting / stop & log / discard gap | StaleTimer |
+| `v` | Open timesheet (today) | ReviewNudge |
+| `m` | Manual entry choice | ReviewNudge |
 | `s`/`Esc` | Skip for today | ReviewNudge |
 
 ---

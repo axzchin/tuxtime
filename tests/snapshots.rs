@@ -219,6 +219,25 @@ fn escape(s: &str) -> String {
     s.replace('{', "{{").replace('}', "}}")
 }
 
+/// Foreground color of the first cell whose row contains `needle`. The cell
+/// column is the char offset of the match — each buffer cell holds exactly
+/// one symbol, so multi-byte glyphs still count as a single column.
+fn fg_of(buf: &Buffer, needle: &str) -> Option<Color> {
+    let cols = buf.area.width;
+    let rows = buf.area.height;
+    for y in 0..rows {
+        let mut row = String::new();
+        for x in 0..cols {
+            row.push_str(buf[(x, y)].symbol());
+        }
+        if let Some(byte_idx) = row.find(needle) {
+            let col = row[..byte_idx].chars().count();
+            return Some(buf[(col as u16, y)].fg);
+        }
+    }
+    None
+}
+
 /// Snapshot both the text grid and the styled grid for the given scene.
 /// Uses two separate insta calls so a layout-only change doesn't force a
 /// styling review (and vice versa).
@@ -623,6 +642,128 @@ fn timesheet_with_monochrome_badges() {
     snapshot_app("timesheet_with_monochrome_badges", &app);
 }
 
+/// Regression: inside a selected timesheet group, dim must mean only
+/// completed / archived / non-billable. Open sibling narratives stay at the
+/// normal foreground — before, the whole group dimmed except the cursor
+/// narrative, so an open task and a completed task were indistinguishable.
+#[test]
+fn timesheet_selected_group_dims_only_done_siblings() {
+    let body = concat!(
+        "2026-05-06 Alpha open +Smith @drafting dur:3600\n",
+        "2026-05-06 Beta open +Smith @drafting dur:1800\n",
+        "x 2026-05-06 2026-05-06 Gamma done +Smith @drafting dur:900\n",
+    );
+    std::fs::write(FIXTURE_PATH, body).expect("seed timesheet group fixture");
+    let mut app = App::new(
+        PathBuf::from(FIXTURE_PATH),
+        body.to_string(),
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.env.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.prefs.density = Density::Compact;
+    app.set_view(View::Timesheet);
+    // Cursor sits on "Alpha open" (narrative 0); the group also holds an
+    // open sibling ("Beta open") and a completed one ("Gamma done").
+    let theme = app.theme();
+    let buf = render(&app);
+    assert_eq!(
+        fg_of(&buf, "Beta open"),
+        Some(theme.fg),
+        "open sibling must stay at the normal foreground, not dim"
+    );
+    assert_eq!(
+        fg_of(&buf, "Gamma done"),
+        Some(theme.dim),
+        "completed narrative must stay dim"
+    );
+    // The cursor narrative carries a full-line highlight (the list view's
+    // cursor background, not the muted selection shade) so "which task am I
+    // on" is readable at a glance.
+    let buf = render(&app);
+    let row = |needle: &str| -> Vec<(u16, u16)> {
+        let cols = buf.area.width;
+        let rows = buf.area.height;
+        let mut hits = Vec::new();
+        for y in 0..rows {
+            let mut row_text = String::new();
+            for x in 0..cols {
+                row_text.push_str(buf[(x, y)].symbol());
+            }
+            if row_text.contains(needle) {
+                hits.push((0, y));
+            }
+        }
+        hits
+    };
+    // The center-list cursor row is the one whose bullet is the ▸ triangle
+    // (the sidebar echoes the narrative without the triangle).
+    let cursor_hits = row("▸ Alpha open");
+    assert_eq!(cursor_hits.len(), 1, "cursor narrative must render once");
+    let (_, cursor_y) = cursor_hits[0];
+    // The left pane is at column 0; the center list begins after its `│`
+    // separator. Assert the highlight on the first center-pane cell (the
+    // leading indent of the cursor row), proving the whole line is filled.
+    let center_col = (0..buf.area.width)
+        .find(|&x| buf[(x, cursor_y)].symbol() == "│")
+        .map(|x| x + 1)
+        .expect("center pane separator");
+    let first_cell = buf[(center_col, cursor_y)].clone();
+    assert_eq!(
+        first_cell.bg,
+        theme.cursor,
+        "cursor narrative line must carry the full-line cursor highlight"
+    );
+    // The triangle itself is accent-colored and bold so it reads as a cursor
+    // indicator on the highlighted row.
+    let tri_col = (0..buf.area.width)
+        .find(|&x| buf[(x, cursor_y)].symbol() == "▸")
+        .expect("cursor triangle");
+    let tri_cell = buf[(tri_col, cursor_y)].clone();
+    assert_eq!(tri_cell.fg, theme.accent);
+    assert!(tri_cell.modifier.contains(Modifier::BOLD));
+    assert_eq!(
+        tri_cell.bg, theme.cursor,
+        "triangle must not punch a gap in the full-line highlight"
+    );
+    // The highlight is exactly as wide as the row's content: it starts right
+    // after the triangle, runs through the narrative and the per-task
+    // duration, and stops there — it must NOT bleed to the pane's right
+    // edge.
+    assert_eq!(
+        buf[(tri_col + 1, cursor_y)].bg,
+        theme.cursor,
+        "highlight must start right after the triangle"
+    );
+    let last_highlight_col = (0..buf.area.width)
+        .filter(|&x| buf[(x, cursor_y)].bg == theme.cursor)
+        .max()
+        .expect("highlighted cursor row");
+    // The task under the cursor is "Alpha open 1h 0m"; the highlight must
+    // cover the narrative and its duration, and stop just past them.
+    let dur_end_col = (0..buf.area.width)
+        .filter(|&x| buf[(x, cursor_y)].symbol() == "m")
+        .max()
+        .expect("duration end");
+    assert_eq!(
+        last_highlight_col,
+        dur_end_col,
+        "highlight must stop after the task's time, not run to the pane edge"
+    );
+    assert_eq!(
+        buf[(last_highlight_col + 1, cursor_y)].bg,
+        theme.panel,
+        "cell past the highlight must fall back to the panel background"
+    );
+    // In a multi-task group, each bullet's own duration (Beta = 30m) renders
+    // as quiet dim text so the group's accent badge stays visually primary.
+    assert_eq!(
+        fg_of(&buf, "30m"),
+        Some(theme.dim),
+        "per-task duration must be dim plain text"
+    );
+}
+
 #[test]
 fn timesheet_weekly_with_daily_subtotals() {
     // Build an app with dur tasks on two different days so the weekly view
@@ -763,7 +904,7 @@ fn idle_nudge_popup() {
 
 #[test]
 fn nudge_task_picker() {
-    // The idle-nudge recovery picker (`S` start timer / `M` add time) now
+    // The idle-nudge recovery picker (`S` start timer / `m` add time) now
     // runs on the real list view: the task list stays fully navigable and
     // searchable while a banner strip + status hints announce the selection
     // mode. The user consciously highlights the task to time instead of

@@ -2,7 +2,7 @@
 //! review nudge, and the stale-timer startup prompt. Owns the idle/long-timer
 //! thresholds, the launch-time idle backdate, and the clock that gates every
 //! nudge, plus the stale-timer discard/keep recovery. The task picker these
-//! nudges can open (`S`/`M` from the idle nudge) lives in
+//! nudges can open (`S`/`m` from the idle nudge) lives in
 //! [`super::nudge_picker`]; the timer mutations the nudges trigger live in
 //! [`super::timer_actions`].
 

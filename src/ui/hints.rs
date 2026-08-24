@@ -14,7 +14,7 @@ pub(crate) fn mode_hint(app: &App) -> String {
     // otherwise. Several modes (Normal, day-boundary, theme picker, stale
     // timer, manual-entry choice) deliberately fall back to this.
     let default_hint: &'static str = if matches!(app.nav.view, View::Timesheet) {
-        "j/k navigate  ·  Enter edit  ·  b billable  ·  n DNB filter  ·  a archive toggle  ·  c copy text  ·  y copy time  ·  C copy both  ·  h/l ±day  ·  H/L ±week  ·  w/d view  ·  s sort  ·  f/F filter project/context  ·  / search  ·  g date  ·  t today  ·  Esc/V/q back"
+        "j/k navigate  ·  J/K group  ·  Enter edit  ·  b billable  ·  n DNB filter  ·  a archive toggle  ·  c copy text  ·  y copy time  ·  C copy both  ·  h/l ±day  ·  H/L ±week  ·  w/d view  ·  s sort  ·  f/F filter project/context  ·  / search  ·  g date  ·  t today  ·  Esc/V/q back"
     } else {
         "j/k · n new · t timer · T interrupt · x done · / search · ? help · u undo · q quit"
     };
@@ -24,9 +24,9 @@ pub(crate) fn mode_hint(app: &App) -> String {
             Screen::Insert => match app.draft.input_mode() {
                 DialogInputMode::Normal => {
                     if app.session.manual_time_entry {
-                        "h/l navigate · w/b/e word · i/a insert · dur:90 (min) dur:1.5h dur:14:30 dur:9am → Enter save · C-Enter save+start".to_string()
+                        "h/l w/b/e word · 5h = repeat n× · i/a insert · dur:90 (min) dur:1.5h dur:14:30 dur:9am → Enter save · C-Enter save+start".to_string()
                     } else {
-                        "h/l navigate · w/b/e word · i/a insert · Enter save · C-Enter save+start · Esc cancel".to_string()
+                        "h/l w/b/e word · 5h = repeat n× · i/a insert · Enter save · C-Enter save+start · Esc cancel".to_string()
                     }
                 }
                 DialogInputMode::Insert => {
@@ -74,10 +74,10 @@ pub(crate) fn mode_hint(app: &App) -> String {
             Picker::Theme => default_hint.to_string(),
         },
         Mode::Nudge(nudge) => match nudge {
-            Nudge::Idle => "S start timer · M add time · N new entry · D dismiss".to_string(),
-            Nudge::LongTimer => "S stop timer · D dismiss".to_string(),
+            Nudge::Idle => "s start timer · m add time · n new entry · d dismiss".to_string(),
+            Nudge::LongTimer => "s stop timer · d dismiss".to_string(),
             Nudge::StaleTimer => default_hint.to_string(),
-            Nudge::Review => "V view timesheet · M add time · S skip".to_string(),
+            Nudge::Review => "v view timesheet · m add time · s skip".to_string(),
             Nudge::ManualEntryChoice => default_hint.to_string(),
         },
     }

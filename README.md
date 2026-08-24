@@ -357,7 +357,7 @@ toggle_line_num   = "L"
 
 # Timing (tuxtime fork)
 timer_start_stop            = "t"
-manual_time_entry           = "M"
+manual_time_entry           = "m"
 quick_interrupt             = "T"
 begin_session_from_current  = "N"
 toggle_billable             = "b"

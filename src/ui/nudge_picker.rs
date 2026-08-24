@@ -1,5 +1,5 @@
 //! Nudge task selection banner: a thin strip drawn over the *real list view*
-//! when the user presses `S` (start timer) or `M` (add time) from the
+//! when the user presses `S` (start timer) or `m` (add time) from the
 //! idle-nudge popup. The list itself — navigation, search, filters, detail
 //! pane — is the selection surface; this strip just announces the mode and
 //! what the commit keys do, so the user always knows a choice is pending.
