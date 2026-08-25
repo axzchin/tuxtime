@@ -18,8 +18,10 @@ expression: buffer_to_text(&buf)
    show done in list     ┌ IDLE NUDGE (MIN) ──────────────────────────────┐                         
    show future in list   │  ⏱ 15█                                         │                         
    duration badge inline │                                                │                         
-   log date inline       │                                                │                         
-   badge theme           └────────────────────────────────────────────────┘                         
+   prefill + on new task │                                                │                         
+   prompt if done w/o tim└────────────────────────────────────────────────┘                         
+   log date inline             off  (O to toggle)                                                   
+   badge theme                 semantic  (B to cycle)                                               
                                                                                                     
  BEHAVIOR                                                                                           
    default sort                priority (S to cycle)                                                
@@ -29,8 +31,6 @@ expression: buffer_to_text(&buf)
                                                                                                     
  KEYBINDINGS                                                                                        
                                press ? for the full list                                            
-                                                                                                    
-                                                                                                    
                                                                                                     
                                                                                                     
  IDLE NUDGE   type minutes · Enter save · Esc cancel        15 open · 2026-05-06 · tuxtime 2026.7.5

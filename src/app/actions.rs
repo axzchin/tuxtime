@@ -5,7 +5,7 @@
 //! The store's own mutation implementations live in `core::mutations`, not here.
 
 use super::App;
-use super::types::{AddOutcome, Sort, View};
+use super::types::{AddOutcome, Mode, Prompt, Sort, View};
 use crate::app::WeekStart;
 use crate::core::AddOutcome as CoreAdd;
 use crate::core::{
@@ -31,13 +31,45 @@ fn same_sort_key(sort: Sort, a: &Task, b: &Task) -> bool {
 impl App {
     pub fn toggle_complete(&mut self, abs: usize) {
         match self.store.toggle_complete(abs) {
-            CompleteOutcome::Completed { abs } => self.commit("completed", abs),
-            CompleteOutcome::CompletedSpawned { next, .. } => self.commit("completed +next", next),
+            CompleteOutcome::Completed { abs } => {
+                self.commit("completed", abs);
+                self.prompt_time_if_none(abs);
+            }
+            CompleteOutcome::CompletedSpawned { abs, next } => {
+                self.commit("completed +next", next);
+                self.prompt_time_if_none(abs);
+            }
             CompleteOutcome::Uncompleted { abs } => self.commit("uncompleted", abs),
             CompleteOutcome::Aborted(r) => self.handle_reconcile_abort(r),
             CompleteOutcome::OutOfRange => {}
             CompleteOutcome::Error(e) => self.flash(format!("complete failed: {e}")),
         }
+    }
+
+    /// After completing a task that accumulated no time, open the add-time
+    /// prompt so the work isn't silently missing from the timesheet — a
+    /// completed task with no `dur:` never appears there. Skipped when a
+    /// timer still runs on the task (its time lands when the timer stops),
+    /// when the task already carries time, or when the `prompt_complete_no_time`
+    /// pref is off (a plain, no-prompt completion). Esc dismisses the prompt
+    /// and the completion stands.
+    fn prompt_time_if_none(&mut self, abs: usize) {
+        if !self.prefs.prompt_complete_no_time {
+            return;
+        }
+        let has_time = self
+            .store
+            .tasks()
+            .get(abs)
+            .is_some_and(|t| t.dur.is_some_and(|d| d > 0))
+            || self.store.active_timer_abs() == Some(abs);
+        if has_time {
+            return;
+        }
+        self.session.pending_complete_add_time = Some(abs);
+        self.flash("completed — no time logged");
+        self.nav.set_mode(Mode::Prompt(Prompt::AddTime));
+        self.draft_clear();
     }
 
     pub fn cycle_priority(&mut self, abs: usize) {
@@ -487,7 +519,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use crate::app::{
-        WeekStart,
+        Mode, Prompt, Screen, WeekStart,
         test_support::{build_app, build_app_with_config, test_path},
     };
     use crate::config::Config;
@@ -542,15 +574,79 @@ mod tests {
 
     #[test]
     fn toggle_complete_flashes_completed_then_spawned() {
-        let mut app = build_app("a\n");
+        // Tasks with time complete without the add-time prompt, so the
+        // plain completion flash is what shows.
+        let mut app = build_app("a dur:600\n");
         app.toggle_complete(0);
         assert!(app.tasks()[0].done);
         assert_eq!(app.flash_active(), Some("completed"));
 
-        let mut app = build_app("(A) 2026-04-15 Pay rent due:2026-04-15 rec:+1m\n");
+        let mut app = build_app("(A) 2026-04-15 Pay rent due:2026-04-15 rec:+1m dur:600\n");
         app.toggle_complete(0);
         assert_eq!(app.tasks().len(), 2);
         assert_eq!(app.flash_active(), Some("completed +next"));
+    }
+
+    // ── complete-without-time prompt ──────────────────────────────────
+
+    /// Completing a task with no time opens the add-time prompt targeting
+    /// that task, so the work isn't silently missing from the timesheet
+    /// (a completed task with no `dur:` never appears there).
+    #[test]
+    fn complete_without_time_opens_add_time_prompt() {
+        let mut app = build_app("Review PR +work @dev\n");
+        app.toggle_complete(0);
+        assert!(app.tasks()[0].done);
+        assert_eq!(app.nav.mode, Mode::Prompt(Prompt::AddTime));
+        assert_eq!(app.session.pending_complete_add_time, Some(0));
+        assert_eq!(app.flash_active(), Some("completed — no time logged"));
+    }
+
+    /// A task that already carries time completes without a prompt.
+    #[test]
+    fn complete_with_time_does_not_prompt() {
+        let mut app = build_app("Review PR +work @dev dur:3600\n");
+        app.toggle_complete(0);
+        assert!(app.tasks()[0].done);
+        assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
+        assert_eq!(app.session.pending_complete_add_time, None);
+        assert_eq!(app.flash_active(), Some("completed"));
+    }
+
+    /// With the `prompt_complete_no_time` pref off, completing a no-time task
+    /// stays a plain completion — no prompt, no pending target.
+    #[test]
+    fn complete_without_time_does_not_prompt_when_disabled() {
+        let mut app = build_app("Review PR +work @dev\n");
+        app.prefs.prompt_complete_no_time = false;
+        app.toggle_complete(0);
+        assert!(app.tasks()[0].done);
+        assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
+        assert_eq!(app.session.pending_complete_add_time, None);
+        assert_eq!(app.flash_active(), Some("completed"));
+    }
+
+    /// A timer still running on the completed task means its time lands when
+    /// the timer stops — no prompt needed.
+    #[test]
+    fn complete_with_running_timer_does_not_prompt() {
+        let mut app = build_app("Review PR +work @dev start:2026-05-06T10:00:00\n");
+        app.toggle_complete(0);
+        assert!(app.tasks()[0].done);
+        assert!(app.timer_running());
+        assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
+        assert_eq!(app.session.pending_complete_add_time, None);
+    }
+
+    /// Recurring completion without time still prompts, targeting the
+    /// completed task — the cursor sits on the freshly spawned successor.
+    #[test]
+    fn complete_recurring_without_time_targets_completed_task() {
+        let mut app = build_app("Pay rent due:2026-04-15 rec:+1m\n");
+        app.toggle_complete(0);
+        assert_eq!(app.tasks().len(), 2);
+        assert_eq!(app.nav.mode, Mode::Prompt(Prompt::AddTime));
+        assert_eq!(app.session.pending_complete_add_time, Some(0));
     }
 
     #[test]

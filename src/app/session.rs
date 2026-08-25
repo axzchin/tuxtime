@@ -80,6 +80,10 @@ pub struct Session {
     /// Day-boundary prompt state: the task being started + what "new entry"
     /// should do once the fresh line exists. `None` when no prompt is showing.
     pub pending_day_boundary: Option<(usize, DayBoundaryAction)>,
+    /// Task just completed with no time logged: the add-time prompt opened by
+    /// `toggle_complete` targets this absolute index instead of the cursor
+    /// (which may sit on a recurring successor). Cleared on save or cancel.
+    pub pending_complete_add_time: Option<usize>,
     /// Source task index for the upgraded `N` carry-forward insert. Cleared
     /// on save or cancel.
     pub carry_forward_from: Option<usize>,
@@ -120,6 +124,7 @@ impl Session {
             pre_nudge_view: None,
             manual_time_entry: false,
             pending_day_boundary: None,
+            pending_complete_add_time: None,
             carry_forward_from: None,
             idle_backdated: false,
             idle_reason: IdleReason::TimerStopped,

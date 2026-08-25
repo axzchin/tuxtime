@@ -83,6 +83,20 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             )),
         ),
         (
+            "  prefill + on new task",
+            Some(format!(
+                "{}  (+ to toggle)",
+                on(app.prefs.prefill_plus_new)
+            )),
+        ),
+        (
+            "  prompt if done w/o time",
+            Some(format!(
+                "{}  (x to toggle)",
+                on(app.prefs.prompt_complete_no_time)
+            )),
+        ),
+        (
             "  log date inline",
             Some(format!("{}  (O to toggle)", on(app.prefs.show_log_inline))),
         ),

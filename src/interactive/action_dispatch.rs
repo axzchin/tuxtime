@@ -169,6 +169,12 @@ pub fn apply_action(app: &mut App, action: Action) {
         Action::BeginAdd => {
             app.nav.set_mode(Mode::Screen(Screen::Insert));
             app.draft_clear();
+            // Optional `+` prefill: with `prefill_plus_new` on, the dialog
+            // opens ready for the project name (the cursor sits right after
+            // the sigil). Off keeps the old blank-dialog behavior.
+            if app.prefs.prefill_plus_new {
+                app.draft_set_insert("+".to_string());
+            }
             app.selection.exit_edit();
             app.session.manual_time_entry = false;
         }

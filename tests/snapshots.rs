@@ -764,6 +764,39 @@ fn timesheet_selected_group_dims_only_done_siblings() {
     );
 }
 
+/// A narrative longer than the timesheet's center pane must word-wrap at
+/// the pane boundary instead of clipping mid-word at the right edge — the
+/// narrative tail stays visible and no text runs under the detail sidebar.
+#[test]
+fn timesheet_long_narrative_wraps_in_center_pane() {
+    let narrative = "draft the opposition brief for the Smith versus Jones summary \
+                     judgment hearing with a very long narrative body that keeps going \
+                     and going and going";
+    let body = format!(
+        "2026-05-06 {narrative} +Smith @drafting dur:7200 log:2026-05-06\n"
+    );
+    std::fs::write(FIXTURE_PATH, &body).expect("seed fixture file");
+    let mut app = App::new(
+        PathBuf::from(FIXTURE_PATH),
+        body,
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.env.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.prefs.density = Density::Compact;
+    app.set_view(View::Timesheet);
+    snapshot_app("timesheet_long_narrative_wraps", &app);
+
+    // The rendered frame must keep the narrative's tail on screen: before
+    // wrapping, the center list clipped the line mid-word at the pane edge
+    // and the tail (and any per-task duration / done marker) was hidden.
+    let text = buffer_to_text(&render(&app));
+    assert!(
+        text.contains("and going and going"),
+        "narrative tail must wrap into view instead of clipping:\n{text}"
+    );
+}
+
 #[test]
 fn timesheet_weekly_with_daily_subtotals() {
     // Build an app with dur tasks on two different days so the weekly view
@@ -1064,6 +1097,59 @@ fn day_boundary_prompt_wraps_long_narrative() {
     assert!(
         text.contains("hearing"),
         "the narrative tail must wrap into view:\n{text}"
+    );
+}
+
+/// The timesheet entry list must scroll like the list view: with more
+/// entries than the viewport fits, the cursor narrative's *wrapped* row stays
+/// visible. Word-wrapped long narratives make the mapping non-trivial (one
+/// source line can consume several rows), so this exercises both a plain
+/// bottom row and a wrapped cursor narrative.
+#[test]
+fn timesheet_scrolls_to_keep_cursor_visible() {
+    let mut s = String::new();
+    for i in 0..40 {
+        s.push_str(&format!(
+            "2026-05-05 Draft motion {i:03} +Smith @drafting dur:1800\n",
+        ));
+    }
+    // A long narrative at the very bottom — it wraps over several rows, so
+    // keeping *its* cursor row visible requires summing wrapped rows, not
+    // just counting source lines.
+    s.push_str(&format!(
+        "2026-05-05 {} +Smith @drafting dur:1800\n",
+        "draft the opposition brief for the Smith versus Jones summary judgment \
+         hearing with a very long narrative body that keeps going and going"
+    ));
+    std::fs::write(FIXTURE_PATH, &s).expect("seed fixture file");
+    let mut app = App::new(
+        PathBuf::from(FIXTURE_PATH),
+        s,
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.env.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.prefs.density = Density::Compact;
+    app.prefs.layout.left = false;
+    app.prefs.layout.right = false;
+    app.set_view(View::Timesheet);
+    app.timesheet.date = "2026-05-05".into();
+
+    // A plain bottom row: cursor on the last short narrative (index 39).
+    app.timesheet.cursor = 39;
+    let text = render_text(&app, 80, 12);
+    assert!(
+        text.contains("Draft motion 039"),
+        "cursor narrative must scroll into view:\n{text}"
+    );
+
+    // The wrapped bottom narrative (index 40): its first wrapped row must
+    // land inside the viewport even though the text is several rows tall.
+    app.timesheet.cursor = 40;
+    let text = render_text(&app, 80, 12);
+    assert!(
+        text.contains("draft the opposition brief"),
+        "wrapped cursor narrative must scroll into view:\n{text}"
     );
 }
 

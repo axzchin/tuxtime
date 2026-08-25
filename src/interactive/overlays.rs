@@ -121,6 +121,14 @@ pub(crate) fn handle_settings(app: &mut App, key: KeyEvent) {
             app.prefs.toggle_duration_inline();
             app.save_prefs();
         }
+        KeyCode::Char('+') => {
+            app.prefs.toggle_prefill_plus_new();
+            app.save_prefs();
+        }
+        KeyCode::Char('x') => {
+            app.prefs.toggle_prompt_complete_no_time();
+            app.save_prefs();
+        }
         KeyCode::Char('O') => {
             app.prefs.toggle_log_inline();
             app.save_prefs();
@@ -293,6 +301,9 @@ pub(crate) fn handle_prompt(app: &mut App, key: KeyEvent) {
 
     match key.code {
         KeyCode::Esc => {
+            // A completion-opened add-time prompt dismissed with Esc keeps the
+            // completion (the task is done) but drops the pending time target.
+            app.session.pending_complete_add_time = None;
             let return_mode = if matches!(
                 app.nav.mode(),
                 Mode::Prompt(Prompt::IdleNudge) | Mode::Prompt(Prompt::LongTimerNudge)
@@ -351,7 +362,14 @@ pub(crate) fn handle_prompt(app: &mut App, key: KeyEvent) {
                 Mode::Prompt(Prompt::Context) => app.toggle_context_on_current(&value),
                 Mode::Prompt(Prompt::SaveFilter) => app.save_current_filter_as(&value),
                 Mode::Prompt(Prompt::AddTime) => {
-                    app.add_time_to_current_from_input(&value);
+                    if let Some(abs) = app.session.pending_complete_add_time.take() {
+                        // Opened by `toggle_complete` on a task with no time:
+                        // target the completed task, not the cursor (which may
+                        // sit on a recurring successor).
+                        app.add_time_to_current_at(abs, &value);
+                    } else {
+                        app.add_time_to_current_from_input(&value);
+                    }
                     // A failed add (invalid duration, write error) from the
                     // nudge's recovery flow must not drop the reminder.
                     resolve_nudge_add_outcome(app);

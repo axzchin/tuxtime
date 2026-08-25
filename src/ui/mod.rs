@@ -1,6 +1,7 @@
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::Style;
+use ratatui::text::Line;
 use ratatui::widgets::Block;
 
 use crate::app::{App, Mode, Screen, View};
@@ -188,9 +189,122 @@ pub(crate) fn keep_cursor_visible(
     new.min(max_offset).min(usize::from(u16::MAX)) as u16
 }
 
+/// Number of rendered rows a [`Line`] occupies when a [`Paragraph`] wraps it
+/// with `Wrap { trim: false }` at `width` columns. The timesheet renders with
+/// word-wrap so long narratives stay fully visible, which means its scroll
+/// offset lives in *wrapped-row* space, not source-line space: to keep the
+/// cursor narrative on screen we must know how many rows every earlier line
+/// consumed.
+///
+/// This mirrors ratatui's `WordWrapper` (`ratatui_widgets::reflow`) exactly
+/// — the same grapheme stream, the same whitespace/overflow rules — so the
+/// count agrees with what `Paragraph` actually renders. Width-only
+/// bookkeeping; no graphemes are stored.
+pub(crate) fn wrapped_row_count(line: &Line, width: u16) -> u16 {
+    use std::collections::VecDeque;
+    use unicode_segmentation::UnicodeSegmentation;
+    use unicode_width::UnicodeWidthStr;
+
+    if width == 0 {
+        return 0;
+    }
+    let max = width;
+    let mut rows = 0u16;
+    // Vec-emptiness mirrors (a Vec can hold zero-width graphemes, so width
+    // alone can't tell whether it's empty).
+    let mut pending_line_has = false;
+    let mut pending_word_has = false;
+    let mut pending_ws_has = false;
+    let mut line_width = 0u16;
+    let mut word_width = 0u16;
+    let mut whitespace_width = 0u16;
+    let mut non_ws_prev = false;
+    // Widths of the queued whitespace graphemes, in order — the flush path
+    // pops from the front, so a deque (not a sum) is needed.
+    let mut pending_ws: VecDeque<u16> = VecDeque::new();
+
+    let graphemes = line
+        .spans
+        .iter()
+        .flat_map(|span| span.content.graphemes(true));
+    for g in graphemes {
+        // Matches `StyledGrapheme::is_whitespace`: ZWSP counts, NBSP does not.
+        let is_ws = g == "\u{200B}" || (g.chars().all(char::is_whitespace) && g != "\u{00A0}");
+        let symbol_width = UnicodeWidthStr::width(g) as u16;
+        // Symbols wider than the line are dropped by the wrapper.
+        if symbol_width > max {
+            continue;
+        }
+
+        let word_found = non_ws_prev && is_ws;
+        // trim=false: only the untrimmed overflow rule fires.
+        let untrimmed_overflow =
+            !pending_line_has && word_width + whitespace_width + symbol_width > max;
+        if word_found || untrimmed_overflow {
+            // trim=false: always append the queued whitespace, then the word.
+            pending_line_has = pending_line_has || pending_ws_has || pending_word_has;
+            line_width += whitespace_width;
+            whitespace_width = 0;
+            pending_ws.clear();
+            pending_ws_has = false;
+            line_width += word_width;
+            word_width = 0;
+            pending_word_has = false;
+        }
+
+        let line_full = line_width >= max;
+        let pending_word_overflow =
+            symbol_width > 0 && line_width + whitespace_width + word_width >= max;
+        if line_full || pending_word_overflow {
+            rows += 1;
+            let mut remaining = max.saturating_sub(line_width);
+            pending_line_has = false;
+            line_width = 0;
+            // Remove leading whitespace that would overflow the flushed row.
+            while let Some(w) = pending_ws.front() {
+                if *w > remaining {
+                    break;
+                }
+                whitespace_width -= w;
+                remaining -= w;
+                pending_ws.pop_front();
+            }
+            pending_ws_has = !pending_ws.is_empty();
+            if is_ws && !pending_ws_has {
+                // This whitespace grapheme is dropped entirely (it would
+                // start the next row); `non_ws_prev` is deliberately
+                // unchanged, mirroring the wrapper's `continue`.
+                continue;
+            }
+        }
+
+        if is_ws {
+            whitespace_width += symbol_width;
+            pending_ws.push_back(symbol_width);
+            pending_ws_has = true;
+        } else {
+            word_width += symbol_width;
+            pending_word_has = true;
+        }
+        non_ws_prev = !is_ws;
+    }
+
+    // Tail: with trim=false the queued whitespace is always flushed into the
+    // pending line, then the word, then the line is emitted if non-empty.
+    let flushed_any = pending_line_has || pending_ws_has || pending_word_has;
+    if flushed_any {
+        rows += 1;
+    }
+    // An empty source line still occupies one rendered row.
+    if rows == 0 {
+        rows = 1;
+    }
+    rows
+}
+
 #[cfg(test)]
 mod tests {
-    use super::keep_cursor_visible;
+    use super::{keep_cursor_visible, wrapped_row_count, Line};
 
     #[test]
     fn no_scroll_when_content_fits() {
@@ -226,5 +340,128 @@ mod tests {
     fn handles_degenerate_inputs() {
         assert_eq!(keep_cursor_visible(0, None, 0, 100), 0);
         assert_eq!(keep_cursor_visible(0, Some(0), 5, 0), 0);
+    }
+
+    // ── wrapped_row_count ────────────────────────────────────────────
+
+    fn line(s: &str) -> Line<'static> {
+        Line::raw(s.to_string())
+    }
+
+    #[test]
+    fn short_lines_occupy_one_row() {
+        assert_eq!(wrapped_row_count(&line("hello"), 20), 1);
+        assert_eq!(wrapped_row_count(&line(""), 20), 1, "blank line is a row");
+        assert_eq!(wrapped_row_count(&line("  "), 20), 1);
+    }
+
+    #[test]
+    fn zero_width_renders_nothing() {
+        // `WordWrapper::next_line` bails when max_line_width == 0.
+        assert_eq!(wrapped_row_count(&line("hello"), 0), 0);
+    }
+
+    #[test]
+    fn wraps_at_word_boundaries() {
+        // "one two three four" wraps at word boundaries: at width 10 →
+        // "one two" + "three four" (2 rows), at width 8 → "one two" +
+        // "three" + "four" (3 rows).
+        let s = "one two three four";
+        assert_eq!(wrapped_row_count(&line(s), 10), 2);
+        assert_eq!(wrapped_row_count(&line(s), 8), 3);
+        assert_eq!(wrapped_row_count(&line(s), 4), 5);
+    }
+
+    #[test]
+    fn long_single_word_stays_whole() {
+        // trim=false never breaks a word: a 12-char word at width 5 overflows
+        // whole. The word's own row is emitted when it would overflow the
+        // pane ("abcdef"), and each further mid-word overflow emits the row
+        // so far — blank at the word's start, hence the empty row.
+        assert_eq!(wrapped_row_count(&line("abcdefghijkl"), 5), 3);
+        // "ab" / "abcdef" / (blank) / "kl" — the untrimmed-overflow flush
+        // at 'f' emits "abcdef" as a real (exactly-fitting) row.
+        assert_eq!(wrapped_row_count(&line("ab abcdefghijkl"), 5), 4);
+        // A word narrower than the pane: clean two-row wrap.
+        assert_eq!(wrapped_row_count(&line("abcd efgh"), 4), 2);
+    }
+
+    #[test]
+    fn exact_fit_is_single_row() {
+        // A line exactly as wide as the pane must not wrap.
+        let s = "1234567890";
+        assert_eq!(wrapped_row_count(&line(s), 10), 1);
+        let s = "1234567890 x";
+        assert_eq!(wrapped_row_count(&line(s), 10), 2);
+    }
+
+    #[test]
+    fn unicode_width_counts_wide_chars() {
+        // Two CJK chars (width 2 each) = 4 columns, so they fit on one row at
+        // width 5; at width 3 the pair (4 wide) is wider than the pane and,
+        // like any unbreakable word, overflows whole onto a single row.
+        assert_eq!(wrapped_row_count(&line("汉字"), 5), 1);
+        assert_eq!(wrapped_row_count(&line("汉字"), 3), 1);
+        // 4 wide + words: "汉字" / "and" / "more".
+        assert_eq!(wrapped_row_count(&line("汉字 and more"), 5), 3);
+    }
+
+    /// The row count must agree with what ratatui's `Paragraph` + `Wrap`
+    /// actually renders, or the timesheet scroll math would drift off-screen.
+    /// Render each case into a scratch buffer and count non-blank rows.
+    #[test]
+    fn wrapped_row_count_matches_ratatui_render() {
+        use ratatui::backend::TestBackend;
+        use ratatui::layout::Rect;
+        use ratatui::widgets::{Paragraph, Wrap};
+        use ratatui::Terminal;
+
+        fn rendered_rows(s: &str, width: u16) -> usize {
+            let backend = TestBackend::new(width.max(1), 50);
+            let mut terminal = Terminal::new(backend).expect("term");
+            terminal
+                .draw(|f| {
+                    f.render_widget(
+                        Paragraph::new(Line::raw(s.to_string())).wrap(Wrap { trim: false }),
+                        Rect::new(0, 0, width, 50),
+                    );
+                })
+                .expect("draw");
+            let buf = terminal.backend().buffer();
+            let mut rows = 0usize;
+            for y in 0..buf.area.height {
+                if (0..buf.area.width).any(|x| buf[(x, y)].symbol() != " ") {
+                    rows += 1;
+                }
+            }
+            rows
+        }
+
+        // Cases whose wrapped output ends on a non-blank row, so the buffer
+        // row count is unambiguous. Blank wrapped rows (empty source lines,
+        // unbreakable words wider than the pane) are asserted separately —
+        // the buffer cannot distinguish them from empty space.
+        let cases: &[(&str, u16)] = &[
+            ("hello", 20),
+            ("one two three four", 10),
+            ("one two three four", 8),
+            ("1234567890", 10),
+            ("1234567890 x", 10),
+            ("汉字", 5),
+            ("a b c d e f g h i j", 5),
+            ("word word word word word word", 7),
+            ("x", 1),
+            ("aa bb cc", 2),
+            ("one  two   three", 6),
+        ];
+        for (s, w) in cases {
+            let count = wrapped_row_count(&line(s), *w);
+            let actual = rendered_rows(s, *w);
+            assert_eq!(
+                usize::from(count),
+                actual,
+                "row count for {s:?} at width {w} must match ratatui's wrap"
+            );
+        }
     }
 }

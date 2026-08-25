@@ -6,18 +6,18 @@ expression: buffer_to_text(&buf)
                           │                                      │                                  
  MATTERS · BILLABLE       │  Tue 2026-05-05                      │ PERIOD                           
    +Smith           4h 15m│  +Smith @drafting  —  2h 0m  (2.0h)  │ billable     4.3h                
-                          │    ▸ Draft motion for summary judgmen│ non-billable 0.0h                
- TOTALS                   │  +Smith @research  —  1h 0m  (1.0h)  │ total        4.3h                
-   billable         4h 15m│    • Review discovery responses      │                                  
-   non-billable         0m│    ──  3h 0m (3.0h)                  │ ENTRY                            
-   total            4h 15m│                                      │2026-05-05                        
-                          │  Wed 2026-05-06                      │+Smith @drafting                  
-                          │  +Smith @drafting  —  30m  (0.5h)    │ group dur     2.0h  · billable   
-                          │    • Prepare exhibit list            │ status       open                
-                          │  +Smith @meeting  —  45m  (0.8h)     │                                  
-                          │    • Conference call with client     │ NARRATIVE 1/1                    
-                          │    ──  1h 15m (1.3h)                 │  Draft motion for summary        
-                          │                                      │  judgment                        
+                          │    ▸ Draft motion for summary        │ non-billable 0.0h                
+ TOTALS                   │judgment                              │ total        4.3h                
+   billable         4h 15m│  +Smith @research  —  1h 0m  (1.0h)  │                                  
+   non-billable         0m│    • Review discovery responses      │ ENTRY                            
+   total            4h 15m│    ──  3h 0m (3.0h)                  │2026-05-05                        
+                          │                                      │+Smith @drafting                  
+                          │  Wed 2026-05-06                      │ group dur     2.0h  · billable   
+                          │  +Smith @drafting  —  30m  (0.5h)    │ status       open                
+                          │    • Prepare exhibit list            │                                  
+                          │  +Smith @meeting  —  45m  (0.8h)     │ NARRATIVE 1/1                    
+                          │    • Conference call with client     │  Draft motion for summary        
+                          │    ──  1h 15m (1.3h)                 │  judgment                        
                           │                                      │                                  
                           │                                      │                                  
                           │                                      │                                  

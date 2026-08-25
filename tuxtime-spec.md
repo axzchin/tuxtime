@@ -318,6 +318,15 @@ idle_nudge_seconds = 900
 
 # Nudge after a single timer runs this long (default 7200 = 2 hours)
 long_timer_nudge_seconds = 7200
+
+# Prefill the new-task dialog with a leading `+` so the project name can be
+# typed immediately (default true)
+# prefill_plus_new = true
+
+# After completing a task with no time logged, open the add-time prompt so
+# the work isn't silently missing from the timesheet (default true).
+# Off completes silently.
+# prompt_complete_no_time = true
 ```
 
 ### 5.2 Updated `Config` Struct
@@ -329,6 +338,16 @@ pub long_timer_nudge_seconds: Option<u64>,
 ```
 
 Parse from `idle_nudge_seconds` and `long_timer_nudge_seconds` keys. Serialize back on save.
+
+Also add:
+```rust
+pub prefill_plus_new: Option<bool>,
+pub prompt_complete_no_time: Option<bool>,
+```
+
+Parsed from the same-named keys (both `true|false`). Serialized back on save.
+The new-task `+` prefill and the complete-without-time prompt are toggled
+from Settings (`+` and `x` respectively).
 
 ---
 
@@ -449,6 +468,7 @@ All existing keybindings preserved.
 1. **Should the shell command `tuxtime start "Draft motion" +Smith @drafting` work from CLI?** Deferred. Timer actions are TUI-only in MVP.
 2. **Should there be a `timesheet export` CLI command?** Deferred. Timesheet is TUI view only in MVP.
 3. **Should `done` tasks with time entries be included in timesheet/copy?** Yes — time tracked is time tracked, even if the task is complete.
+6. **What happens when a task is completed with no time logged?** The completion opens the add-time prompt (targeting the completed task) so the work isn't silently missing from the timesheet. `Esc` keeps the completion and skips the time. Skipped when the task carries `dur:` or a timer is still running on it.
 4. **What happens to `start:` if the user manually edits the line?** Standard re-parse handles it. If they remove `start:`, the timer is effectively stopped (no elapsed added to dur). This is acceptable — the user is explicitly editing the raw line.
 5. **Should timer survive `undo`?** Yes. Undo restores the previous task state including `start:`/`dur:` values.
 

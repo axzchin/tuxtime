@@ -3345,3 +3345,104 @@ fn palette_launched_nudge_prompt_pops_back_to_caller() {
         "nudge prompt must return to the mode the palette returned to"
     );
 }
+
+// ── complete-without-time add-time prompt (x → ⏱) ────────────────
+
+/// Completing a task with no time opens the add-time prompt; Enter records
+/// the duration on the completed task and returns to Normal.
+#[test]
+fn complete_without_time_prompt_enter_adds_time_to_completed_task() {
+    let mut app = build_app_with_archive("Review PR +work @dev\n", None);
+    app.toggle_complete(0);
+    assert_eq!(app.nav.mode, Mode::Prompt(Prompt::AddTime));
+
+    app.draft_set_insert("30".to_string());
+    handle_prompt(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
+    assert_eq!(app.session.pending_complete_add_time, None);
+    let raw = &app.tasks()[0].raw;
+    assert!(
+        raw.contains("dur:1800"),
+        "30m must land on the done task, got: {raw}"
+    );
+    assert!(
+        raw.contains("log:2026-05-06"),
+        "log date stamped for today, got: {raw}"
+    );
+    assert!(app.tasks()[0].done, "completion must survive the add");
+}
+
+/// Esc from the completion prompt keeps the completion but skips the time.
+#[test]
+fn complete_without_time_prompt_esc_keeps_completion() {
+    let mut app = build_app_with_archive("Review PR +work @dev\n", None);
+    app.toggle_complete(0);
+    assert_eq!(app.nav.mode, Mode::Prompt(Prompt::AddTime));
+
+    handle_prompt(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
+    assert_eq!(app.session.pending_complete_add_time, None);
+    assert!(app.tasks()[0].done, "Esc must not undo the completion");
+    assert_eq!(app.tasks()[0].dur, None, "no time added");
+}
+
+// ── new-task `+` prefill ─────────────────────────────────────────
+
+/// With `prefill_plus_new` on, BeginAdd opens the dialog with a `+` already
+/// typed so the project name can be entered immediately.
+#[test]
+fn begin_add_prefills_plus_when_enabled() {
+    let mut app = build_app();
+    app.prefs.prefill_plus_new = true;
+    apply_action(&mut app, Action::BeginAdd);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Insert));
+    assert_eq!(app.draft.text(), "+");
+    assert_eq!(app.draft.input_mode(), DialogInputMode::Insert);
+}
+
+/// Default on: BeginAdd opens the dialog with `+` already typed. The blank
+/// dialog is the opt-out, via the Settings `+` toggle.
+#[test]
+fn begin_add_prefills_plus_by_default() {
+    let mut app = build_app();
+    assert!(app.prefs.prefill_plus_new, "default is on");
+    apply_action(&mut app, Action::BeginAdd);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Insert));
+    assert_eq!(app.draft.text(), "+");
+}
+
+/// With the prefill toggled off, BeginAdd keeps the old blank-dialog behavior.
+#[test]
+fn begin_add_blank_when_prefill_disabled() {
+    let mut app = build_app();
+    app.prefs.prefill_plus_new = false;
+    apply_action(&mut app, Action::BeginAdd);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Insert));
+    assert_eq!(app.draft.text(), "");
+}
+
+/// The settings `+` key toggles the prefill.
+#[test]
+fn settings_plus_toggles_prefill() {
+    let mut app = build_app();
+    app.nav.mode = Mode::Screen(Screen::Settings);
+    assert!(app.prefs.prefill_plus_new);
+    handle_settings(&mut app, key('+'));
+    assert!(!app.prefs.prefill_plus_new);
+    handle_settings(&mut app, key('+'));
+    assert!(app.prefs.prefill_plus_new);
+}
+
+/// The settings `x` key toggles the complete-without-time prompt.
+#[test]
+fn settings_x_toggles_complete_prompt() {
+    let mut app = build_app();
+    app.nav.mode = Mode::Screen(Screen::Settings);
+    assert!(app.prefs.prompt_complete_no_time);
+    handle_settings(&mut app, key('x'));
+    assert!(!app.prefs.prompt_complete_no_time);
+    handle_settings(&mut app, key('x'));
+    assert!(app.prefs.prompt_complete_no_time);
+}

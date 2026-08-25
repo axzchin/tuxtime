@@ -240,6 +240,12 @@ removes them from the working file (atomically: `done.txt` is written
 before the originals are dropped). `a` toggles the archive view so you
 can browse, un-archive, or permanently delete past tasks.
 
+Completing a task with `x` when no time has been logged (no `dur:` and no
+running timer) opens the add-time prompt — a completed task with no time
+never appears in the timesheet, so the prompt keeps the finished work from
+vanishing from your billing record. Type a duration (`30`, `1.5h`, `14:30`)
+and press Enter, or Esc to skip; the completion stands either way.
+
 ## Command-line interface
 
 When the first argument is a recognized subcommand, tuxtime runs a one-shot
@@ -668,6 +674,13 @@ show_log_inline = false
 # Badge palette: `semantic` (colored chips), `monochrome` (subdued chips),
 # or `plain` (colored text, no chip background).
 badge_theme = "semantic"
+# Prefill the new-task dialog with a leading `+` so the project name can be
+# typed immediately (default true). Toggle in Settings with `+`.
+prefill_plus_new = true
+# After completing a task with no time logged, open the add-time prompt so
+# the finished work isn't silently missing from the timesheet (default true).
+# Toggle in Settings with `x`; off completes silently.
+prompt_complete_no_time = true
 ```
 
 Both settings are display-only and do not alter task data. Press `B` in

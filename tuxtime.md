@@ -395,6 +395,78 @@ lawyer's day:
 
 ---
 
+### 39. Complete-Without-Time Prompt (`x` → ⏱, configurable)
+
+Completing a task with **no time logged** (no `dur:` and no running timer)
+opens the add-time prompt instead of silently dropping the work from the
+timesheet:
+
+- The prompt targets the **completed task itself** — even when completing a
+  recurring task, where the cursor moves to the freshly spawned successor.
+- `Enter` records the typed duration (`30`, `1.5h`, `14:30`, …) on the done
+  task and stamps today's `log:`; `Esc` keeps the completion and skips the
+  time.
+- Skipped when the task already carries time or a timer is still running on
+  it (its time lands when the timer stops), or when the
+  `prompt_complete_no_time` pref is off.
+- Bulk-complete (Visual mode) never prompts per task.
+- **Optional**: toggle in Settings with `x` (row reads
+  `prompt if done w/o time`), persisted to `config.toml` as
+  `prompt_complete_no_time = true|false` (default **on**). Turn it off for a
+  plain, no-prompt completion flow.
+
+**Files**: `src/app/actions.rs`, `src/app/session.rs`,
+`src/interactive/overlays.rs`, `src/config.rs`, `src/app/prefs.rs`,
+`src/ui/settings.rs`, `src/ui/hints.rs`
+
+### 40. New-Task `+` Prefill (configurable)
+
+New setting `prefill_plus_new` (default **on**) — pressing `n` opens the add
+dialog with `+` already typed, so the cursor sits right after the sigil and
+the user can type the project name immediately:
+
+- Toggle in Settings with `+` (row reads `prefill + on new task`); persisted
+  to `config.toml` as `prefill_plus_new = true|false`.
+- Off keeps the old blank-dialog behavior; the project autocomplete popup
+  offers existing matters the moment the dialog opens.
+
+**Files**: `src/config.rs`, `src/app/prefs.rs`,
+`src/interactive/action_dispatch.rs`, `src/interactive/overlays.rs`,
+`src/ui/settings.rs`, `src/ui/hints.rs`
+
+### 41. Timesheet Long-Narrative Wrapping
+
+Narratives longer than the timesheet's center pane now **word-wrap at the
+pane boundary** instead of clipping mid-word at the right edge:
+
+- The narrative tail stays visible, so the per-task duration and `(done)` /
+  `(archived)` markers on a long line are never hidden.
+- No text runs under (or visually collides with) the detail sidebar — the
+  right margin is the pane border, and content stops there.
+- The cursor row's full-line highlight carries across wrapped continuation
+  lines; the pinned billable footer is a separate paragraph and can't be
+  pushed off-screen.
+
+**Files**: `src/ui/timesheet_render.rs`, `tests/snapshots.rs`
+
+### 42. Timesheet Scrolling
+
+The timesheet entry list now **scrolls to keep the cursor narrative
+visible**, matching the list and archive views. With more entries than the
+viewport fits, the highlighted row follows the cursor instead of scrolling
+off-screen:
+
+- The scroll offset lives in *wrapped-row* space: long narratives that wrap
+  over several rows are accounted for exactly, so the cursor row (and the
+  full-line highlight on it) lands inside the viewport even when it sits
+  below a wrapped entry.
+- The pinned billable footer still never scrolls away — only the entry list
+  moves.
+
+**Files**: `src/ui/timesheet_render.rs`, `src/ui/mod.rs`, `Cargo.toml`
+
+---
+
 ## Keybinding Reference
 
 | Key | Action | Context |
@@ -423,6 +495,8 @@ lawyer's day:
 | `L` | Next week (+7 days) | Timesheet |
 | `t` | Jump to today (flashes with DOW) | Timesheet |
 | `g` | Open calendar picker (type date directly) | Timesheet |
+| `+` | Toggle `+` prefill on new task | Settings |
+| `x` | Toggle complete-without-time prompt | Settings |
 | `s` | Cycle sort mode (project/date/duration) | Timesheet |
 | `/` | Search/filter narratives | Timesheet |
 | `j`/`k` | Navigate narratives | Timesheet |
@@ -462,6 +536,10 @@ long_timer_nudge_seconds = 7200
 # timesheet. Omit either (or both) to hide the line.
 # workday_start = "09:00"
 # workday_end = "18:00"
+
+# Prefill the new-task dialog with a leading `+` so the project name can be
+# typed immediately (default false)
+# prefill_plus_new = true
 
 # Week start day
 week_start = "sunday"  # or "monday"

@@ -18,6 +18,8 @@ expression: buffer_to_text(&buf)
    show done in list           off  (H to toggle)                                                   
    show future in list         off  (F to toggle)                                                   
    duration badge inline       on  (I to toggle)                                                    
+   prefill + on new task       on  (+ to toggle)                                                    
+   prompt if done w/o time     on  (x to toggle)                                                    
    log date inline             off  (O to toggle)                                                   
    badge theme                 semantic  (B to cycle)                                               
                                                                                                     
@@ -29,8 +31,6 @@ expression: buffer_to_text(&buf)
                                                                                                     
  KEYBINDINGS                                                                                        
                                press ? for the full list                                            
-                                                                                                    
-                                                                                                    
                                                                                                     
                                                                                                     
  SETTINGS   Esc/ ,/ q dismiss  ·  i idle nudge  ·  l long ti15 open · 2026-05-06 · tuxtime 2026.7.5

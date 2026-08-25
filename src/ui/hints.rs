@@ -41,7 +41,7 @@ pub(crate) fn mode_hint(app: &App) -> String {
             Screen::Visual => "space toggle · x complete · dd delete · Esc cancel".to_string(),
             Screen::Help => "? close help".to_string(),
             Screen::Settings => {
-                "Esc/ ,/ q dismiss  ·  i idle nudge  ·  l long timer nudge  ·  I duration badge  ·  O log date".to_string()
+                "Esc/ ,/ q dismiss  ·  i idle nudge  ·  l long timer nudge  ·  I duration badge  ·  + new-task prefill  ·  x done-no-time prompt  ·  O log date".to_string()
             }
             Screen::CommandPalette => "type to filter · Enter run · Esc cancel".to_string(),
             Screen::Share => "scan the QR · any key dismisses".to_string(),

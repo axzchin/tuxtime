@@ -76,6 +76,14 @@ pub struct Prefs {
     pub hidden_keys: Vec<String>,
     /// Whether positive `dur:` values render as compact badges in task rows.
     pub show_duration_inline: bool,
+    /// Prefill the new-task dialog with a leading `+` so the user can type
+    /// the project name immediately. Default true.
+    pub prefill_plus_new: bool,
+    /// After completing a task with no time logged, open the add-time prompt
+    /// so the finished work doesn't silently vanish from the timesheet
+    /// (a completed task with no `dur:` never appears there). Default true;
+    /// turn off for a plain, no-prompt completion flow.
+    pub prompt_complete_no_time: bool,
     /// Whether the `log:YYYY-MM-DD` bookkeeping token is rendered inline.
     pub show_log_inline: bool,
     /// Palette used by duration and non-billable metadata chips.
@@ -122,6 +130,8 @@ impl Prefs {
             show_future: cfg.show_future.unwrap_or(false),
             hidden_keys: cfg.hidden_keys,
             show_duration_inline: cfg.show_duration_inline.unwrap_or(true),
+            prefill_plus_new: cfg.prefill_plus_new.unwrap_or(true),
+            prompt_complete_no_time: cfg.prompt_complete_no_time.unwrap_or(true),
             show_log_inline: cfg.show_log_inline.unwrap_or(false),
             badge_theme: BadgeTheme::from_config(cfg.badge_theme.as_deref()),
             idle_nudge_seconds: cfg.idle_nudge_seconds.unwrap_or(900),
@@ -232,6 +242,16 @@ impl Prefs {
         self.show_duration_inline = !self.show_duration_inline;
     }
 
+    /// Toggle the new-task `+` prefill.
+    pub fn toggle_prefill_plus_new(&mut self) {
+        self.prefill_plus_new = !self.prefill_plus_new;
+    }
+
+    /// Toggle the complete-without-time add-time prompt.
+    pub fn toggle_prompt_complete_no_time(&mut self) {
+        self.prompt_complete_no_time = !self.prompt_complete_no_time;
+    }
+
     /// Toggle the `log:YYYY-MM-DD` bookkeeping token in list and archive rows.
     pub fn toggle_log_inline(&mut self) {
         self.show_log_inline = !self.show_log_inline;
@@ -262,6 +282,8 @@ impl Prefs {
             cfg.show_future = Some(self.show_future);
             cfg.hidden_keys = self.hidden_keys.clone();
             cfg.show_duration_inline = Some(self.show_duration_inline);
+            cfg.prefill_plus_new = Some(self.prefill_plus_new);
+            cfg.prompt_complete_no_time = Some(self.prompt_complete_no_time);
             cfg.show_log_inline = Some(self.show_log_inline);
             cfg.badge_theme = Some(self.badge_theme.as_str().to_string());
             cfg.week_start = Some(week_start);

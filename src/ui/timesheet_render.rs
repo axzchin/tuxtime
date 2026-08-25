@@ -4,15 +4,16 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Clear, Paragraph};
+use ratatui::widgets::{Clear, Paragraph, Wrap};
 
 use chrono::Timelike;
 
-use crate::app::App;
+use crate::app::{App, View};
 use crate::ui::calendar_utils::{calendar_cells, calendar_footer, format_focused, month_name};
 use crate::ui::msgbox;
 use crate::ui::overlay::timesheet_calendar_rect;
 use crate::ui::task_row::{bill_badge_style, dur_badge_style};
+use crate::ui::{keep_cursor_visible, wrapped_row_count};
 
 /// Plain `1h 5m` / `45m` without the billable parenthetical that
 /// [`crate::app::format_duration`] embeds. Used wherever the invoice-correct
@@ -72,6 +73,9 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
     let increment = app.prefs.rounding_increment;
 
     let mut lines: Vec<Line> = Vec::new();
+    // Source-line index of the cursor narrative, resolved later (after the
+    // lines are built) into a *wrapped-row* position for the scroll math.
+    let mut cursor_line: Option<usize> = None;
     // The grand-total block is kept out of `lines` so it can be pinned below
     // the scrollable entry list instead of scrolling off short terminals.
     let mut footer: Vec<Line> = Vec::new();
@@ -310,6 +314,9 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                 // narrative (or the per-task duration in a multi-task group),
                 // so the cursor bar is exactly as wide as the row's content
                 // instead of bleeding to the pane's right edge.
+                if is_narr_cursor {
+                    cursor_line = Some(lines.len());
+                }
                 lines.push(Line::from(narr_spans));
             }
             let units = crate::app::billable_units(entry.total_secs, increment);
@@ -410,9 +417,34 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
     let footer_h = footer.len() as u16;
     let [list_rect, footer_rect] =
         Layout::vertical([Constraint::Min(0), Constraint::Length(footer_h)]).areas(body_rect);
-    let max_lines = list_rect.height as usize;
-    let visible: Vec<Line> = lines.into_iter().take(max_lines).collect();
-    frame.render_widget(Paragraph::new(visible), list_rect);
+    // The paragraph word-wraps long narratives at the pane's inner width, so
+    // the scroll offset lives in *wrapped-row* space: the cursor narrative's
+    // source-line index maps to a rendered row only after summing how many
+    // rows each earlier line consumed (long narratives take several).
+    let list_width = list_rect.width;
+    let mut cursor_row: Option<usize> = None;
+    let mut total_rows: usize = 0;
+    for (i, line) in lines.iter().enumerate() {
+        let rows = usize::from(wrapped_row_count(line, list_width));
+        if cursor_line == Some(i) {
+            cursor_row = Some(total_rows);
+        }
+        total_rows += rows;
+    }
+    let scroll_cell = &app.nav.view_scroll[View::Timesheet];
+    let scroll = keep_cursor_visible(scroll_cell.get(), cursor_row, list_rect.height, total_rows);
+    scroll_cell.set(scroll);
+    // Long narratives word-wrap at the pane's inner width instead of clipping
+    // at the border: the right margin is the detail pane's boundary, so the
+    // duration badge and `(done)` status at the end of a long line stay
+    // visible instead of being cut off. The footer is a separate paragraph,
+    // so wrapping here can never push the totals off-screen.
+    frame.render_widget(
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: false })
+            .scroll((scroll, 0)),
+        list_rect,
+    );
     if !footer.is_empty() {
         frame.render_widget(Paragraph::new(footer), footer_rect);
     }

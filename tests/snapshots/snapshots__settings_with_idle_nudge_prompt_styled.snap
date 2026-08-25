@@ -18,8 +18,10 @@ expression: buffer_to_styled(&buf)
 {fg=#c8ccd4 bg=#1a1d23}   show done in list     {/}{fg=#2a2f38 bg=#1f232b}┌{/}{fg=#8aa9c9 bg=#1f232b mod=bold} IDLE NUDGE (MIN) {/}{fg=#2a2f38 bg=#1f232b}──────────────────────────────┐{/}{fg=#c8ccd4 bg=#1a1d23}                         {/}
 {fg=#c8ccd4 bg=#1a1d23}   show future in list   {/}{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}  {/}{fg=#8aa9c9 bg=#1f232b mod=bold}⏱{/}{bg=#1f232b} {/}{fg=#c8ccd4 bg=#1f232b}15█{/}{bg=#1f232b}                                         {/}{fg=#2a2f38 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1a1d23}                         {/}
 {fg=#c8ccd4 bg=#1a1d23}   duration badge inline {/}{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                {/}{fg=#2a2f38 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1a1d23}                         {/}
-{fg=#c8ccd4 bg=#1a1d23}   log date inline       {/}{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                {/}{fg=#2a2f38 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1a1d23}                         {/}
-{fg=#c8ccd4 bg=#1a1d23}   badge theme           {/}{fg=#2a2f38 bg=#1f232b}└────────────────────────────────────────────────┘{/}{fg=#c8ccd4 bg=#1a1d23}                         {/}
+{fg=#c8ccd4 bg=#1a1d23}   prefill + on new task {/}{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                                                {/}{fg=#2a2f38 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1a1d23}                         {/}
+{fg=#c8ccd4 bg=#1a1d23}   prompt if done w/o tim{/}{fg=#2a2f38 bg=#1f232b}└────────────────────────────────────────────────┘{/}{fg=#c8ccd4 bg=#1a1d23}                         {/}
+{fg=#c8ccd4 bg=#1a1d23}   log date inline             {/}{fg=#6b7280 bg=#1a1d23}off  (O to toggle){/}{fg=#c8ccd4 bg=#1a1d23}                                                   {/}
+{fg=#c8ccd4 bg=#1a1d23}   badge theme                 {/}{fg=#6b7280 bg=#1a1d23}semantic  (B to cycle){/}{fg=#c8ccd4 bg=#1a1d23}                                               {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}BEHAVIOR{/}{fg=#c8ccd4 bg=#1a1d23}                                                                                           {/}
 {fg=#c8ccd4 bg=#1a1d23}   default sort                {/}{fg=#6b7280 bg=#1a1d23}priority (S to cycle){/}{fg=#c8ccd4 bg=#1a1d23}                                                {/}
@@ -29,8 +31,6 @@ expression: buffer_to_styled(&buf)
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}KEYBINDINGS{/}{fg=#c8ccd4 bg=#1a1d23}                                                                                        {/}
 {fg=#c8ccd4 bg=#1a1d23}                               {/}{fg=#6b7280 bg=#1a1d23}press ? for the full list{/}{fg=#c8ccd4 bg=#1a1d23}                                            {/}
-{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
-{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#1a1d23 bg=#8aa9c9 mod=bold} IDLE NUDGE {/}{bg=#252a33}  {/}{fg=#a8b0bc bg=#252a33}type minutes · Enter save · Esc cancel{/}{bg=#252a33}        {/}{fg=#6b7280 bg=#252a33}15 open · 2026-05-06 · tuxtime 2026.7.5 {/}

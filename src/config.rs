@@ -52,6 +52,14 @@ pub struct Config {
     /// Render the compact duration badge in list/archive rows (default true).
     /// Set `show_duration_inline = false` to keep time only in the detail view.
     pub show_duration_inline: Option<bool>,
+    /// Prefill the new-task dialog with a leading `+` so the user can type the
+    /// project name immediately (default true). Off keeps the old behavior:
+    /// a blank dialog that accepts any narrative.
+    pub prefill_plus_new: Option<bool>,
+    /// After completing a task with no time logged, open the add-time prompt
+    /// (default true). Off completes silently — the task simply won't appear
+    /// in the timesheet until time is added manually.
+    pub prompt_complete_no_time: Option<bool>,
     /// Render the `log:YYYY-MM-DD` bookkeeping token inline (default false).
     pub show_log_inline: Option<bool>,
     /// Badge palette for duration and non-billable chips: `semantic` or
@@ -233,6 +241,8 @@ fn parse(s: &str) -> Config {
                     .collect();
             }
             "show_duration_inline" => c.show_duration_inline = parse_bool(v),
+            "prefill_plus_new" => c.prefill_plus_new = parse_bool(v),
+            "prompt_complete_no_time" => c.prompt_complete_no_time = parse_bool(v),
             "show_log_inline" => c.show_log_inline = parse_bool(v),
             "badge_theme" if matches!(v, "semantic" | "monochrome" | "plain") => {
                 c.badge_theme = Some(v.to_string());
@@ -322,6 +332,12 @@ fn serialize(c: &Config) -> String {
     if let Some(v) = c.show_duration_inline {
         let _ = writeln!(out, "show_duration_inline = {v}");
     }
+    if let Some(v) = c.prefill_plus_new {
+        let _ = writeln!(out, "prefill_plus_new = {v}");
+    }
+    if let Some(v) = c.prompt_complete_no_time {
+        let _ = writeln!(out, "prompt_complete_no_time = {v}");
+    }
     if let Some(v) = c.show_log_inline {
         let _ = writeln!(out, "show_log_inline = {v}");
     }
@@ -395,6 +411,8 @@ mod tests {
             notes_dir: Some("~/notes".into()),
             hidden_keys: vec!["uid".into(), "sync".into()],
             show_duration_inline: Some(true),
+            prefill_plus_new: Some(true),
+            prompt_complete_no_time: Some(true),
             show_log_inline: Some(false),
             badge_theme: Some("monochrome".into()),
             week_start: Some(WeekStart::Sunday),
@@ -418,9 +436,12 @@ mod tests {
         assert_eq!(defaults.show_duration_inline, None);
         assert_eq!(defaults.show_log_inline, None);
 
-        let configured =
-            parse("show_duration_inline = false\nshow_log_inline = true\nbadge_theme = plain\n");
+        let configured = parse(
+            "show_duration_inline = false\nprefill_plus_new = true\nprompt_complete_no_time = false\nshow_log_inline = true\nbadge_theme = plain\n",
+        );
         assert_eq!(configured.show_duration_inline, Some(false));
+        assert_eq!(configured.prefill_plus_new, Some(true));
+        assert_eq!(configured.prompt_complete_no_time, Some(false));
         assert_eq!(configured.show_log_inline, Some(true));
         assert_eq!(configured.badge_theme.as_deref(), Some("plain"));
 
@@ -428,8 +449,10 @@ mod tests {
         assert_eq!(mono.badge_theme.as_deref(), Some("monochrome"));
 
         let invalid =
-            parse("show_duration_inline = maybe\nshow_log_inline = maybe\nbadge_theme = vivid\n");
+            parse("show_duration_inline = maybe\nprefill_plus_new = maybe\nprompt_complete_no_time = maybe\nshow_log_inline = maybe\nbadge_theme = vivid\n");
         assert_eq!(invalid.show_duration_inline, None);
+        assert_eq!(invalid.prefill_plus_new, None);
+        assert_eq!(invalid.prompt_complete_no_time, None);
         assert_eq!(invalid.show_log_inline, None);
     }
 
@@ -619,6 +642,8 @@ mod tests {
             notes_dir: Some("/tmp/notes".into()),
             hidden_keys: vec!["uid".into()],
             show_duration_inline: Some(true),
+            prefill_plus_new: Some(false),
+            prompt_complete_no_time: Some(false),
             show_log_inline: Some(false),
             badge_theme: Some("monochrome".into()),
             week_start: Some(WeekStart::Sunday),
