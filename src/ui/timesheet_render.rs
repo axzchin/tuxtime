@@ -27,6 +27,65 @@ fn h_m(secs: u64) -> String {
     }
 }
 
+/// Word-wrap `text` into chunks at most `width` display columns wide, keeping
+/// words whole and breaking only a single word that still exceeds the width.
+/// Runs of whitespace collapse to single spaces. The timesheet uses this to
+/// pre-wrap narrative rows so continuation lines hang indented under the
+/// narrative text — ratatui's own word-wrap would drop them flush at the
+/// pane's left edge, breaking the entry's visual indent.
+fn wrap_chunks(text: &str, width: usize) -> Vec<String> {
+    use unicode_segmentation::UnicodeSegmentation;
+    use unicode_width::UnicodeWidthStr;
+
+    let mut chunks: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    let mut cur_w = 0usize;
+    for word in text.split(' ') {
+        if word.is_empty() {
+            continue;
+        }
+        let word_w = UnicodeWidthStr::width(word);
+        if word_w > width {
+            if !cur.is_empty() {
+                chunks.push(std::mem::take(&mut cur));
+                cur_w = 0;
+            }
+            // A single overlong word (URL, path) is broken at grapheme
+            // boundaries so it can never overflow the pane.
+            let mut piece = String::new();
+            let mut piece_w = 0usize;
+            for g in word.graphemes(true) {
+                let w = UnicodeWidthStr::width(g);
+                if piece_w + w > width && !piece.is_empty() {
+                    chunks.push(std::mem::take(&mut piece));
+                    piece_w = 0;
+                }
+                piece.push_str(g);
+                piece_w += w;
+            }
+            if !piece.is_empty() {
+                chunks.push(piece);
+            }
+            continue;
+        }
+        let sep = usize::from(!cur.is_empty());
+        if cur_w + sep + word_w > width {
+            chunks.push(std::mem::take(&mut cur));
+            cur_w = 0;
+        }
+        if !cur.is_empty() {
+            cur.push(' ');
+            cur_w += 1;
+        }
+        cur.push_str(word);
+        cur_w += word_w;
+    }
+    if !cur.is_empty() {
+        chunks.push(cur);
+    }
+    chunks
+}
+
 pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
 
@@ -66,6 +125,9 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
     let inner = msgbox::frame_box(frame, area, theme.border, theme.panel, title);
     let [_pad_top, body_rect] =
         Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(inner);
+    // The paragraph wraps at the pane's inner width; narrative rows are
+    // pre-wrapped to that width so continuation lines can hang indented.
+    let pane_w = usize::from(body_rect.width);
 
     let groups = app.build_timesheet_groups();
     // Billable rounding increment (decimal hours) from prefs — 0.1 default,
@@ -252,17 +314,24 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                 // it reads at a glance on the highlighted row. Same column as
                 // the `•` bullets — both are single-width, so nothing shifts.
                 let bullet = if is_narr_cursor {
-                    // The triangle keeps the cursor background explicitly:
-                    // with only an accent foreground it would inherit the
-                    // paragraph's panel background and punch a gap in the
-                    // full-line highlight.
-                    Span::styled(
-                        "▸",
-                        Style::default()
-                            .fg(theme.accent)
-                            .bg(theme.cursor)
-                            .add_modifier(Modifier::BOLD),
-                    )
+                    if copy_flash_active {
+                        // Join the group's white flash: keeping the cursor
+                        // background here would leave a dark box around the
+                        // triangle while every other cell inverts.
+                        Span::styled("▸", narr_style)
+                    } else {
+                        // The triangle keeps the cursor background explicitly:
+                        // with only an accent foreground it would inherit the
+                        // paragraph's panel background and punch a gap in the
+                        // full-line highlight.
+                        Span::styled(
+                            "▸",
+                            Style::default()
+                                .fg(theme.accent)
+                                .bg(theme.cursor)
+                                .add_modifier(Modifier::BOLD),
+                        )
+                    }
                 } else {
                     Span::styled("•", narr_style)
                 };
@@ -271,44 +340,96 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                 // badge already is that task's time, so a second figure would
                 // just duplicate it. Dim plain text (no chip, no billable
                 // parenthetical) keeps the loud accent badge on the group
-                // header visually primary.
-                let task_dur = entry
-                    .task_indices
-                    .get(ni)
-                    .and_then(|r| app.timesheet_task(*r).and_then(|t| t.dur));
-                let mut narr_spans = vec![
-                    // The indent is styled like the row so the full-line
-                    // cursor highlight fills the leading gutter too.
-                    Span::styled("    ", narr_style),
-                    bullet,
-                    Span::styled(format!(" {n}{status_suffix}"), narr_style),
-                ];
-                if entry.task_indices.len() > 1
-                    && let Some(d) = task_dur
+                // header visually primary. Right-padded to a fixed-width
+                // block so the per-task figures read as a tidy column.
+                let dur_block: Option<(String, Style)> =
+                    if entry.task_indices.len() > 1
+                        && let Some(d) = entry
+                            .task_indices
+                            .get(ni)
+                            .and_then(|r| app.timesheet_task(*r).and_then(|t| t.dur))
+                    {
+                        let dur_text = if d >= 3600 {
+                            format!("{}h {}m", d / 3600, (d % 3600) / 60)
+                        } else {
+                            format!("{}m", d / 60)
+                        };
+                        let dur_style = if copy_flash_active {
+                            Style::default().fg(theme.bg).bg(theme.fg)
+                        } else if is_narr_cursor {
+                            // The duration sits on the highlighted row: dim
+                            // text on the cursor background so the full-line
+                            // highlight runs through it, not around it.
+                            Style::default()
+                                .fg(theme.dim)
+                                .bg(theme.cursor)
+                                .add_modifier(Modifier::BOLD)
+                        } else if is_selected {
+                            Style::default().fg(theme.dim).bg(theme.selection)
+                        } else {
+                            Style::default().fg(theme.dim).bg(theme.panel)
+                        };
+                        Some((format!(" {:>7}", dur_text), dur_style))
+                    } else {
+                        None
+                    };
+                // Pre-wrap the narrative so wrapped continuation rows hang
+                // indented under the text (column 6, aligned with the first
+                // line's narrative) instead of snapping flush to the pane's
+                // left edge. Each emitted row fits the pane width, so the
+                // paragraph's own word-wrap never re-triggers on them.
+                let chunks = wrap_chunks(
+                    &format!("{n}{status_suffix}"),
+                    pane_w.saturating_sub(6),
+                );
+                let last_chunk_w = chunks
+                    .last()
+                    .map_or(0, |c| unicode_width::UnicodeWidthStr::width(c.as_str()));
+                // The duration rides the last text row when it fits, else it
+                // gets its own (still indented) continuation row.
+                let dur_on_last = dur_block
+                    .as_ref()
+                    .is_some_and(|(d, _)| 6 + last_chunk_w + unicode_width::UnicodeWidthStr::width(d.as_str()) <= pane_w);
+                let mut narr_rows: Vec<Line> = Vec::with_capacity(chunks.len() + 1);
+                for (ci, chunk) in chunks.iter().enumerate() {
+                    let last = ci + 1 == chunks.len();
+                    // The first row carries the bullet; continuation rows pad
+                    // to the narrative's text column. Indents are styled like
+                    // the row so the full-line cursor highlight fills the
+                    // leading gutter on every wrapped line.
+                    let mut spans: Vec<Span> = if ci == 0 {
+                        vec![
+                            Span::styled("    ", narr_style),
+                            bullet.clone(),
+                            Span::styled(" ", narr_style),
+                        ]
+                    } else {
+                        vec![Span::styled("      ", narr_style)]
+                    };
+                    spans.push(Span::styled(chunk.clone(), narr_style));
+                    if last && dur_on_last
+                        && let Some((d, s)) = &dur_block
+                    {
+                        spans.push(Span::styled(d.clone(), *s));
+                    }
+                    narr_rows.push(Line::from(spans));
+                }
+                // Whitespace-only narrative: keep the bullet row so the entry
+                // never disappears entirely.
+                if chunks.is_empty() {
+                    narr_rows.push(Line::from(vec![
+                        Span::styled("    ", narr_style),
+                        bullet,
+                        Span::styled(" ", narr_style),
+                    ]));
+                }
+                if !dur_on_last
+                    && let Some((d, s)) = &dur_block
                 {
-                    let dur_text = if d >= 3600 {
-                        format!("{}h {}m", d / 3600, (d % 3600) / 60)
-                    } else {
-                        format!("{}m", d / 60)
-                    };
-                    let dur_style = if copy_flash_active {
-                        Style::default().fg(theme.bg).bg(theme.fg)
-                    } else if is_narr_cursor {
-                        // The duration sits on the highlighted row: dim text
-                        // on the cursor background so the full-line highlight
-                        // runs through it, not around it.
-                        Style::default()
-                            .fg(theme.dim)
-                            .bg(theme.cursor)
-                            .add_modifier(Modifier::BOLD)
-                    } else if is_selected {
-                        Style::default().fg(theme.dim).bg(theme.selection)
-                    } else {
-                        Style::default().fg(theme.dim).bg(theme.panel)
-                    };
-                    // Right-pad to a fixed-width block so the per-task
-                    // figures read as a tidy column instead of ending ragged.
-                    narr_spans.push(Span::styled(format!(" {:>7}", dur_text), dur_style));
+                    narr_rows.push(Line::from(vec![
+                        Span::styled("      ", narr_style),
+                        Span::styled(d.clone(), *s),
+                    ]));
                 }
                 // No trailing padding: the highlight stops at the end of the
                 // narrative (or the per-task duration in a multi-task group),
@@ -317,7 +438,7 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                 if is_narr_cursor {
                     cursor_line = Some(lines.len());
                 }
-                lines.push(Line::from(narr_spans));
+                lines.append(&mut narr_rows);
             }
             let units = crate::app::billable_units(entry.total_secs, increment);
             day_total += entry.total_secs;
@@ -561,4 +682,73 @@ pub(crate) fn render_timesheet_calendar(frame: &mut Frame, area: Rect, app: &App
         Paragraph::new(lines).style(Style::default().bg(theme.panel)),
         inner,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::wrap_chunks;
+
+    #[test]
+    fn short_text_is_one_chunk() {
+        assert_eq!(wrap_chunks("short narrative", 30), vec!["short narrative"]);
+    }
+
+    #[test]
+    fn wraps_at_word_boundaries() {
+        assert_eq!(
+            wrap_chunks("one two three four", 10),
+            vec!["one two", "three four"]
+        );
+        assert_eq!(
+            wrap_chunks("one two three four", 8),
+            vec!["one two", "three", "four"]
+        );
+    }
+
+    #[test]
+    fn runs_of_spaces_collapse() {
+        assert_eq!(wrap_chunks("one  two   three", 30), vec!["one two three"]);
+    }
+
+    /// Every emitted chunk must fit its width budget, or the paragraph's own
+    /// word-wrap would re-trigger and break the hanging indent.
+    #[test]
+    fn chunks_never_exceed_width() {
+        for s in [
+            "one two three four five six seven",
+            "a b c d e f g h i j k l m",
+            "draft the opposition brief for the Smith versus Jones",
+        ] {
+            for w in 1..=15 {
+                for chunk in wrap_chunks(s, w) {
+                    assert!(
+                        unicode_width::UnicodeWidthStr::width(chunk.as_str()) <= w,
+                        "chunk {chunk:?} wider than {w} for {s:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn overlong_word_is_broken_not_overflowed() {
+        let chunks = wrap_chunks("prefix abcdefghijklmnop suffix", 6);
+        assert!(
+            chunks.iter().all(|c| unicode_width::UnicodeWidthStr::width(c.as_str()) <= 6),
+            "chunks: {chunks:?}"
+        );
+        assert!(
+            chunks.iter().any(|c| c.starts_with("abc")),
+            "the long word must be split into visible pieces: {chunks:?}"
+        );
+    }
+
+    #[test]
+    fn wide_chars_count_by_display_width() {
+        // 汉字 is 4 display columns: one chunk at width 5, split per glyph
+        // only when the budget demands it.
+        assert_eq!(wrap_chunks("汉字", 5), vec!["汉字"]);
+        assert_eq!(wrap_chunks("汉字", 4), vec!["汉字"]);
+        assert_eq!(wrap_chunks("汉字", 2), vec!["汉", "字"]);
+    }
 }

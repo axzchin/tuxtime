@@ -7,7 +7,7 @@ expression: buffer_to_text(&buf)
  MATTERS · BILLABLE       │  Tue 2026-05-05                      │ PERIOD                           
    +Smith           4h 15m│  +Smith @drafting  —  2h 0m  (2.0h)  │ billable     4.3h                
                           │    ▸ Draft motion for summary        │ non-billable 0.0h                
- TOTALS                   │judgment                              │ total        4.3h                
+ TOTALS                   │      judgment                        │ total        4.3h                
    billable         4h 15m│  +Smith @research  —  1h 0m  (1.0h)  │                                  
    non-billable         0m│    • Review discovery responses      │ ENTRY                            
    total            4h 15m│    ──  3h 0m (3.0h)                  │2026-05-05                        

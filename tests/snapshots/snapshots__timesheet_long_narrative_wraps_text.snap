@@ -6,10 +6,10 @@ expression: buffer_to_text(&buf)
                           │                                      │                                  
  MATTERS · BILLABLE       │  +Smith @drafting  —  2h 0m  (2.0h)  │ PERIOD                           
    +Smith           2h 00m│    ▸ draft the opposition brief for  │ billable     2.0h                
-                          │the Smith versus Jones summary        │ non-billable 0.0h                
- TOTALS                   │judgment hearing with a very long     │ total        2.0h                
-   billable         2h 00m│narrative body that keeps going and   │                                  
-   non-billable         0m│going and going                       │ ENTRY                            
+                          │      the Smith versus Jones summary  │ non-billable 0.0h                
+ TOTALS                   │      judgment hearing with a very    │ total        2.0h                
+   billable         2h 00m│      long narrative body that keeps  │                                  
+   non-billable         0m│      going and going and going       │ ENTRY                            
    total            2h 00m│                                      │2026-05-06                        
                           │                                      │+Smith @drafting                  
                           │                                      │ group dur     2.0h  · billable   

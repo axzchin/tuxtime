@@ -465,6 +465,22 @@ off-screen:
 
 **Files**: `src/ui/timesheet_render.rs`, `src/ui/mod.rs`, `Cargo.toml`
 
+### 43. Timesheet Wrap Polish + Copy-Flash Triangle
+
+Two timesheet rendering refinements:
+
+- **Wrapped narratives hang indented.** When a narrative wraps, the
+  continuation rows now align under the narrative text (column 6) instead of
+  snapping flush to the pane's left edge — a wrapped entry reads as one tidy
+  block. Narrative rows are pre-wrapped (overlong words are broken, never
+  overflowing), so the paragraph's own wrap never re-triggers on them.
+- **The copy flash covers the cursor triangle.** After copying, the whole
+  group inverts white — the `▸` triangle now joins the flash instead of
+  keeping its dark cursor background, which used to leave a black box around
+  it on the flashing row.
+
+**Files**: `src/ui/timesheet_render.rs`, `tests/snapshots.rs`
+
 ---
 
 ## Keybinding Reference

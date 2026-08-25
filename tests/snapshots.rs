@@ -764,6 +764,49 @@ fn timesheet_selected_group_dims_only_done_siblings() {
     );
 }
 
+/// The copy flash inverts the whole group white — including the cursor
+/// triangle, which must join the flash instead of keeping its cursor
+/// background (a dark box around the triangle would punch a hole in the
+/// inverted highlight).
+#[test]
+fn timesheet_copy_flash_covers_cursor_triangle() {
+    let body = concat!(
+        "2026-05-06 Non-billable work +Smith @drafting dur:900 bill:n\n",
+        "2026-05-06 Billable work +Smith @drafting dur:3600\n",
+    );
+    std::fs::write(FIXTURE_PATH, body).expect("seed flash fixture");
+    let mut app = App::new(
+        PathBuf::from(FIXTURE_PATH),
+        body.to_string(),
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.env.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.prefs.density = Density::Compact;
+    app.set_view(View::Timesheet);
+    // Group 0 (the DNB narrative, which the cursor sits on) is flashing now.
+    app.timesheet.copy_flash = Some((0, std::time::Instant::now()));
+
+    let theme = app.theme();
+    let buf = render(&app);
+    let tri = (0..buf.area.height)
+        .find_map(|y| {
+            (0..buf.area.width)
+                .find(|&x| buf[(x, y)].symbol() == "▸")
+                .map(|x| (x, y))
+        })
+        .expect("cursor triangle");
+    let cell = buf[tri].clone();
+    assert_eq!(
+        cell.bg, theme.fg,
+        "triangle must join the copy flash background, not keep a dark box"
+    );
+    assert_eq!(
+        cell.fg, theme.bg,
+        "triangle text must invert like the rest of the flashing group"
+    );
+}
+
 /// A narrative longer than the timesheet's center pane must word-wrap at
 /// the pane boundary instead of clipping mid-word at the right edge — the
 /// narrative tail stays visible and no text runs under the detail sidebar.
@@ -794,6 +837,12 @@ fn timesheet_long_narrative_wraps_in_center_pane() {
     assert!(
         text.contains("and going and going"),
         "narrative tail must wrap into view instead of clipping:\n{text}"
+    );
+    // Continuation rows hang indented under the narrative text (column 6) so
+    // a wrapped entry reads as one tidy block — not a flush-left orphan line.
+    assert!(
+        text.contains("      judgment hearing with a very"),
+        "wrapped continuation must be indented under the narrative:\n{text}"
     );
 }
 
