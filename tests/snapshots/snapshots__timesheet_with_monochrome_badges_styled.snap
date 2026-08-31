@@ -33,4 +33,4 @@ expression: buffer_to_styled(&buf)
 {fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#2a2f38 bg=#1f232b}│{/}{fg=#6b7280 bg=#1f232b mod=bold}  Non-billable: 15m (0.3h){/}{bg=#1f232b}            {/}{fg=#2a2f38 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
 {fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#2a2f38 bg=#1f232b}│{/}{fg=#8aa9c9 bg=#1f232b mod=bold}  Total:        1h 15m (1.3h){/}{bg=#1f232b}         {/}{fg=#2a2f38 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
 {fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#2a2f38 bg=#1f232b}└──────────────────────────────────────┘{/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
-{fg=#1a1d23 bg=#8aa9c9 mod=bold} TIMESHEET {/}{bg=#252a33}  {/}{fg=#a8b0bc bg=#252a33}j/k navigate  ·  J/K group  ·  Enter edit  ·  b {/}{fg=#6b7280 bg=#252a33}2 open · 2026-05-06 · tuxtime 2026.7.7 {/}
+{fg=#1a1d23 bg=#8aa9c9 mod=bold} TIMESHEET {/}{bg=#252a33}  {/}{fg=#a8b0bc bg=#252a33}j/k navigate  ·  J/K group  ·  Enter edit  ·  b {/}{fg=#6b7280 bg=#252a33}2 open · 2026-05-06 · tuxtime 2026.7.8 {/}
