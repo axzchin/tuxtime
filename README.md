@@ -405,6 +405,7 @@ chords like `ZZ`, modifier forms like `Ctrl-n` / `Alt-x`, named keys like
 | Key | Action |
 | --- | --- |
 | `n` | add task |
+| `Enter` | start the timer on the selected task — start-only by default (a second press never stops it); set `enter_timer_toggle = true` to make it toggle like `t` |
 | `e` | edit current task in Normal mode (see [Edit dialog](#edit-dialog)) |
 | `i` | edit current task in Insert mode (see [Edit dialog](#edit-dialog)) |
 | `x` | toggle complete |
@@ -441,6 +442,8 @@ The modal keys below apply in Normal mode:
 | `Esc` (in Insert) | return to Normal mode |
 | `Esc` (in Normal) | cancel and close |
 | `Enter` (in Insert and Normal) | save |
+| `Ctrl+Enter` (in Insert and Normal) | save and start the timer on the saved task (most terminals send this as `Ctrl+J`, which is accepted too) |
+| `Enter` (in Normal, after saving) | the terminal-safe alternative: save with `Enter`, then press `Enter` again in the list to start the timer on the saved task |
 
 ### Filtering, sort, view
 
@@ -677,10 +680,19 @@ badge_theme = "semantic"
 # Prefill the new-task dialog with a leading `+` so the project name can be
 # typed immediately (default true). Toggle in Settings with `+`.
 prefill_plus_new = true
+# Where the edit dialog parks the cursor: at the end of the narrative
+# (default false, so typing appends) or at its first word (true). Toggle in
+# Settings with `e`.
+edit_cursor_narrative_start = false
 # After completing a task with no time logged, open the add-time prompt so
 # the finished work isn't silently missing from the timesheet (default true).
 # Toggle in Settings with `x`; off completes silently.
 prompt_complete_no_time = true
+# Enter in Normal mode: false (default) starts the timer on the selected task
+# without ever stopping one — a second press is a no-op, so the save-then-
+# Enter flow can't accidentally stop the timer. true makes Enter a full
+# toggle exactly like `t` (a second press stops). Toggle in Settings with `t`.
+enter_timer_toggle = false
 ```
 
 Both settings are display-only and do not alter task data. Press `B` in

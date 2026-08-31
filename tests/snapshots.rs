@@ -762,6 +762,68 @@ fn timesheet_selected_group_dims_only_done_siblings() {
         Some(theme.dim),
         "per-task duration must be dim plain text"
     );
+    // The cursor narrative's own duration joins the white highlight (bright
+    // foreground on the cursor background) instead of staying dim — the
+    // hovered task's time reads as part of the highlight, not a secondary
+    // label.
+    assert_eq!(
+        fg_of(&buf, "1h 0m"),
+        Some(theme.fg),
+        "cursor narrative's per-task time must join the highlight"
+    );
+}
+
+/// Pressing `i` on a task opens the edit dialog with the cursor parked
+/// right after the narrative — the inverted cursor block sits between the
+/// last narrative word and the first `@context` / `+project` token, so
+/// appending narrative text is immediate.
+#[test]
+fn edit_dialog_cursor_at_narrative_end() {
+    let body = concat!(
+        "(A) 2026-04-28 Call dentist to reschedule cleaning @phone +health due:2026-05-08\n",
+        "2026-05-06 Draft motion +Smith @drafting dur:3600\n",
+    );
+    std::fs::write(FIXTURE_PATH, body).expect("seed edit-dialog fixture");
+    let mut app = App::new(
+        PathBuf::from(FIXTURE_PATH),
+        body.to_string(),
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.env.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.prefs.density = Density::Compact;
+    // The exact `i` flow: edit selection + Insert-mode draft seeded at the
+    // narrative edge (default = end).
+    app.selection.enter_edit(0);
+    app.draft_set_edit_pref(
+        "(A) 2026-04-28 Call dentist to reschedule cleaning @phone +health due:2026-05-08"
+            .to_string(),
+        true,
+    );
+    app.nav.mode = Mode::Screen(Screen::Insert);
+    snapshot_app("edit_dialog_cursor_at_narrative_end", &app);
+}
+
+/// A multi-task group renders each task's own duration next to its
+/// narrative. The cursor row's time joins the white highlight; open
+/// siblings stay dim. Locked in as a full-frame snapshot.
+#[test]
+fn timesheet_multi_task_group() {
+    let body = concat!(
+        "2026-05-06 Alpha open +Smith @drafting dur:3600\n",
+        "2026-05-06 Beta open +Smith @drafting dur:1800\n",
+    );
+    std::fs::write(FIXTURE_PATH, body).expect("seed multi-task fixture");
+    let mut app = App::new(
+        PathBuf::from(FIXTURE_PATH),
+        body.to_string(),
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.env.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.prefs.density = Density::Compact;
+    app.set_view(View::Timesheet);
+    snapshot_app("timesheet_multi_task_group", &app);
 }
 
 /// The copy flash inverts the whole group white — including the cursor

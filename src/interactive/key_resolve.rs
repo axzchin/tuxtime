@@ -117,6 +117,9 @@ fn builtin_action(key: KeyEvent, mut chord: Option<&mut Chord>) -> Option<Action
         KeyCode::Esc => Action::EscapeStack,
         KeyCode::Char('W') => Action::ChangeWeekStart,
         KeyCode::Char('t') => Action::TimerStartStop,
+        // Enter starts the timer (a second press never stops it) — the
+        // save-then-Enter flow out of the edit dialog.
+        KeyCode::Enter => Action::TimerStart,
         KeyCode::Char('m') => Action::ManualTimeEntry,
         KeyCode::Char('Z') => Action::OpenThemePicker,
         KeyCode::Char('V') => Action::OpenTimesheet,
@@ -148,6 +151,11 @@ mod tests {
         assert_eq!(
             resolve_builtin_single_key(key('t')),
             Some(Action::TimerStartStop)
+        );
+        assert_eq!(
+            resolve_builtin_single_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+            Some(Action::TimerStart),
+            "Enter must start (not toggle) the timer"
         );
         assert_eq!(
             resolve_builtin_single_key(key('N')),

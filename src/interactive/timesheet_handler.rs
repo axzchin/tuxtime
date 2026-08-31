@@ -240,7 +240,8 @@ pub(crate) fn handle_timesheet_keys(app: &mut App, key: KeyEvent) {
                 TimesheetTaskRef::Active(abs) => {
                     if let Some(raw) = app.task_raw(abs) {
                         app.selection.enter_edit(abs);
-                        app.draft_set(raw);
+                        // Same narrative-edge cursor as `e` in the list view.
+                        app.draft_set_edit_pref(raw, false);
                         app.session.manual_time_entry = false;
                         app.nav.mode = Mode::Screen(Screen::Insert);
                     }

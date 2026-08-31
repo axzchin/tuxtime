@@ -101,6 +101,21 @@ fn build_app() -> App {
     )
 }
 
+/// App seeded with an arbitrary todo.txt body (unique path per call so
+/// parallel tests can't race on the same file).
+fn build_app_with_body(raw: &str) -> App {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static N: AtomicUsize = AtomicUsize::new(0);
+    let n = N.fetch_add(1, Ordering::Relaxed);
+    let path = std::env::temp_dir().join(format!(
+        "tuxtime-bindings-{}-{}.txt",
+        std::process::id(),
+        n
+    ));
+    let _ = std::fs::write(&path, raw);
+    App::new(path, raw.into(), "2026-05-06".into(), Config::default())
+}
+
 fn build_app_with_due() -> App {
     let path = std::env::temp_dir().join(format!(
         "tuxtime-bindings-{}-{:?}.txt",
@@ -3421,6 +3436,463 @@ fn begin_add_blank_when_prefill_disabled() {
     apply_action(&mut app, Action::BeginAdd);
     assert_eq!(app.nav.mode, Mode::Screen(Screen::Insert));
     assert_eq!(app.draft.text(), "");
+}
+
+// ── edit dialog narrative-end cursor ──────────────────────────────
+
+/// `e` seeds the edit dialog in Normal mode with the cursor parked at the
+/// end of the narrative — right before the trailing metadata — so the user
+/// doesn't scan backwards past `+project`/`@context`/`dur:` to append text.
+#[test]
+fn begin_edit_parks_cursor_at_narrative_end() {
+    let mut app = build_app_with_body("2026-05-06 Draft motion +Smith @drafting dur:3600\n");
+    apply_action(&mut app, Action::BeginEdit);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Insert));
+    assert_eq!(app.draft.input_mode(), DialogInputMode::Normal);
+    let text = app.draft.text().to_string();
+    let narrative_end = text.find("+Smith").expect("project present") - 1;
+    assert_eq!(
+        app.draft.cursor(),
+        narrative_end,
+        "cursor must sit at the end of the narrative, before the metadata"
+    );
+    // Typing appends to the narrative, not to the end of the line.
+    app.draft_insert_char(' ');
+    app.draft_insert_char('X');
+    assert_eq!(
+        app.draft.text(),
+        "2026-05-06 Draft motion X +Smith @drafting dur:3600"
+    );
+}
+
+/// `i` seeds the edit dialog in Insert mode with the same narrative-end
+/// cursor.
+#[test]
+fn begin_edit_insert_parks_cursor_at_narrative_end() {
+    let mut app = build_app_with_body("2026-05-06 Draft motion +Smith @drafting dur:3600\n");
+    apply_action(&mut app, Action::BeginEditInsert);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Insert));
+    assert_eq!(app.draft.input_mode(), DialogInputMode::Insert);
+    let text = app.draft.text().to_string();
+    assert_eq!(
+        app.draft.cursor(),
+        text.find("+Smith").expect("project present") - 1
+    );
+}
+
+/// A task with no trailing metadata parks the cursor at the end of the line
+/// (the narrative IS the line).
+#[test]
+fn begin_edit_parks_cursor_at_end_when_no_metadata() {
+    let mut app = build_app_with_body("2026-05-06 Draft motion\n");
+    apply_action(&mut app, Action::BeginEdit);
+    assert_eq!(app.draft.cursor(), app.draft.text().len());
+}
+
+/// With `edit_cursor_narrative_start` on, `e` parks the cursor on the
+/// narrative's first word instead of its end.
+#[test]
+fn begin_edit_parks_cursor_at_narrative_start_when_pref() {
+    let mut app = build_app_with_body("2026-05-06 Draft motion +Smith @drafting dur:3600\n");
+    app.prefs.edit_cursor_narrative_start = true;
+    apply_action(&mut app, Action::BeginEdit);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Insert));
+    assert_eq!(app.draft.input_mode(), DialogInputMode::Normal);
+    let text = app.draft.text().to_string();
+    assert_eq!(
+        app.draft.cursor(),
+        text.find("Draft").expect("narrative present"),
+        "cursor must sit on the narrative's first word"
+    );
+}
+
+/// `i` with the start pref lands in Insert mode at the narrative's first
+/// word.
+#[test]
+fn begin_edit_insert_parks_cursor_at_narrative_start_when_pref() {
+    let mut app = build_app_with_body("2026-05-06 Draft motion +Smith @drafting dur:3600\n");
+    app.prefs.edit_cursor_narrative_start = true;
+    apply_action(&mut app, Action::BeginEditInsert);
+    assert_eq!(app.draft.input_mode(), DialogInputMode::Insert);
+    let text = app.draft.text().to_string();
+    assert_eq!(
+        app.draft.cursor(),
+        text.find("Draft").expect("narrative present")
+    );
+}
+
+/// Pressing `i` through the real key pipeline (resolution → dispatch →
+/// dialog seeding) parks the cursor right after the narrative, before the
+/// trailing metadata.
+#[test]
+fn pressing_i_parks_cursor_after_narrative_end_to_end() {
+    let mut app = build_app_with_body("2026-05-06 Draft motion +Smith @drafting dur:3600\n");
+    dispatch(&mut app, key('i'), &KeyBindings::default());
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Insert));
+    let text = app.draft.text().to_string();
+    assert_eq!(
+        app.draft.cursor(),
+        text.find("+Smith").expect("project present") - 1
+    );
+}
+
+/// The `N` carry-forward dialog seeds the carried body with the same
+/// narrative-edge cursor as `i` — the carried text is mostly narrative to
+/// polish.
+#[test]
+fn begin_session_from_current_parks_cursor_at_narrative_end() {
+    let mut app = build_app_with_body("2026-05-05 Draft motion +Smith @drafting dur:7200\n");
+    apply_action(&mut app, Action::BeginSessionFromCurrent);
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Insert));
+    assert_eq!(app.draft.input_mode(), DialogInputMode::Insert);
+    let text = app.draft.text().to_string();
+    assert!(text.contains("Draft motion"), "carried body: {text}");
+    assert!(text.contains("+Smith"), "project carried: {text}");
+    let expected = text.find("+Smith").expect("project present") - 1;
+    assert_eq!(
+        app.draft.cursor(),
+        expected,
+        "carry-forward cursor must sit at the end of the narrative"
+    );
+}
+
+// ── nudge / manual-entry `+` prefill ──────────────────────────────
+
+/// The idle-nudge `n` new-entry dialog gets the same `+` prefill as `n` in
+/// Normal mode.
+#[test]
+fn idle_nudge_n_prefills_plus() {
+    let mut app = build_app();
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
+    handle_idle_nudge(&mut app, key('n'));
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Insert));
+    assert_eq!(app.draft.text(), "+");
+    assert_eq!(app.draft.cursor(), 1, "cursor sits right after the sigil");
+}
+
+/// With the prefill toggled off, the nudge's `n` keeps the blank dialog.
+#[test]
+fn idle_nudge_n_blank_when_prefill_disabled() {
+    let mut app = build_app();
+    app.prefs.prefill_plus_new = false;
+    app.nav.mode = Mode::Nudge(Nudge::Idle);
+    handle_idle_nudge(&mut app, key('n'));
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Insert));
+    assert_eq!(app.draft.text(), "");
+}
+
+/// The manual-entry `m` → `n` new-entry dialog also prefills `+`.
+#[test]
+fn manual_entry_n_prefills_plus() {
+    let mut app = build_app();
+    app.nav.mode = Mode::Nudge(Nudge::ManualEntryChoice);
+    handle_manual_entry_choice(&mut app, key('n'));
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Insert));
+    assert_eq!(app.draft.text(), "+");
+    assert!(app.session.manual_time_entry);
+}
+
+/// The settings `e` key toggles the edit-cursor narrative-start pref.
+#[test]
+fn settings_e_toggles_edit_cursor_pref() {
+    let mut app = build_app();
+    app.nav.mode = Mode::Screen(Screen::Settings);
+    assert!(!app.prefs.edit_cursor_narrative_start);
+    handle_settings(&mut app, key('e'));
+    assert!(app.prefs.edit_cursor_narrative_start);
+    handle_settings(&mut app, key('e'));
+    assert!(!app.prefs.edit_cursor_narrative_start);
+}
+
+/// The settings `t` key toggles the enter-timer pref (start-only ↔ toggle).
+#[test]
+fn settings_t_toggles_enter_timer_pref() {
+    let mut app = build_app();
+    app.nav.mode = Mode::Screen(Screen::Settings);
+    assert!(!app.prefs.enter_timer_toggle, "default: start-only");
+    handle_settings(&mut app, key('t'));
+    assert!(app.prefs.enter_timer_toggle);
+    handle_settings(&mut app, key('t'));
+    assert!(!app.prefs.enter_timer_toggle);
+}
+
+// ── Ctrl+Enter: save and start timer ─────────────────────────────
+
+/// Ctrl+Enter in the add dialog saves the task AND starts the timer on it,
+/// driven through the real key pipeline: `n` opens the dialog, the text is
+/// typed, and the Ctrl+Enter chord is dispatched.
+#[test]
+fn ctrl_enter_in_add_dialog_saves_and_starts_timer() {
+    let mut app = build_app();
+    let before = app.tasks().len();
+    dispatch(&mut app, key('n'), &KeyBindings::default());
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Insert));
+    app.draft_set_insert("Buy milk +shop".into());
+
+    dispatch(
+        &mut app,
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL),
+        &KeyBindings::default(),
+    );
+
+    assert_eq!(
+        app.nav.mode,
+        Mode::Screen(Screen::Normal),
+        "dialog must close on Ctrl+Enter"
+    );
+    assert_eq!(app.tasks().len(), before + 1, "task must be saved");
+    assert!(app.timer_running(), "Ctrl+Enter must start the timer");
+    let active = app.active_timer_task().expect("timer on a task");
+    assert!(
+        active.raw.contains("Buy milk"),
+        "timer must run on the new task, got: {}",
+        active.raw
+    );
+}
+
+/// Plain Enter still saves WITHOUT starting the timer — the control for
+/// the Ctrl+Enter behavior.
+#[test]
+fn plain_enter_in_add_dialog_saves_without_timer() {
+    let mut app = build_app();
+    let before = app.tasks().len();
+    dispatch(&mut app, key('n'), &KeyBindings::default());
+    app.draft_set_insert("Buy milk".into());
+
+    dispatch(
+        &mut app,
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        &KeyBindings::default(),
+    );
+
+    assert_eq!(app.tasks().len(), before + 1);
+    assert!(!app.timer_running(), "plain Enter must not start the timer");
+}
+
+/// The save-then-start flow (terminal-safe alternative to Ctrl+Enter): Enter
+/// in the dialog saves and closes it, then Enter in Normal mode starts the
+/// timer on the just-saved task — two plain Enter presses, no modifier
+/// chords, no terminal key-encoding involved.
+#[test]
+fn enter_save_then_enter_start_flow() {
+    let mut app = build_app();
+    let before = app.tasks().len();
+    dispatch(&mut app, key('n'), &KeyBindings::default());
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Insert));
+    app.draft_set_insert("Buy milk +shop".into());
+
+    // Enter #1: save + close the dialog (plain save, no timer).
+    dispatch(
+        &mut app,
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        &KeyBindings::default(),
+    );
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
+    assert_eq!(app.tasks().len(), before + 1);
+    assert!(!app.timer_running());
+
+    // Enter #2: Normal mode starts the timer on the saved task.
+    dispatch(
+        &mut app,
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        &KeyBindings::default(),
+    );
+    assert!(app.timer_running(), "Enter in Normal must start the timer");
+    let active = app.active_timer_task().expect("timer on a task");
+    assert!(
+        active.raw.contains("Buy milk"),
+        "timer must run on the saved task, got: {}",
+        active.raw
+    );
+
+    // Enter #3: a third press must NOT stop the timer (start-only).
+    dispatch(
+        &mut app,
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        &KeyBindings::default(),
+    );
+    assert!(app.timer_running(), "Enter must never stop the timer");
+}
+
+/// Same save-then-Enter flow with the `enter_timer_toggle` pref on: Enter
+/// now behaves exactly like `t`, so a second press stops the timer.
+#[test]
+fn enter_save_then_enter_toggle_flow_when_pref_enabled() {
+    let mut app = build_app();
+    app.prefs.enter_timer_toggle = true;
+    let before = app.tasks().len();
+    dispatch(&mut app, key('n'), &KeyBindings::default());
+    app.draft_set_insert("Buy milk +shop".into());
+
+    dispatch(
+        &mut app,
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        &KeyBindings::default(),
+    );
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
+    assert_eq!(app.tasks().len(), before + 1);
+    assert!(!app.timer_running());
+
+    // Enter: start.
+    dispatch(
+        &mut app,
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        &KeyBindings::default(),
+    );
+    assert!(app.timer_running());
+
+    // Enter again: stop, exactly like `t`.
+    dispatch(
+        &mut app,
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        &KeyBindings::default(),
+    );
+    assert!(!app.timer_running(), "pref on: second Enter must stop");
+}
+
+/// Ctrl+Enter in the edit dialog (`e` opens it in Normal input mode) saves
+/// the edit and starts the timer on the edited task.
+#[test]
+fn ctrl_enter_in_edit_dialog_saves_and_starts_timer() {
+    let mut app = build_app_with_body("2026-05-06 Draft motion +Smith @drafting dur:0\n");
+    apply_action(&mut app, Action::BeginEdit);
+    assert_eq!(app.draft.input_mode(), DialogInputMode::Normal);
+
+    dispatch(
+        &mut app,
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL),
+        &KeyBindings::default(),
+    );
+
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
+    assert!(app.timer_running(), "Ctrl+Enter on an edit must start the timer");
+    let active = app.active_timer_task().expect("timer on a task");
+    assert!(
+        active.raw.contains("Draft motion"),
+        "timer must run on the edited task, got: {}",
+        active.raw
+    );
+}
+
+/// Ctrl+Enter is not swallowed by the autocomplete popup: when the popup is
+/// open (a typed `+work` matches an existing project), the chord still
+/// saves and starts the timer instead of being eaten as a popup key.
+#[test]
+fn ctrl_enter_with_autocomplete_open_saves_and_starts_timer() {
+    let mut app = build_app_with_body("a +work\n");
+    dispatch(&mut app, key('n'), &KeyBindings::default());
+    app.draft_set_insert("Buy +work".into());
+    assert!(
+        app.autocomplete_visible(),
+        "the +work token must open the project autocomplete"
+    );
+
+    dispatch(
+        &mut app,
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL),
+        &KeyBindings::default(),
+    );
+
+    assert_eq!(app.tasks().len(), 2, "task must be saved");
+    assert!(app.timer_running());
+    let active = app.active_timer_task().expect("timer on a task");
+    assert!(active.raw.contains("Buy"), "got: {}", active.raw);
+}
+
+/// Ctrl+Enter on an empty draft is a no-op: nothing is saved, no timer
+/// starts, and the dialog stays open.
+#[test]
+fn ctrl_enter_on_empty_draft_does_nothing() {
+    let mut app = build_app();
+    let before = app.tasks().len();
+    dispatch(&mut app, key('n'), &KeyBindings::default());
+    app.draft_clear();
+
+    dispatch(
+        &mut app,
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL),
+        &KeyBindings::default(),
+    );
+
+    assert_eq!(
+        app.nav.mode,
+        Mode::Screen(Screen::Insert),
+        "empty Ctrl+Enter must keep the dialog open"
+    );
+    assert_eq!(app.tasks().len(), before, "no task must be saved");
+    assert!(!app.timer_running());
+}
+
+// ── Ctrl+J = Ctrl+Enter (raw-mode LF) ────────────────────────────
+
+/// Most terminals deliver Ctrl+Enter as LF (0x0A), which crossterm parses
+/// in raw mode as Ctrl+J (`Char('j')` + CONTROL), NOT as Enter. The dialog
+/// must treat that as the same save-and-start chord.
+#[test]
+fn ctrl_j_in_add_dialog_saves_and_starts_timer() {
+    let mut app = build_app();
+    let before = app.tasks().len();
+    dispatch(&mut app, key('n'), &KeyBindings::default());
+    app.draft_set_insert("Buy milk +shop".into());
+
+    dispatch(
+        &mut app,
+        KeyEvent::new(KeyCode::Char('j'), KeyModifiers::CONTROL),
+        &KeyBindings::default(),
+    );
+
+    assert_eq!(
+        app.nav.mode,
+        Mode::Screen(Screen::Normal),
+        "Ctrl+J must close the dialog like Ctrl+Enter"
+    );
+    assert_eq!(app.tasks().len(), before + 1, "task must be saved");
+    assert!(app.timer_running(), "Ctrl+J must start the timer");
+    let active = app.active_timer_task().expect("timer on a task");
+    assert!(
+        active.raw.contains("Buy milk"),
+        "timer must run on the new task, got: {}",
+        active.raw
+    );
+}
+
+/// The Ctrl+J alias also works in the edit dialog's Normal input mode
+/// (`e`), which uses the other handler.
+#[test]
+fn ctrl_j_in_edit_dialog_saves_and_starts_timer() {
+    let mut app = build_app_with_body("2026-05-06 Draft motion +Smith @drafting dur:0\n");
+    apply_action(&mut app, Action::BeginEdit);
+    assert_eq!(app.draft.input_mode(), DialogInputMode::Normal);
+
+    dispatch(
+        &mut app,
+        KeyEvent::new(KeyCode::Char('j'), KeyModifiers::CONTROL),
+        &KeyBindings::default(),
+    );
+
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
+    assert!(app.timer_running());
+    let active = app.active_timer_task().expect("timer on a task");
+    assert!(
+        active.raw.contains("Draft motion"),
+        "got: {}",
+        active.raw
+    );
+}
+
+/// The alias must not swallow a plain `j`: in Insert mode it types the
+/// letter as usual.
+#[test]
+fn plain_j_in_add_dialog_types_j() {
+    let mut app = build_app();
+    dispatch(&mut app, key('n'), &KeyBindings::default());
+    app.draft_clear();
+
+    dispatch(&mut app, key('j'), &KeyBindings::default());
+
+    assert_eq!(app.nav.mode, Mode::Screen(Screen::Insert));
+    assert_eq!(app.draft.text(), "j");
+    assert!(!app.timer_running());
 }
 
 /// The settings `+` key toggles the prefill.

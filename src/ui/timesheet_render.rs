@@ -357,11 +357,12 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                         let dur_style = if copy_flash_active {
                             Style::default().fg(theme.bg).bg(theme.fg)
                         } else if is_narr_cursor {
-                            // The duration sits on the highlighted row: dim
-                            // text on the cursor background so the full-line
-                            // highlight runs through it, not around it.
+                            // The duration sits on the highlighted row and
+                            // joins the narrative's highlight: bright text on
+                            // the cursor background (not dim, which would read
+                            // as a secondary label mid-highlight).
                             Style::default()
-                                .fg(theme.dim)
+                                .fg(theme.fg)
                                 .bg(theme.cursor)
                                 .add_modifier(Modifier::BOLD)
                         } else if is_selected {

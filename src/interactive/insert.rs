@@ -207,14 +207,23 @@ fn exit_insert(app: &mut App, cancelled: bool) {
 
 pub(crate) fn handle_insert_normal(app: &mut App, key: KeyEvent) {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    // Ctrl+Enter in raw mode: most terminals send LF (0x0A), which crossterm
+    // deliberately parses as Ctrl+J (`Char('j')` + CONTROL) rather than Enter
+    // (see crossterm's parse.rs, Issue #371). Both spellings must save and
+    // start the timer, or the chord silently does nothing on those terminals.
+    // CONTROL+ALT is AltGr (text input on international layouts), so the
+    // chord is gated on exactly one modifier, matching `resolve_edit_key`.
+    let ctrl_enter = ctrl
+        && !key.modifiers.contains(KeyModifiers::ALT)
+        && matches!(key.code, KeyCode::Enter | KeyCode::Char('j'));
     match key.code {
-        KeyCode::Enter if !ctrl => {
+        KeyCode::Enter if !ctrl_enter => {
             let outcome = commit_draft(app);
             if !matches!(outcome, AddOutcome::Parsed) {
                 exit_insert(app, false);
             }
         }
-        KeyCode::Enter if ctrl => {
+        KeyCode::Enter | KeyCode::Char('j') if ctrl_enter => {
             let outcome = commit_draft(app);
             if outcome == AddOutcome::Saved {
                 exit_insert(app, false);
@@ -376,11 +385,20 @@ pub(crate) fn handle_insert(app: &mut App, key: KeyEvent) {
     }
 
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    // Ctrl+Enter in raw mode: most terminals send LF (0x0A), which crossterm
+    // deliberately parses as Ctrl+J (`Char('j')` + CONTROL) rather than Enter
+    // (see crossterm's parse.rs, Issue #371). Both spellings must save and
+    // start the timer, or the chord silently does nothing on those terminals.
+    // CONTROL+ALT is AltGr (text input on international layouts), so the
+    // chord is gated on exactly one modifier, matching `resolve_edit_key`.
+    let ctrl_enter = ctrl
+        && !key.modifiers.contains(KeyModifiers::ALT)
+        && matches!(key.code, KeyCode::Enter | KeyCode::Char('j'));
     match key.code {
         KeyCode::Esc => {
             app.draft.set_input_mode(DialogInputMode::Normal);
         }
-        KeyCode::Enter if !ctrl => {
+        KeyCode::Enter if !ctrl_enter => {
             let outcome = commit_draft(app);
             // `Parsed` means the NL parser rewrote the draft into canonical
             // todo.txt and is asking the user to confirm — stay in Insert so
@@ -389,7 +407,7 @@ pub(crate) fn handle_insert(app: &mut App, key: KeyEvent) {
                 exit_insert(app, false);
             }
         }
-        KeyCode::Enter if ctrl => {
+        KeyCode::Enter | KeyCode::Char('j') if ctrl_enter => {
             let outcome = commit_draft(app);
             if outcome == AddOutcome::Saved {
                 exit_insert(app, false);

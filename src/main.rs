@@ -122,12 +122,27 @@ fn main() -> Result<()> {
     }
 
     let terminal = ratatui::init();
+    // Ask the terminal for kitty-protocol key reporting (if supported) so
+    // modified keys like Ctrl+Enter arrive as a distinct `CSI 13;5u` escape
+    // sequence instead of the plain CR most terminals send, which is
+    // indistinguishable from Enter. Terminals without support ignore the
+    // request and keep the legacy encodings (incl. LF-as-Ctrl+J), which the
+    // dialog also understands, so this is strictly additive.
+    let _ = crossterm::execute!(
+        io::stdout(),
+        event::PushKeyboardEnhancementFlags(
+            event::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+        )
+    );
     // Give the window/tab a consistent `tuxtime <path>` title across terminals
     // and operating systems, shortening long paths to fit a fixed budget.
     let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
     let title = ui::title::terminal_title(&path, home.as_deref(), ui::title::DEFAULT_BUDGET);
     let _ = crossterm::execute!(io::stdout(), crossterm::terminal::SetTitle(title.clone()));
     let result = run(terminal, &mut app_state, &keybinds, config_rx, title);
+    // Undo the kitty-protocol request so the shell isn't left with modified
+    // keys re-encoded after we exit.
+    let _ = crossterm::execute!(io::stdout(), event::PopKeyboardEnhancementFlags);
     ratatui::restore();
     // Clear the title on exit so the shell retitles on its next prompt rather
     // than leaving `tuxtime …` behind.
@@ -374,7 +389,10 @@ fn open_path_in_editor(path: &std::path::Path) -> Result<()> {
     ratatui::crossterm::terminal::enable_raw_mode()?;
     ratatui::crossterm::execute!(
         io::stdout(),
-        ratatui::crossterm::terminal::EnterAlternateScreen
+        ratatui::crossterm::terminal::EnterAlternateScreen,
+        ratatui::crossterm::event::PushKeyboardEnhancementFlags(
+            ratatui::crossterm::event::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+        )
     )?;
     match status {
         Ok(_) => Ok(()),

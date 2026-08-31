@@ -79,11 +79,20 @@ pub struct Prefs {
     /// Prefill the new-task dialog with a leading `+` so the user can type
     /// the project name immediately. Default true.
     pub prefill_plus_new: bool,
+    /// Where the edit dialog parks the cursor: `false` (default) at the end
+    /// of the narrative so typing appends, `true` at the narrative's first
+    /// word. Toggle in Settings with `e`.
+    pub edit_cursor_narrative_start: bool,
     /// After completing a task with no time logged, open the add-time prompt
     /// so the finished work doesn't silently vanish from the timesheet
     /// (a completed task with no `dur:` never appears there). Default true;
     /// turn off for a plain, no-prompt completion flow.
     pub prompt_complete_no_time: bool,
+    /// `Enter` in Normal mode: `false` (default) starts the timer on the
+    /// selected task without ever stopping one (a second press is a no-op);
+    /// `true` makes it a full toggle exactly like `t`. Toggle in Settings
+    /// with `t`.
+    pub enter_timer_toggle: bool,
     /// Whether the `log:YYYY-MM-DD` bookkeeping token is rendered inline.
     pub show_log_inline: bool,
     /// Palette used by duration and non-billable metadata chips.
@@ -131,7 +140,9 @@ impl Prefs {
             hidden_keys: cfg.hidden_keys,
             show_duration_inline: cfg.show_duration_inline.unwrap_or(true),
             prefill_plus_new: cfg.prefill_plus_new.unwrap_or(true),
+            edit_cursor_narrative_start: cfg.edit_cursor_narrative_start.unwrap_or(false),
             prompt_complete_no_time: cfg.prompt_complete_no_time.unwrap_or(true),
+            enter_timer_toggle: cfg.enter_timer_toggle.unwrap_or(false),
             show_log_inline: cfg.show_log_inline.unwrap_or(false),
             badge_theme: BadgeTheme::from_config(cfg.badge_theme.as_deref()),
             idle_nudge_seconds: cfg.idle_nudge_seconds.unwrap_or(900),
@@ -247,9 +258,31 @@ impl Prefs {
         self.prefill_plus_new = !self.prefill_plus_new;
     }
 
+    /// Toggle where the edit dialog parks its cursor (end vs start of the
+    /// narrative). Returns the flash label for the caller to show.
+    pub fn toggle_edit_cursor_narrative_start(&mut self) -> &'static str {
+        self.edit_cursor_narrative_start = !self.edit_cursor_narrative_start;
+        if self.edit_cursor_narrative_start {
+            "edit cursor at narrative start"
+        } else {
+            "edit cursor at narrative end"
+        }
+    }
+
     /// Toggle the complete-without-time add-time prompt.
     pub fn toggle_prompt_complete_no_time(&mut self) {
         self.prompt_complete_no_time = !self.prompt_complete_no_time;
+    }
+
+    /// Toggle whether `Enter` toggles the timer (like `t`) or only starts it
+    /// (never stops). Returns the flash label for the caller to show.
+    pub fn toggle_enter_timer_toggle(&mut self) -> &'static str {
+        self.enter_timer_toggle = !self.enter_timer_toggle;
+        if self.enter_timer_toggle {
+            "enter toggles timer"
+        } else {
+            "enter starts timer only"
+        }
     }
 
     /// Toggle the `log:YYYY-MM-DD` bookkeeping token in list and archive rows.
@@ -283,7 +316,9 @@ impl Prefs {
             cfg.hidden_keys = self.hidden_keys.clone();
             cfg.show_duration_inline = Some(self.show_duration_inline);
             cfg.prefill_plus_new = Some(self.prefill_plus_new);
+            cfg.edit_cursor_narrative_start = Some(self.edit_cursor_narrative_start);
             cfg.prompt_complete_no_time = Some(self.prompt_complete_no_time);
+            cfg.enter_timer_toggle = Some(self.enter_timer_toggle);
             cfg.show_log_inline = Some(self.show_log_inline);
             cfg.badge_theme = Some(self.badge_theme.as_str().to_string());
             cfg.week_start = Some(week_start);

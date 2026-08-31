@@ -90,10 +90,32 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             )),
         ),
         (
+            "  edit cursor at narrative",
+            Some(format!(
+                "{}  (e to toggle)",
+                if app.prefs.edit_cursor_narrative_start {
+                    "start"
+                } else {
+                    "end"
+                }
+            )),
+        ),
+        (
             "  prompt if done w/o time",
             Some(format!(
                 "{}  (x to toggle)",
                 on(app.prefs.prompt_complete_no_time)
+            )),
+        ),
+        (
+            "  enter timer",
+            Some(format!(
+                "{}  (t to toggle)",
+                if app.prefs.enter_timer_toggle {
+                    "toggle"
+                } else {
+                    "start-only"
+                }
             )),
         ),
         (

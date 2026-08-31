@@ -183,7 +183,10 @@ pub fn apply_action(app: &mut App, action: Action) {
                 && let Some(raw) = app.task_raw(abs)
             {
                 app.selection.enter_edit(abs);
-                app.draft_set(raw);
+                // Park the cursor at the narrative edge the user prefers
+                // (default: its end, so they don't scan past the trailing
+                // `+project` / `@context` / `dur:` metadata to append text).
+                app.draft_set_edit_pref(raw, false);
                 app.nav.set_mode(Mode::Screen(Screen::Insert));
             }
         }
@@ -192,7 +195,7 @@ pub fn apply_action(app: &mut App, action: Action) {
                 && let Some(raw) = app.task_raw(abs)
             {
                 app.selection.enter_edit(abs);
-                app.draft_set_insert(raw);
+                app.draft_set_edit_pref(raw, true);
                 app.nav.set_mode(Mode::Screen(Screen::Insert));
             }
         }
@@ -226,6 +229,7 @@ pub fn apply_action(app: &mut App, action: Action) {
             }
         }
         Action::TimerStartStop => app.toggle_timer(),
+        Action::TimerStart => app.start_timer(),
         Action::ManualTimeEntry => app.nav.set_mode(Mode::Nudge(Nudge::ManualEntryChoice)),
         Action::BeginSessionFromCurrent => {
             let Some(abs) = app.cur_abs() else {
@@ -258,7 +262,9 @@ pub fn apply_action(app: &mut App, action: Action) {
                 };
                 app.session.carry_forward_from = Some(abs);
                 app.draft_clear();
-                app.draft_set_insert(draft);
+                // Same narrative-edge cursor as `i`: the carried line is
+                // mostly narrative to polish.
+                app.draft_set_edit_pref(draft, true);
                 app.session.manual_time_entry = false;
                 app.nav.set_mode(Mode::Screen(Screen::Insert));
                 app.selection.exit_edit();

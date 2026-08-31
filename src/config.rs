@@ -56,10 +56,19 @@ pub struct Config {
     /// project name immediately (default true). Off keeps the old behavior:
     /// a blank dialog that accepts any narrative.
     pub prefill_plus_new: Option<bool>,
+    /// Where the edit dialog parks the cursor: omitted/`false` (default) at
+    /// the end of the narrative (right before the trailing metadata), `true`
+    /// at the narrative's first word. Toggle in Settings with `e`.
+    pub edit_cursor_narrative_start: Option<bool>,
     /// After completing a task with no time logged, open the add-time prompt
     /// (default true). Off completes silently — the task simply won't appear
     /// in the timesheet until time is added manually.
     pub prompt_complete_no_time: Option<bool>,
+    /// `Enter` in Normal mode: `false` (default) starts the timer on the
+    /// selected task without ever stopping one (a second press is a no-op);
+    /// `true` makes it a full toggle exactly like `t`, so a second press
+    /// stops the timer. Toggle in Settings with `t`.
+    pub enter_timer_toggle: Option<bool>,
     /// Render the `log:YYYY-MM-DD` bookkeeping token inline (default false).
     pub show_log_inline: Option<bool>,
     /// Badge palette for duration and non-billable chips: `semantic` or
@@ -242,7 +251,9 @@ fn parse(s: &str) -> Config {
             }
             "show_duration_inline" => c.show_duration_inline = parse_bool(v),
             "prefill_plus_new" => c.prefill_plus_new = parse_bool(v),
+            "edit_cursor_narrative_start" => c.edit_cursor_narrative_start = parse_bool(v),
             "prompt_complete_no_time" => c.prompt_complete_no_time = parse_bool(v),
+            "enter_timer_toggle" => c.enter_timer_toggle = parse_bool(v),
             "show_log_inline" => c.show_log_inline = parse_bool(v),
             "badge_theme" if matches!(v, "semantic" | "monochrome" | "plain") => {
                 c.badge_theme = Some(v.to_string());
@@ -335,8 +346,14 @@ fn serialize(c: &Config) -> String {
     if let Some(v) = c.prefill_plus_new {
         let _ = writeln!(out, "prefill_plus_new = {v}");
     }
+    if let Some(v) = c.edit_cursor_narrative_start {
+        let _ = writeln!(out, "edit_cursor_narrative_start = {v}");
+    }
     if let Some(v) = c.prompt_complete_no_time {
         let _ = writeln!(out, "prompt_complete_no_time = {v}");
+    }
+    if let Some(v) = c.enter_timer_toggle {
+        let _ = writeln!(out, "enter_timer_toggle = {v}");
     }
     if let Some(v) = c.show_log_inline {
         let _ = writeln!(out, "show_log_inline = {v}");
@@ -412,7 +429,9 @@ mod tests {
             hidden_keys: vec!["uid".into(), "sync".into()],
             show_duration_inline: Some(true),
             prefill_plus_new: Some(true),
+            edit_cursor_narrative_start: Some(true),
             prompt_complete_no_time: Some(true),
+            enter_timer_toggle: Some(true),
             show_log_inline: Some(false),
             badge_theme: Some("monochrome".into()),
             week_start: Some(WeekStart::Sunday),
@@ -437,11 +456,13 @@ mod tests {
         assert_eq!(defaults.show_log_inline, None);
 
         let configured = parse(
-            "show_duration_inline = false\nprefill_plus_new = true\nprompt_complete_no_time = false\nshow_log_inline = true\nbadge_theme = plain\n",
+            "show_duration_inline = false\nprefill_plus_new = true\nedit_cursor_narrative_start = true\nprompt_complete_no_time = false\nenter_timer_toggle = true\nshow_log_inline = true\nbadge_theme = plain\n",
         );
         assert_eq!(configured.show_duration_inline, Some(false));
         assert_eq!(configured.prefill_plus_new, Some(true));
+        assert_eq!(configured.edit_cursor_narrative_start, Some(true));
         assert_eq!(configured.prompt_complete_no_time, Some(false));
+        assert_eq!(configured.enter_timer_toggle, Some(true));
         assert_eq!(configured.show_log_inline, Some(true));
         assert_eq!(configured.badge_theme.as_deref(), Some("plain"));
 
@@ -449,10 +470,12 @@ mod tests {
         assert_eq!(mono.badge_theme.as_deref(), Some("monochrome"));
 
         let invalid =
-            parse("show_duration_inline = maybe\nprefill_plus_new = maybe\nprompt_complete_no_time = maybe\nshow_log_inline = maybe\nbadge_theme = vivid\n");
+            parse("show_duration_inline = maybe\nprefill_plus_new = maybe\nedit_cursor_narrative_start = maybe\nprompt_complete_no_time = maybe\nenter_timer_toggle = maybe\nshow_log_inline = maybe\nbadge_theme = vivid\n");
         assert_eq!(invalid.show_duration_inline, None);
         assert_eq!(invalid.prefill_plus_new, None);
+        assert_eq!(invalid.edit_cursor_narrative_start, None);
         assert_eq!(invalid.prompt_complete_no_time, None);
+        assert_eq!(invalid.enter_timer_toggle, None);
         assert_eq!(invalid.show_log_inline, None);
     }
 
@@ -643,7 +666,9 @@ mod tests {
             hidden_keys: vec!["uid".into()],
             show_duration_inline: Some(true),
             prefill_plus_new: Some(false),
+            edit_cursor_narrative_start: Some(true),
             prompt_complete_no_time: Some(false),
+            enter_timer_toggle: Some(true),
             show_log_inline: Some(false),
             badge_theme: Some("monochrome".into()),
             week_start: Some(WeekStart::Sunday),

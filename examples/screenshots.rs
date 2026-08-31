@@ -95,6 +95,20 @@ fn main() -> std::io::Result<()> {
         save(&app, &out.join(format!("theme-{slug}.svg")))?;
     }
 
+    // 8. Edit dialog — the exact `i` flow: edit selection + Insert-mode
+    // draft seeded at the narrative edge (default: end), so the cursor block
+    // sits between the last narrative word and the trailing metadata and
+    // appending narrative text is immediate.
+    let mut app = make();
+    app.selection.enter_edit(0);
+    app.nav.mode = Mode::Screen(Screen::Insert);
+    app.draft_set_edit_pref(
+        "(A) 2026-04-28 Call dentist to reschedule cleaning @phone +health due:2026-05-08"
+            .to_string(),
+        true,
+    );
+    save(&app, &out.join("edit-dialog.svg"))?;
+
     println!("wrote screenshots to {}", out.display());
     Ok(())
 }

@@ -142,7 +142,15 @@ impl DraftState {
     /// sub-mode is the caller's choice — `App::draft_set` (`e`) lands in
     /// Normal mode, `App::draft_set_insert` (`i`) lands in Insert mode.
     pub fn set(&mut self, s: String, mode: DialogInputMode) {
-        self.cursor = DraftCursor::at_end(&s);
+        let len = s.len();
+        self.set_at(s, mode, len);
+    }
+
+    /// Replace the text and park the cursor at `cursor` bytes (clamped to a
+    /// char boundary). Used to open the edit dialog with the cursor at the
+    /// narrative edge — see [`App::draft_set_edit_pref`].
+    pub fn set_at(&mut self, s: String, mode: DialogInputMode, cursor: usize) {
+        self.cursor = DraftCursor::clamped(&s, cursor);
         self.text = s;
         self.reset_autocomplete();
         self.overlay = None;
@@ -370,6 +378,25 @@ impl App {
     /// typing without the vim modal step.
     pub fn draft_set_insert(&mut self, s: String) {
         self.draft.set(s, DialogInputMode::Insert);
+    }
+
+    /// Seed the edit dialog with the cursor at the narrative edge the user
+    /// prefers. `insert_mode` picks Insert (`i`-style, immediate typing) vs
+    /// Normal (`e`-style, vim navigation). With `edit_cursor_narrative_start`
+    /// the cursor lands on the narrative's first word; otherwise at its end
+    /// (right before the trailing metadata), so appending text is immediate.
+    pub fn draft_set_edit_pref(&mut self, s: String, insert_mode: bool) {
+        let pos = if self.prefs.edit_cursor_narrative_start {
+            crate::todo::narrative_start_offset(&s)
+        } else {
+            crate::todo::narrative_end_offset(&s)
+        };
+        let mode = if insert_mode {
+            DialogInputMode::Insert
+        } else {
+            DialogInputMode::Normal
+        };
+        self.draft.set_at(s, mode, pos);
     }
 
     pub fn draft_insert_char(&mut self, c: char) {

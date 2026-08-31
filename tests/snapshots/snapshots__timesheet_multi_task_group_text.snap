@@ -1,0 +1,36 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(&buf)
+---
+ FILTERS                  ┌ Timesheet  Wed 2026-05-06  by project┐ DETAIL · TIMESHEET               
+                          │                                      │                                  
+ MATTERS · BILLABLE       │  +Smith @drafting  —  1h 30m  (1.5h) │ PERIOD                           
+   +Smith           1h 30m│    ▸ Alpha open   1h 0m              │ billable     1.5h                
+                          │    • Beta open     30m               │ non-billable 0.0h                
+ TOTALS                   │                                      │ total        1.5h                
+   billable         1h 30m│                                      │                                  
+   non-billable         0m│                                      │ ENTRY                            
+   total            1h 30m│                                      │2026-05-06                        
+                          │                                      │+Smith @drafting                  
+                          │                                      │ group dur     1.5h  · billable   
+                          │                                      │ status       open                
+                          │                                      │ task dur      1.0h               
+                          │                                      │                                  
+                          │                                      │ NARRATIVE 1/2                    
+                          │                                      │  Alpha open                      
+                          │                                      │                                  
+                          │                                      │                                  
+                          │                                      │                                  
+                          │                                      │                                  
+                          │                                      │                                  
+                          │                                      │                                  
+                          │                                      │                                  
+                          │                                      │                                  
+                          │                                      │                                  
+                          │                                      │                                  
+                          │                                      │                                  
+                          │                                      │                                  
+                          │  Billable:     1h 30m (1.5h)         │                                  
+                          │  Total:        1h 30m (1.5h)         │                                  
+                          └──────────────────────────────────────┘                                  
+ TIMESHEET   j/k navigate  ·  J/K group  ·  Enter edit  ·  b 2 open · 2026-05-06 · tuxtime 2026.7.7

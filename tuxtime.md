@@ -481,6 +481,129 @@ Two timesheet rendering refinements:
 
 **Files**: `src/ui/timesheet_render.rs`, `tests/snapshots.rs`
 
+### 44. Edit Dialog Opens at the End of the Narrative
+
+`e` / `i` (and Enter in the timesheet) used to seed the edit dialog with the
+cursor at the **end of the whole line** — so to edit a task like
+`2026-05-06 Draft motion +Smith @drafting dur:2h` you had to scan backwards
+past the metadata to find where the narrative ends. Now the cursor parks
+right after the narrative's final word, before the trailing `+project` /
+`@context` / `key:value` tokens, so typing immediately appends to the
+narrative. Tasks with no trailing metadata keep the end-of-line cursor.
+
+**Files**: `src/todo.rs`, `src/app/draft.rs`,
+`src/interactive/action_dispatch.rs`, `src/interactive/timesheet_handler.rs`
+
+### 45. Timesheet Hover Highlights the Task's Time
+
+When the cursor sits on a narrative in a multi-task timesheet group, the
+per-task duration used to stay **dim** on the highlighted row while the
+narrative turned bright. The duration now joins the highlight (bright
+foreground on the cursor background), so the hovered task's time reads as
+part of the row highlight instead of a muted side label. Open siblings in
+the same group stay dim as before.
+
+**Files**: `src/ui/timesheet_render.rs`, `tests/snapshots.rs`
+
+### 46. `+` Prefill on Every New-Task Dialog
+
+The new-task `+` prefill (`prefill_plus_new`) applied only to `n` in Normal
+mode; the idle-nudge `n`, the manual-entry new-entry (`m` → `n`), and the
+quick-interrupt (`T`) dialogs all opened blank. All three now respect the
+pref, so every blank new-task dialog starts with the cursor after a `+`
+ready for the project name (opt-out via Settings `+`).
+
+**Files**: `src/interactive/overlays.rs`, `src/app/timer_actions.rs`
+
+### 47. Configurable Edit-Cursor Position + Carry-Forward Cursor
+
+Two refinements to the narrative-edge cursor (section 44):
+
+- **Toggleable position.** New `edit_cursor_narrative_start` pref (default
+  `false` = end of narrative, matching section 44). Toggle in Settings with
+  `e`; persisted to `config.toml`. With it on, `e` / `i` / timesheet-Enter
+  park the cursor on the narrative's *first* word instead of its end.
+- **Carry-forward uses the same cursor.** The `N` carry-forward dialog now
+  seeds the carried body with the same narrative-edge cursor, so polishing
+  the carried narrative doesn't require scanning past the trailing metadata.
+
+**Files**: `src/config.rs`, `src/app/prefs.rs`, `src/todo.rs`,
+`src/app/draft.rs`, `src/interactive/action_dispatch.rs`,
+`src/interactive/overlays.rs`, `src/ui/settings.rs`, `src/ui/hints.rs`
+
+### 48. Ctrl+Enter Save-and-Start Fix (Ctrl+J alias)
+
+`Ctrl+Enter` in the add/edit dialog saves the task and starts the timer on
+it — but the chord was silently dead in real terminals. In raw mode (which
+the TUI enables), crossterm deliberately parses LF (0x0A) — what most
+terminals send for Ctrl+Enter — as **Ctrl+J** (`Char('j')` + CONTROL), not
+as Enter (crossterm parse.rs, Issue #371). The dialog now treats both
+`Enter`+`CONTROL` and `Ctrl+J` as the same save-and-start chord (gated on
+exactly one modifier, so AltGr text input is unaffected). Covered by
+end-to-end tests through the real key pipeline: add dialog, edit dialog,
+Normal input mode, and with the autocomplete popup open.
+
+**Files**: `src/interactive/insert.rs`, `src/interactive/tests.rs`
+
+---
+
+### 49. Kitty-Protocol Key Reporting + Leading-Project Narrative Cursor
+
+Two follow-up fixes to the previous sections:
+
+- **Ctrl+Enter on supporting terminals**: some terminals send plain CR for
+  Ctrl+Enter (indistinguishable from Enter), so neither the chord nor the
+  Ctrl+J alias could fire. The app now pushes the kitty keyboard protocol
+  (`DISAMBIGUATE_ESCAPE_CODES`) on startup, so terminals that support it
+  send a distinct `CSI 13;5u` for Ctrl+Enter, which is parsed as
+  `Enter`+`CONTROL` and handled. Non-supporting terminals ignore the request
+  and keep the legacy encodings (Ctrl+J still works). The flags are popped
+  on exit and re-pushed after the external-editor round-trip.
+- **Narrative cursor with a leading `+project`**: `narrative_end_offset`
+  previously returned the end of the whole line when the first metadata
+  token appeared *before* the narrative (e.g. `2026-08-31 +work do stuff
+  dur:4 log:2026-08-31` parked the cursor after `log:...`). It now skips
+  leading metadata and only treats a metadata token as the narrative
+  terminator once a narrative word has been seen, so the cursor lands after
+  `stuff`.
+
+**Files**: `src/main.rs`, `src/todo.rs`
+
+---
+
+### 50. `Enter` Starts the Timer (save-then-Enter flow)
+
+Terminals that can't express Ctrl+Enter as a distinct keystroke (many send
+plain CR) now get a terminal-safe alternative: `Enter` in Normal mode
+**starts** the timer on the selected task. Combined with the dialog's plain
+`Enter` = save, the flow is two unmodified Enter presses — save, then start.
+Unlike `t` (which toggles), `Enter` is start-only: a second press on the
+same task is a no-op rather than a stop, so an accidental double-press can't
+stop the timer. A timer running on a *different* task is still switched over
+(single-timer invariant), and the day-boundary prompt fires exactly as it
+does for `t`. New `Action::TimerStart` + `App::start_timer()`.
+
+**Files**: `src/action.rs`, `src/interactive/key_resolve.rs`,
+`src/interactive/action_dispatch.rs`, `src/app/timer_actions.rs`,
+`src/ui/hints.rs`, `src/ui/help.rs`
+
+---
+
+### 51. `Enter` Timer Toggle Pref (`enter_timer_toggle`)
+
+Following the save-then-Enter flow, the `Enter` timer action is now
+configurable: new `enter_timer_toggle` pref (default `false` = start-only,
+so a second `Enter` is a no-op rather than a stop — double-press safe).
+With `enter_timer_toggle = true`, `Enter` behaves exactly like `t`: start
+*and* stop. Toggleable live in Settings with `t` (row shows `start-only` /
+`toggle`), persisted to `config.toml`, with the same day-boundary prompt
+behavior in both modes. `App::start_timer()` routes to `toggle_timer()`
+when the pref is on.
+
+**Files**: `src/config.rs`, `src/app/prefs.rs`, `src/app/timer_actions.rs`,
+`src/ui/settings.rs`, `src/interactive/overlays.rs`, `src/ui/hints.rs`,
+`src/ui/help.rs`
+
 ---
 
 ## Keybinding Reference

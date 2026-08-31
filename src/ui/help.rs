@@ -45,6 +45,7 @@ const TIMER: Section = (
     "TIMER",
     &[
         ("t", "start / stop timer"),
+        ("Enter", "start / toggle timer on selected"),
         ("m", "manual time entry"),
         ("T", "quick interrupt"),
         ("N", "new session from task"),

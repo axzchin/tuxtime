@@ -125,9 +125,19 @@ pub(crate) fn handle_settings(app: &mut App, key: KeyEvent) {
             app.prefs.toggle_prefill_plus_new();
             app.save_prefs();
         }
+        KeyCode::Char('e') => {
+            let label = app.prefs.toggle_edit_cursor_narrative_start();
+            app.save_prefs();
+            app.flash(label);
+        }
         KeyCode::Char('x') => {
             app.prefs.toggle_prompt_complete_no_time();
             app.save_prefs();
+        }
+        KeyCode::Char('t') => {
+            let label = app.prefs.toggle_enter_timer_toggle();
+            app.save_prefs();
+            app.flash(label);
         }
         KeyCode::Char('O') => {
             app.prefs.toggle_log_inline();
@@ -478,6 +488,11 @@ pub(crate) fn handle_idle_nudge(app: &mut App, key: KeyEvent) {
             app.session.from_nudge = true;
             app.set_view(View::List);
             app.draft_clear();
+            // Match `n` in Normal mode: with `prefill_plus_new` on, the
+            // dialog opens ready for the project name.
+            if app.prefs.prefill_plus_new {
+                app.draft_set_insert("+".to_string());
+            }
             app.session.manual_time_entry = false;
             app.nav.set_mode(Mode::Screen(Screen::Insert));
             app.selection.exit_edit();
@@ -649,6 +664,10 @@ pub(crate) fn handle_manual_entry_choice(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Char('n' | 'N') => {
             app.draft_clear();
+            // Same `+` prefill as every other blank new-task dialog.
+            if app.prefs.prefill_plus_new {
+                app.draft_set_insert("+".to_string());
+            }
             // Manual time entry: treat a typed `dur:` as flexible input
             // (minutes/hours/clock time) on save, so `dur:30` logs 30 minutes
             // — not the 30 *seconds* the raw on-disk token would mean.

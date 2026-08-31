@@ -63,6 +63,9 @@ pub enum Action {
     ChangeWeekStart,
     /// `t` — start/stop timer on the selected task.
     TimerStartStop,
+    /// `Enter` — start the timer on the selected task without stopping an
+    /// already-running one (a second press is a no-op, never a stop).
+    TimerStart,
     /// `m` — open the manual time entry dialog.
     ManualTimeEntry,
     /// `C` — copy today's narratives for the current project+activity.
@@ -161,6 +164,7 @@ impl Action {
         ("change_week_start", Self::ChangeWeekStart),
         ("timer_start_stop", Self::TimerStartStop),
         ("timer", Self::TimerStartStop),
+        ("timer_start", Self::TimerStart),
         ("manual_time_entry", Self::ManualTimeEntry),
         ("manual_entry", Self::ManualTimeEntry),
         ("copy_narratives", Self::CopyNarratives),
@@ -342,6 +346,7 @@ mod tests {
             Action::OpenThemePicker => all.push(Action::OpenThemePicker),
             Action::ChangeWeekStart => all.push(Action::ChangeWeekStart),
             Action::TimerStartStop => all.push(Action::TimerStartStop),
+            Action::TimerStart => all.push(Action::TimerStart),
             Action::ManualTimeEntry => all.push(Action::ManualTimeEntry),
             Action::CopyNarratives => all.push(Action::CopyNarratives),
             Action::OpenTimesheet => all.push(Action::OpenTimesheet),

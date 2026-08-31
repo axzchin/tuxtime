@@ -662,6 +662,92 @@ fn is_meta_token(tok: &str) -> bool {
     tag_kind(tok).is_some() || kv_pair(tok).is_some()
 }
 
+/// Byte offset just past the narrative's final word — the natural place to
+/// park the cursor when the edit dialog opens, so the user can append text
+/// without scanning past the trailing `+project` / `@context` / `key:value`
+/// metadata. Metadata conventionally trails the narrative in todo.txt, so
+/// the first metadata token marks where the narrative ends. Falls back to
+/// the end of the line when no narrative word can be identified
+/// (metadata-only lines, malformed input).
+#[must_use]
+pub fn narrative_end_offset(raw: &str) -> usize {
+    let mut last_word_end = raw.len();
+    let mut seen_narrative = false;
+    for (range, kind) in classify_draft(raw) {
+        match kind {
+            // The first *trailing* metadata token ends the narrative: bail
+            // with the end of the last word-shaped segment seen so far.
+            // Leading metadata (a `+project` before the narrative, say) is
+            // skipped — it only terminates the narrative once a word has
+            // appeared, otherwise metadata-only lines would truncate to 0.
+            SegmentKind::Project
+            | SegmentKind::Context
+            | SegmentKind::Due
+            | SegmentKind::KeyValue => {
+                if seen_narrative {
+                    return last_word_end;
+                }
+            }
+            // Track the end of the last non-whitespace Plain run. Date and
+            // priority segments are leading bookkeeping, not narrative, so
+            // they deliberately don't advance the marker.
+            SegmentKind::Plain if !raw[range.clone()].chars().all(char::is_whitespace) => {
+                seen_narrative = true;
+                last_word_end = range.end;
+            }
+            _ => {}
+        }
+    }
+    last_word_end
+}
+
+/// Byte offset of the narrative's first word — right after the leading
+/// `x ` / done-date / priority / creation-date tokens. Used when the edit
+/// dialog's cursor preference is "narrative start". Falls back to the end of
+/// the line when no narrative word exists (metadata-only lines), so both
+/// cursor preferences behave identically there.
+#[must_use]
+pub fn narrative_start_offset(raw: &str) -> usize {
+    let bytes = raw.as_bytes();
+    let mut i = 0;
+    // Skip the same leading bookkeeping tokens the parser recognizes: a
+    // done "x " marker plus its done date, a priority, and the creation
+    // date. (Not `classify_draft` — it tags the leading `x` as a Plain
+    // word, which would make every done task look narrative-less.)
+    if bytes.len() >= 2 && bytes[0] == b'x' && bytes[1].is_ascii_whitespace() {
+        i = 2;
+        if let Some(end) = match_date(bytes, i) {
+            i = end;
+            if i < bytes.len() && bytes[i].is_ascii_whitespace() {
+                i += 1;
+            }
+        }
+    }
+    if let Some(end) = match_priority(bytes, i) {
+        i = end;
+        if i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+    }
+    if let Some(end) = match_date(bytes, i) {
+        i = end;
+        if i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+    }
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    // A line that goes straight into metadata has no narrative, so fall
+    // back to the end of the line (matching `narrative_end_offset`).
+    let first = raw[i..].split_whitespace().next().unwrap_or("");
+    if first.is_empty() || is_meta_token(first) {
+        raw.len()
+    } else {
+        i
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Draft syntax classification (syntax highlighting for the add/edit dialog)
 // ---------------------------------------------------------------------------
@@ -992,6 +1078,85 @@ mod tests {
         assert!(!t.done);
         assert!(!t.raw.starts_with('x'), "got: {}", t.raw);
         assert_eq!(t.raw, "2026-05-01 Hello");
+    }
+
+    #[test]
+    fn narrative_end_offset_stops_before_trailing_metadata() {
+        assert_eq!(
+            narrative_end_offset("2026-05-06 Draft motion +Smith @drafting dur:3600"),
+            "2026-05-06 Draft motion".len()
+        );
+        assert_eq!(
+            narrative_end_offset("(A) 2026-04-28 Call dentist @phone +health due:2026-05-08"),
+            "(A) 2026-04-28 Call dentist".len()
+        );
+    }
+
+    #[test]
+    fn narrative_end_offset_handles_done_tasks_and_no_metadata() {
+        // Completed tasks carry a done date before the creation date.
+        assert_eq!(
+            narrative_end_offset("x 2026-05-05 2026-05-01 Submit expense report +work"),
+            "x 2026-05-05 2026-05-01 Submit expense report".len()
+        );
+        // No metadata: the whole line is narrative, so the offset is the end.
+        let bare = "2026-05-06 Draft motion";
+        assert_eq!(narrative_end_offset(bare), bare.len());
+    }
+
+    #[test]
+    fn narrative_start_offset_lands_on_first_word() {
+        assert_eq!(
+            narrative_start_offset("2026-05-06 Draft motion +Smith @drafting dur:3600"),
+            "2026-05-06 ".len()
+        );
+        assert_eq!(
+            narrative_start_offset("(A) 2026-04-28 Call dentist @phone +health due:2026-05-08"),
+            "(A) 2026-04-28 ".len()
+        );
+        // Done tasks carry a done date before the creation date.
+        assert_eq!(
+            narrative_start_offset("x 2026-05-05 2026-05-01 Submit expense report +work"),
+            "x 2026-05-05 2026-05-01 ".len()
+        );
+    }
+
+    #[test]
+    fn narrative_start_offset_falls_back_to_line_end() {
+        // Metadata with no narrative word: park at the end, matching the
+        // end-of-narrative fallback so both preferences behave identically.
+        assert_eq!(
+            narrative_start_offset("2026-05-06 +Smith @drafting dur:3600"),
+            "2026-05-06 +Smith @drafting dur:3600".len()
+        );
+    }
+
+    #[test]
+    fn narrative_end_offset_skips_leading_project_before_narrative() {
+        // A `+project` may precede the narrative; the cursor must still stop
+        // at the end of the last narrative word, before the trailing metadata.
+        assert_eq!(
+            narrative_end_offset("2026-08-31 +work do stuff dur:4 log:2026-08-31"),
+            "2026-08-31 +work do stuff".len()
+        );
+        assert_eq!(
+            narrative_end_offset("+work do stuff dur:4 log:2026-08-31"),
+            "+work do stuff".len()
+        );
+    }
+
+    #[test]
+    fn narrative_end_offset_falls_back_to_line_end() {
+        // Metadata with no narrative word: park at the end, not mid-token.
+        assert_eq!(
+            narrative_end_offset("2026-05-06 +Smith @drafting dur:3600"),
+            "2026-05-06 +Smith @drafting dur:3600".len()
+        );
+        // Quoted key:value tokens (e.g. note:"...") count as metadata.
+        assert_eq!(
+            narrative_end_offset("2026-05-06 Review note:\"call ops\" +Smith"),
+            "2026-05-06 Review".len()
+        );
     }
 
     #[test]

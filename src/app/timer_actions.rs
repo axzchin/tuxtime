@@ -73,6 +73,32 @@ impl App {
         self.toggle_timer_at(abs);
     }
 
+    /// The `Enter` key's timer action. With the `enter_timer_toggle` pref
+    /// on, this is a full toggle exactly like `t` (start *and* stop). By
+    /// default it is start-only: pressing it again on the same task is a
+    /// no-op rather than a stop, so the save-then-Enter flow out of the edit
+    /// dialog can't accidentally stop the timer on a double-press. A timer
+    /// running on a *different* task is still switched over (single-timer
+    /// invariant), and the day-boundary prompt fires the same as `t`.
+    pub fn start_timer(&mut self) {
+        if self.prefs.enter_timer_toggle {
+            return self.toggle_timer();
+        }
+        let Some(abs) = self.cur_task_index_in_tasks() else {
+            self.flash("no task selected");
+            return;
+        };
+        if self.store.is_timer_running_on(abs) {
+            return;
+        }
+        if self.should_prompt_day_boundary(abs) {
+            self.session.pending_day_boundary = Some((abs, DayBoundaryAction::StartTimer));
+            self.nav.push_mode(Mode::Prompt(Prompt::DayBoundary));
+            return;
+        }
+        self.toggle_timer_at(abs);
+    }
+
     /// True when starting a timer on `abs` should first ask about the day
     /// boundary: the task has accumulated time whose effective log date is
     /// before today, so a plain continue would move that time onto today's
@@ -318,10 +344,14 @@ impl App {
                     "interrupted {proj}{act}{body} ({elapsed}) — enter new task"
                 ));
                 self.note_timer_activity();
-                // Open a blank Insert dialog for the interruption entry.
+                // Open a blank Insert dialog for the interruption entry,
+                // with the same `+` prefill as every other new-task dialog.
                 self.session.manual_time_entry = true;
                 self.session.auto_start_on_save = true;
                 self.draft_clear();
+                if self.prefs.prefill_plus_new {
+                    self.draft_set_insert("+".to_string());
+                }
                 self.nav.mode = Mode::Screen(Screen::Insert);
                 self.selection.exit_edit();
             }
@@ -369,6 +399,42 @@ mod tests {
         KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)
     }
 
+    // ---- quick interrupt `+` prefill ----
+
+    /// The quick-interrupt (`T`) blank dialog gets the same `+` prefill as
+    /// every other new-task dialog.
+    #[test]
+    fn interrupt_timer_prefills_plus() {
+        let mut app = build_app("Draft +Smith\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+        app.toggle_timer();
+        assert!(app.timer_running());
+
+        app.interrupt_timer();
+
+        assert_eq!(app.nav.mode, Mode::Screen(Screen::Insert));
+        assert_eq!(app.draft.text(), "+");
+        assert!(app.session.auto_start_on_save);
+        assert!(app.session.manual_time_entry);
+    }
+
+    /// With the prefill toggled off, the interrupt dialog stays blank.
+    #[test]
+    fn interrupt_timer_blank_when_prefill_disabled() {
+        let mut app = build_app("Draft +Smith\n");
+        app.prefs.prefill_plus_new = false;
+        app.nav.cursor = 0;
+        app.recompute_visible();
+        app.toggle_timer();
+        assert!(app.timer_running());
+
+        app.interrupt_timer();
+
+        assert_eq!(app.nav.mode, Mode::Screen(Screen::Insert));
+        assert_eq!(app.draft.text(), "");
+    }
+
     // ---- day-boundary prompt (one line per task-day) ----
 
     #[test]
@@ -387,6 +453,107 @@ mod tests {
         assert_eq!(app.tasks().len(), 1);
         assert!(!app.tasks()[0].done);
         assert!(app.session.pending_day_boundary.is_none());
+    }
+
+    // ---- Enter: start-only timer action ----
+
+    #[test]
+    fn start_timer_starts_when_idle() {
+        let mut app = build_app("Draft +Smith\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+
+        app.start_timer();
+
+        assert!(app.timer_running());
+        assert_eq!(app.store.active_timer_abs(), Some(0));
+        assert_eq!(app.nav.mode(), Mode::Screen(Screen::Normal));
+    }
+
+    #[test]
+    fn start_timer_noop_when_already_running_on_task() {
+        let mut app = build_app("Draft +Smith\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+        app.toggle_timer();
+        assert!(app.timer_running());
+
+        // A second Enter must not stop the timer (unlike `t`).
+        app.start_timer();
+
+        assert!(app.timer_running());
+        assert_eq!(app.store.active_timer_abs(), Some(0));
+    }
+
+    #[test]
+    fn start_timer_noop_skips_day_boundary_prompt_when_running() {
+        // Previous-day time would normally prompt — but the timer is already
+        // running on this task, so Enter is a no-op, not a prompt.
+        let mut app = build_app("Old +W dur:7200 log:2026-05-05\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+        // Resolve the initial day-boundary prompt via "continue" so the
+        // timer actually starts (a plain toggle would leave the prompt up).
+        app.toggle_timer();
+        assert_eq!(app.nav.mode(), Mode::Prompt(Prompt::DayBoundary));
+        crate::interactive::handle_day_boundary(&mut app, key('c'));
+        assert!(app.timer_running());
+
+        app.start_timer();
+
+        assert!(app.timer_running());
+        assert_eq!(app.nav.mode(), Mode::Screen(Screen::Normal));
+        assert!(app.session.pending_day_boundary.is_none());
+    }
+
+    #[test]
+    fn start_timer_switches_from_another_task() {
+        let mut app = build_app("First +A\nSecond +B\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+        app.toggle_timer();
+        assert_eq!(app.store.active_timer_abs(), Some(0));
+
+        app.nav.cursor = 1;
+        app.recompute_visible();
+        app.start_timer();
+
+        // Single-timer invariant: the other task's timer is captured and the
+        // timer starts on the selected task.
+        assert!(app.timer_running());
+        assert_eq!(app.store.active_timer_abs(), Some(1));
+        assert!(app.tasks()[0].start.is_none());
+    }
+
+    /// With the `enter_timer_toggle` pref on, Enter behaves exactly like `t`:
+    /// a second press stops the timer instead of being a no-op.
+    #[test]
+    fn start_timer_toggles_when_pref_enabled() {
+        let mut app = build_app("Draft +Smith\n");
+        app.prefs.enter_timer_toggle = true;
+        app.nav.cursor = 0;
+        app.recompute_visible();
+
+        app.start_timer();
+        assert!(app.timer_running());
+        assert_eq!(app.store.active_timer_abs(), Some(0));
+
+        // Second press stops, matching `t`.
+        app.start_timer();
+        assert!(!app.timer_running(), "pref on: Enter must stop like t");
+        assert!(app.tasks()[0].dur.is_some(), "elapsed time must be captured");
+    }
+
+    #[test]
+    fn start_timer_prompts_on_previous_day_task() {
+        let mut app = build_app("Draft +Smith dur:7200 log:2026-05-05\n");
+        app.nav.cursor = 0;
+        app.recompute_visible();
+
+        app.start_timer();
+
+        assert_eq!(app.nav.mode(), Mode::Prompt(Prompt::DayBoundary));
+        assert!(!app.timer_running(), "no timer until the prompt resolves");
     }
 
     #[test]

@@ -29,7 +29,7 @@ expression: buffer_to_text(&buf)
      │                                                g                 calendar date picker  │     
      │  TIMER                                         j / k             next / prev narrative │     
      │    t                 start / stop timer        J / K             next / prev group     │     
-     │    m                 manual time entry         Enter             edit narrative        │     
+     │    Enter             start / toggle timer on selected    Enter             edit narrati│     
      │────────────────────────────────────────────────────────────────────────────────────────│     
      └────────────────────────────────────────────────────────────────────────────────────────┘     
                                                                                                     

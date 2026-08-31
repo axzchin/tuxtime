@@ -1,0 +1,36 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(&buf)
+---
+ FILTERS                   ▶▮◀ /tmp/tuxtime-snapshot.txt  •  2 tas DETAIL                           
+                                                                                                    
+ PROJECTS                  (1)  PRIORITY A  ────────────────────── priority  (A)                    
+   +Smith            1      1 ▸ (A) Call dentist to reschedule cl… created   2026-04-28             
+   +health           1     (1)  NO PRIORITY  ───────────────────── due       2026-05-08  in 2d      
+                            2       Draft motion +Smith @d… 1h 00m projects  +health                
+ CONTEXTS                                                          contexts  @phone                 
+   @drafting         1                                                                              
+   @phone            1                                             RAW                              
+                                                                                                    
+                                                                   (A) 2026-04-28 Call dentist to   
+                                                                   reschedule cleaning @phone       
+                              ┌ EDIT TASK  · INSERT ─────────────────┐alth due:2026-05-08           
+                              │                                      │                              
+                              │  › ll dentist to reschedule cleaning │                              
+                              │  ok · pri A · due 2026-05-08 · 1 +pro│                              
+                              │                                      │                              
+                              │  format: (A) Buy milk +shop @home due│                              
+                              │                                      │                              
+                              └──────────────────────────────────────┘                              
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+ INSERT   Enter save · C-Enter save+start · Esc normal       2 open · 2026-05-06 · tuxtime 2026.7.7
