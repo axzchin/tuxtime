@@ -710,8 +710,7 @@ fn timesheet_selected_group_dims_only_done_siblings() {
         .expect("center pane separator");
     let first_cell = buf[(center_col, cursor_y)].clone();
     assert_eq!(
-        first_cell.bg,
-        theme.cursor,
+        first_cell.bg, theme.cursor,
         "cursor narrative line must carry the full-line cursor highlight"
     );
     // The triangle itself is accent-colored and bold so it reads as a cursor
@@ -746,8 +745,7 @@ fn timesheet_selected_group_dims_only_done_siblings() {
         .max()
         .expect("duration end");
     assert_eq!(
-        last_highlight_col,
-        dur_end_col,
+        last_highlight_col, dur_end_col,
         "highlight must stop after the task's time, not run to the pane edge"
     );
     assert_eq!(
@@ -877,9 +875,7 @@ fn timesheet_long_narrative_wraps_in_center_pane() {
     let narrative = "draft the opposition brief for the Smith versus Jones summary \
                      judgment hearing with a very long narrative body that keeps going \
                      and going and going";
-    let body = format!(
-        "2026-05-06 {narrative} +Smith @drafting dur:7200 log:2026-05-06\n"
-    );
+    let body = format!("2026-05-06 {narrative} +Smith @drafting dur:7200 log:2026-05-06\n");
     std::fs::write(FIXTURE_PATH, &body).expect("seed fixture file");
     let mut app = App::new(
         PathBuf::from(FIXTURE_PATH),
@@ -968,6 +964,61 @@ fn timesheet_totals_stay_pinned_when_list_overflows() {
     assert!(
         text.contains("Billable:") && text.contains("Total:"),
         "totals must stay pinned while the entry list scrolls:\n{text}"
+    );
+}
+
+#[test]
+fn timesheet_scroll_keeps_entries_whole() {
+    // Long narratives wrap over several rows, so a short viewport can't show
+    // the whole list. Scrolling to the last entry must keep every row of that
+    // entry on screen (no clipped tail), and the viewport must start on an
+    // entry boundary (group header or narrative bullet) instead of in the
+    // middle of a wrapped line.
+    let mut s = String::new();
+    for i in 0..30 {
+        s.push_str(&format!(
+            "2026-05-05 Draft motion number {i:02} for the Smith versus Jones summary judgment hearing +Smith @drafting dur:1800 log:2026-05-05\n"
+        ));
+    }
+    std::fs::write(FIXTURE_PATH, &s).expect("seed fixture file");
+    let mut app = App::new(
+        PathBuf::from(FIXTURE_PATH),
+        s,
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.env.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.prefs.density = Density::Compact;
+    app.prefs.layout.left = false;
+    app.prefs.layout.right = false;
+    app.set_view(View::Timesheet);
+    app.timesheet.date = "2026-05-05".into();
+    let last = app.timesheet_narrative_count() - 1;
+    app.timesheet.cursor = last;
+    // 60 columns: the narratives wrap over two rows each, so a 14-row
+    // viewport shows only part of the list.
+    let text = render_text(&app, 60, 14);
+    let lines: Vec<&str> = text.lines().collect();
+    let cursor_row = lines
+        .iter()
+        .position(|l| l.contains("number 29"))
+        .expect("the cursor narrative must be visible");
+    assert!(
+        lines
+            .get(cursor_row + 1)
+            .is_some_and(|l| l.contains("judgment hearing")),
+        "the cursor entry's wrapped tail must stay on screen:\n{text}"
+    );
+    // Left sidebar is off, so body row 0 is the box's top border and row 1 is
+    // its pad row: the first scrollable row starts after the left border.
+    let first_row = lines
+        .get(2)
+        .copied()
+        .unwrap_or_default()
+        .trim_start_matches(['│', ' ']);
+    assert!(
+        first_row.starts_with('+') || first_row.starts_with('▸') || first_row.starts_with('•'),
+        "the scrolled list must start on an entry boundary:\n{text}"
     );
 }
 

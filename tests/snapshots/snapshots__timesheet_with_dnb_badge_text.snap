@@ -4,7 +4,7 @@ expression: buffer_to_text(&buf)
 ---
  FILTERS                  ┌ Timesheet  Wed 2026-05-06  by project┐ DETAIL · TIMESHEET               
                           │                                      │                                  
- MATTERS · BILLABLE       │  +Smith @drafting  —  15m  DNB       │ PERIOD                           
+ MATTERS · BILLABLE       │  +Smith @drafting  —  15m  (0.3h) DNB│ PERIOD                           
    +Smith           1h 00m│    ▸ Non-billable work               │ billable     1.0h                
                           │  +Smith @drafting  —  1h 0m  (1.0h)  │ non-billable 0.3h                
  NON-BILLABLE             │    • Billable work                   │ total        1.3h                

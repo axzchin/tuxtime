@@ -13,7 +13,7 @@ use crate::ui::calendar_utils::{calendar_cells, calendar_footer, format_focused,
 use crate::ui::msgbox;
 use crate::ui::overlay::timesheet_calendar_rect;
 use crate::ui::task_row::{bill_badge_style, dur_badge_style};
-use crate::ui::{keep_cursor_visible, wrapped_row_count};
+use crate::ui::wrapped_row_count;
 
 /// Plain `1h 5m` / `45m` without the billable parenthetical that
 /// [`crate::app::format_duration`] embeds. Used wherever the invoice-correct
@@ -135,9 +135,14 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
     let increment = app.prefs.rounding_increment;
 
     let mut lines: Vec<Line> = Vec::new();
-    // Source-line index of the cursor narrative, resolved later (after the
-    // lines are built) into a *wrapped-row* position for the scroll math.
-    let mut cursor_line: Option<usize> = None;
+    // Source-line span of the cursor narrative (first wrapped row .. one past
+    // the last), resolved later into *wrapped-row* positions for the scroll
+    // math so the whole entry can be kept on screen.
+    let mut cursor_span: Option<(usize, usize)> = None;
+    // Source lines where a visual block begins (date header, group header,
+    // narrative bullet). The scroll offset snaps to these so the top row of
+    // the viewport is never a wrapped continuation line.
+    let mut block_starts: Vec<usize> = Vec::new();
     // The grand-total block is kept out of `lines` so it can be pinned below
     // the scrollable entry list instead of scrolling off short terminals.
     let mut footer: Vec<Line> = Vec::new();
@@ -192,6 +197,7 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                         |_| entry.date.clone(),
                         |d| d.format("%a %Y-%m-%d").to_string(),
                     );
+                block_starts.push(lines.len());
                 lines.push(Line::from(Span::styled(
                     format!("  {date_dow}"),
                     Style::default()
@@ -246,9 +252,12 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                     dur_badge_style(false, theme, app.prefs.badge_theme),
                 ));
             }
-            if entry.billable {
-                group_spans.push(Span::styled(format!(" ({billable_str})"), group_style));
-            } else {
+            // The rounded billable figure is shown for every group, billable
+            // or not: dropping it for DNB left the header without the figure
+            // the detail pane reports as `group dur`, so the group's time was
+            // only findable in the sidebar.
+            group_spans.push(Span::styled(format!(" ({billable_str})"), group_style));
+            if !entry.billable {
                 group_spans.push(Span::raw(" "));
                 let dnb_style = if copy_flash_active {
                     Style::default()
@@ -261,6 +270,7 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                 group_spans.push(Span::styled("DNB", dnb_style));
             }
             let group_line = Line::from(group_spans);
+            block_starts.push(lines.len());
             lines.push(group_line);
 
             for (ni, n) in entry.narratives.iter().enumerate() {
@@ -342,55 +352,51 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                 // parenthetical) keeps the loud accent badge on the group
                 // header visually primary. Right-padded to a fixed-width
                 // block so the per-task figures read as a tidy column.
-                let dur_block: Option<(String, Style)> =
-                    if entry.task_indices.len() > 1
-                        && let Some(d) = entry
-                            .task_indices
-                            .get(ni)
-                            .and_then(|r| app.timesheet_task(*r).and_then(|t| t.dur))
-                    {
-                        let dur_text = if d >= 3600 {
-                            format!("{}h {}m", d / 3600, (d % 3600) / 60)
-                        } else {
-                            format!("{}m", d / 60)
-                        };
-                        let dur_style = if copy_flash_active {
-                            Style::default().fg(theme.bg).bg(theme.fg)
-                        } else if is_narr_cursor {
-                            // The duration sits on the highlighted row and
-                            // joins the narrative's highlight: bright text on
-                            // the cursor background (not dim, which would read
-                            // as a secondary label mid-highlight).
-                            Style::default()
-                                .fg(theme.fg)
-                                .bg(theme.cursor)
-                                .add_modifier(Modifier::BOLD)
-                        } else if is_selected {
-                            Style::default().fg(theme.dim).bg(theme.selection)
-                        } else {
-                            Style::default().fg(theme.dim).bg(theme.panel)
-                        };
-                        Some((format!(" {:>7}", dur_text), dur_style))
+                let dur_block: Option<(String, Style)> = if entry.task_indices.len() > 1
+                    && let Some(d) = entry
+                        .task_indices
+                        .get(ni)
+                        .and_then(|r| app.timesheet_task(*r).and_then(|t| t.dur))
+                {
+                    let dur_text = if d >= 3600 {
+                        format!("{}h {}m", d / 3600, (d % 3600) / 60)
                     } else {
-                        None
+                        format!("{}m", d / 60)
                     };
+                    let dur_style = if copy_flash_active {
+                        Style::default().fg(theme.bg).bg(theme.fg)
+                    } else if is_narr_cursor {
+                        // The duration sits on the highlighted row and
+                        // joins the narrative's highlight: bright text on
+                        // the cursor background (not dim, which would read
+                        // as a secondary label mid-highlight).
+                        Style::default()
+                            .fg(theme.fg)
+                            .bg(theme.cursor)
+                            .add_modifier(Modifier::BOLD)
+                    } else if is_selected {
+                        Style::default().fg(theme.dim).bg(theme.selection)
+                    } else {
+                        Style::default().fg(theme.dim).bg(theme.panel)
+                    };
+                    Some((format!(" {:>7}", dur_text), dur_style))
+                } else {
+                    None
+                };
                 // Pre-wrap the narrative so wrapped continuation rows hang
                 // indented under the text (column 6, aligned with the first
                 // line's narrative) instead of snapping flush to the pane's
                 // left edge. Each emitted row fits the pane width, so the
                 // paragraph's own word-wrap never re-triggers on them.
-                let chunks = wrap_chunks(
-                    &format!("{n}{status_suffix}"),
-                    pane_w.saturating_sub(6),
-                );
+                let chunks = wrap_chunks(&format!("{n}{status_suffix}"), pane_w.saturating_sub(6));
                 let last_chunk_w = chunks
                     .last()
                     .map_or(0, |c| unicode_width::UnicodeWidthStr::width(c.as_str()));
                 // The duration rides the last text row when it fits, else it
                 // gets its own (still indented) continuation row.
-                let dur_on_last = dur_block
-                    .as_ref()
-                    .is_some_and(|(d, _)| 6 + last_chunk_w + unicode_width::UnicodeWidthStr::width(d.as_str()) <= pane_w);
+                let dur_on_last = dur_block.as_ref().is_some_and(|(d, _)| {
+                    6 + last_chunk_w + unicode_width::UnicodeWidthStr::width(d.as_str()) <= pane_w
+                });
                 let mut narr_rows: Vec<Line> = Vec::with_capacity(chunks.len() + 1);
                 for (ci, chunk) in chunks.iter().enumerate() {
                     let last = ci + 1 == chunks.len();
@@ -408,7 +414,8 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                         vec![Span::styled("      ", narr_style)]
                     };
                     spans.push(Span::styled(chunk.clone(), narr_style));
-                    if last && dur_on_last
+                    if last
+                        && dur_on_last
                         && let Some((d, s)) = &dur_block
                     {
                         spans.push(Span::styled(d.clone(), *s));
@@ -424,9 +431,7 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                         Span::styled(" ", narr_style),
                     ]));
                 }
-                if !dur_on_last
-                    && let Some((d, s)) = &dur_block
-                {
+                if !dur_on_last && let Some((d, s)) = &dur_block {
                     narr_rows.push(Line::from(vec![
                         Span::styled("      ", narr_style),
                         Span::styled(d.clone(), *s),
@@ -436,8 +441,9 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
                 // narrative (or the per-task duration in a multi-task group),
                 // so the cursor bar is exactly as wide as the row's content
                 // instead of bleeding to the pane's right edge.
+                block_starts.push(lines.len());
                 if is_narr_cursor {
-                    cursor_line = Some(lines.len());
+                    cursor_span = Some((lines.len(), lines.len() + narr_rows.len()));
                 }
                 lines.append(&mut narr_rows);
             }
@@ -544,17 +550,34 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
     // source-line index maps to a rendered row only after summing how many
     // rows each earlier line consumed (long narratives take several).
     let list_width = list_rect.width;
-    let mut cursor_row: Option<usize> = None;
+    // `row_offsets[i]` is the first rendered row of source line `i`, with a
+    // sentinel at the end so a span ending at `lines.len()` maps cleanly.
+    let mut row_offsets: Vec<usize> = Vec::with_capacity(lines.len() + 1);
     let mut total_rows: usize = 0;
-    for (i, line) in lines.iter().enumerate() {
-        let rows = usize::from(wrapped_row_count(line, list_width));
-        if cursor_line == Some(i) {
-            cursor_row = Some(total_rows);
-        }
-        total_rows += rows;
+    for line in &lines {
+        row_offsets.push(total_rows);
+        total_rows += usize::from(wrapped_row_count(line, list_width));
     }
+    row_offsets.push(total_rows);
+    let last_offset = row_offsets.len() - 1;
+    let cursor_rows = cursor_span.map(|(start, end)| {
+        (
+            row_offsets[start.min(last_offset)],
+            row_offsets[end.min(last_offset)],
+        )
+    });
+    let boundaries: Vec<usize> = block_starts
+        .iter()
+        .map(|s| row_offsets[(*s).min(last_offset)])
+        .collect();
     let scroll_cell = &app.nav.view_scroll[View::Timesheet];
-    let scroll = keep_cursor_visible(scroll_cell.get(), cursor_row, list_rect.height, total_rows);
+    let scroll = entry_scroll(
+        scroll_cell.get(),
+        cursor_rows,
+        &boundaries,
+        list_rect.height,
+        total_rows,
+    );
     scroll_cell.set(scroll);
     // Long narratives word-wrap at the pane's inner width instead of clipping
     // at the border: the right margin is the detail pane's boundary, so the
@@ -570,6 +593,59 @@ pub(crate) fn render_timesheet(frame: &mut Frame, area: Rect, app: &App) {
     if !footer.is_empty() {
         frame.render_widget(Paragraph::new(footer), footer_rect);
     }
+}
+
+/// Scroll offset (in wrapped rows) for the timesheet entry list.
+///
+/// The list scrolls in whole entries: the viewport's first row is always a
+/// block start (date header, group header, or narrative bullet) and the
+/// cursor's entry — its bullet plus every wrapped continuation row — is kept
+/// entirely on screen. An entry therefore never appears cut off at the top or
+/// bottom edge; when the block sizes don't divide the viewport evenly the list
+/// ends a row or two early, leaving blank rows above the pinned totals rather
+/// than a half-visible narrative.
+///
+/// An entry taller than the viewport can't fit whole; it is pinned to its
+/// first row (its banner or bullet) so the reader sees where it begins.
+fn entry_scroll(
+    prev: u16,
+    cursor_rows: Option<(usize, usize)>,
+    boundaries: &[usize],
+    height: u16,
+    total: usize,
+) -> u16 {
+    let h = usize::from(height);
+    if h == 0 || total == 0 {
+        return 0;
+    }
+    let prev = usize::from(prev);
+    let Some((start, end)) = cursor_rows else {
+        // No cursor entry (empty list or all groups filtered out): keep the
+        // viewport inside the content so the "no entries" line stays visible.
+        return u16::try_from(prev.min(total.saturating_sub(h))).unwrap_or(u16::MAX);
+    };
+    if end <= start {
+        return u16::try_from(prev).unwrap_or(u16::MAX);
+    }
+    // Taller than the viewport: pin the entry's first row so the reader sees
+    // where it starts instead of an arbitrary middle slice.
+    if end - start >= h {
+        return u16::try_from(start).unwrap_or(u16::MAX);
+    }
+    // Already on screen: leave the offset alone so a redraw (or a toggle that
+    // re-sorts nothing) doesn't shift the view under the reader.
+    if start >= prev && end <= prev + h {
+        return u16::try_from(prev).unwrap_or(u16::MAX);
+    }
+    // Otherwise pick the smallest block start that still shows the entry's
+    // last row, so the top row belongs to a whole entry.
+    let min_start = end.saturating_sub(h);
+    let offset = boundaries
+        .iter()
+        .copied()
+        .find(|b| *b >= min_start)
+        .map_or(start, |b| b.min(start));
+    u16::try_from(offset).unwrap_or(u16::MAX)
 }
 
 /// Render a centered calendar overlay for the timesheet date picker.
@@ -687,7 +763,7 @@ pub(crate) fn render_timesheet_calendar(frame: &mut Frame, area: Rect, app: &App
 
 #[cfg(test)]
 mod tests {
-    use super::wrap_chunks;
+    use super::{entry_scroll, wrap_chunks};
 
     #[test]
     fn short_text_is_one_chunk() {
@@ -735,7 +811,9 @@ mod tests {
     fn overlong_word_is_broken_not_overflowed() {
         let chunks = wrap_chunks("prefix abcdefghijklmnop suffix", 6);
         assert!(
-            chunks.iter().all(|c| unicode_width::UnicodeWidthStr::width(c.as_str()) <= 6),
+            chunks
+                .iter()
+                .all(|c| unicode_width::UnicodeWidthStr::width(c.as_str()) <= 6),
             "chunks: {chunks:?}"
         );
         assert!(
@@ -751,5 +829,48 @@ mod tests {
         assert_eq!(wrap_chunks("汉字", 5), vec!["汉字"]);
         assert_eq!(wrap_chunks("汉字", 4), vec!["汉字"]);
         assert_eq!(wrap_chunks("汉字", 2), vec!["汉", "字"]);
+    }
+
+    // ── entry_scroll ─────────────────────────────────────────────────
+
+    #[test]
+    fn pins_the_viewport_to_the_cursor_entry_start() {
+        // 4-row viewport, cursor entry on rows 10..13: its whole block fits
+        // when the viewport starts at the entry itself.
+        assert_eq!(entry_scroll(0, Some((10, 13)), &[0, 10], 4, 40), 10);
+        assert_eq!(entry_scroll(10, Some((10, 13)), &[0, 10], 4, 40), 10);
+    }
+
+    #[test]
+    fn leaves_the_offset_alone_while_the_entry_is_visible() {
+        // Entry rows 11..13 sit whole inside the 4-row viewport starting at 10.
+        assert_eq!(entry_scroll(10, Some((11, 13)), &[0, 10], 4, 40), 10);
+    }
+
+    #[test]
+    fn end_of_list_ends_whole_entries_early_rather_than_clipping() {
+        // 30 entries of 3 rows after a 1-row header: the last entry owns rows
+        // 88..91. A 7-row viewport can't start on a block boundary and still
+        // reach row 90, so it starts at the boundary 85 and leaves one blank
+        // row instead of cutting the entry's tail.
+        let boundaries: Vec<usize> = (0..30).map(|i| 1 + 3 * i).collect();
+        assert_eq!(entry_scroll(0, Some((88, 91)), &boundaries, 7, 88 + 3), 85);
+    }
+
+    #[test]
+    fn overlong_entry_is_pinned_to_its_first_row() {
+        // Taller than the 4-row viewport: show where the entry begins rather
+        // than its tail.
+        assert_eq!(entry_scroll(8, Some((5, 20)), &[0, 5], 4, 40), 5);
+    }
+
+    #[test]
+    fn no_cursor_entry_or_tiny_viewport_stays_inside_the_content() {
+        // No cursor: clamp a stale offset so the content (e.g. the "no
+        // entries" line) can't be scrolled past.
+        assert_eq!(entry_scroll(3, None, &[0, 2], 4, 40), 3);
+        assert_eq!(entry_scroll(80, None, &[0, 2], 4, 10), 6);
+        assert_eq!(entry_scroll(0, Some((1, 2)), &[0], 0, 40), 0);
+        assert_eq!(entry_scroll(0, Some((1, 2)), &[0], 4, 0), 0);
     }
 }
