@@ -300,22 +300,34 @@ fn collapse_spaces(s: &str) -> String {
     out.trim().to_string()
 }
 
-/// Invoice-ready narrative text: collapse stray whitespace, join with "; ",
-/// and end with a full stop so the copied group reads as finished prose. Case
-/// is left exactly as typed — a lowercase narrative stays lowercase, including
-/// after every semicolon.
+/// Uppercase the first character of `s` when it's lowercase. Digits,
+/// symbols, and already-uppercase starts are left untouched, so "API design"
+/// or "2026 budget call" survive intact.
+fn capitalize_first(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(c) if c.is_lowercase() => c.to_uppercase().collect::<String>() + chars.as_str(),
+        _ => s.to_string(),
+    }
+}
+
+/// Invoice-ready narrative text: collapse stray whitespace, capitalize the
+/// group's opening letter (it starts the sentence), join the narratives with
+/// "; ", and end with a full stop so the copied group reads as finished prose.
+/// Only that opening letter is capitalized — narratives after a semicolon keep
+/// the casing they were typed with, so a lowercase note stays lowercase.
 fn format_narratives_for_copy(narratives: &[String]) -> String {
     let joined = narratives
         .iter()
         .map(|n| collapse_spaces(n))
         .collect::<Vec<_>>()
         .join("; ");
-    ensure_full_stop(&joined)
+    ensure_full_stop(&capitalize_first(&joined))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{collapse_spaces, ensure_full_stop, format_narratives_for_copy};
+    use super::{capitalize_first, collapse_spaces, ensure_full_stop, format_narratives_for_copy};
 
     #[test]
     fn appends_full_stop_when_missing() {
@@ -349,7 +361,19 @@ mod tests {
     }
 
     #[test]
-    fn copy_formatting_preserves_case_and_collapses_spaces() {
+    fn capitalize_first_uppercases_lowercase_start() {
+        assert_eq!(capitalize_first("drafted the brief"), "Drafted the brief");
+    }
+
+    #[test]
+    fn capitalize_first_leaves_uppercase_digits_symbols_alone() {
+        assert_eq!(capitalize_first("API design"), "API design");
+        assert_eq!(capitalize_first("2026 budget call"), "2026 budget call");
+        assert_eq!(capitalize_first("(follow-up) call"), "(follow-up) call");
+    }
+
+    #[test]
+    fn copy_formatting_capitalizes_only_the_opening_narrative() {
         let narratives = vec![
             "  drafted   the  brief  ".to_string(),
             "reviewed discovery responses".to_string(),
@@ -357,7 +381,7 @@ mod tests {
         ];
         assert_eq!(
             format_narratives_for_copy(&narratives),
-            "drafted the brief; reviewed discovery responses; API design."
+            "Drafted the brief; reviewed discovery responses; API design."
         );
     }
 
@@ -366,13 +390,13 @@ mod tests {
         let narratives = vec!["call with jim".to_string(), "draft email".to_string()];
         assert_eq!(
             format_narratives_for_copy(&narratives),
-            "call with jim; draft email."
+            "Call with jim; draft email."
         );
     }
 
     #[test]
     fn copy_formatting_keeps_existing_full_stop() {
         let narratives = vec!["draft motion.".to_string()];
-        assert_eq!(format_narratives_for_copy(&narratives), "draft motion.");
+        assert_eq!(format_narratives_for_copy(&narratives), "Draft motion.");
     }
 }
