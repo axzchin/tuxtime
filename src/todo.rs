@@ -683,10 +683,10 @@ pub fn narrative_end_offset(raw: &str) -> usize {
             SegmentKind::Project
             | SegmentKind::Context
             | SegmentKind::Due
-            | SegmentKind::KeyValue => {
-                if seen_narrative {
-                    return last_word_end;
-                }
+            | SegmentKind::KeyValue
+                if seen_narrative =>
+            {
+                return last_word_end;
             }
             // Track the end of the last non-whitespace Plain run. Date and
             // priority segments are leading bookkeeping, not narrative, so

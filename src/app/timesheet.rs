@@ -112,11 +112,11 @@ impl TimesheetState {
     /// Handle a typing key while the calendar picker is open.
     pub fn date_type(&mut self, code: ratatui::crossterm::event::KeyCode) {
         match code {
-            ratatui::crossterm::event::KeyCode::Char(c) if c.is_ascii_digit() || c == '-' => {
-                if self.date_input.len() < 10 {
-                    self.date_input.push(c);
-                    self.sync_input();
-                }
+            ratatui::crossterm::event::KeyCode::Char(c)
+                if (c.is_ascii_digit() || c == '-') && self.date_input.len() < 10 =>
+            {
+                self.date_input.push(c);
+                self.sync_input();
             }
             ratatui::crossterm::event::KeyCode::Backspace => {
                 self.date_input.pop();
@@ -311,7 +311,7 @@ impl App {
                 entries.sort_by(|a, b| a.date.cmp(&b.date).then_with(|| a.key.cmp(&b.key)));
             }
             TimesheetSort::Duration => {
-                entries.sort_by(|a, b| b.total_secs.cmp(&a.total_secs));
+                entries.sort_by_key(|b| std::cmp::Reverse(b.total_secs));
             }
         }
         *self.timesheet.groups_cache.borrow_mut() = Some(entries.clone());
@@ -504,7 +504,11 @@ impl App {
                 return;
             }
             // Last narrative of the previous group.
-            groups[..gi].iter().map(|g| g.task_indices.len()).sum::<usize>() - 1
+            groups[..gi]
+                .iter()
+                .map(|g| g.task_indices.len())
+                .sum::<usize>()
+                - 1
         };
         self.timesheet.cursor = target;
     }

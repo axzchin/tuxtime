@@ -181,7 +181,7 @@ pub(crate) fn parse_duration_input(s: &str) -> u64 {
             }
         }
         // Explicit minutes: "90m"
-        Some('m') => num_part.parse::<u64>().map(|m| m * 60).unwrap_or(0),
+        Some('m') => num_part.parse::<u64>().map_or(0, |m| m * 60),
         // No suffix: infer — decimal point → hours, plain integer → minutes
         None => {
             if num_part.contains('.') {
@@ -192,7 +192,7 @@ pub(crate) fn parse_duration_input(s: &str) -> u64 {
                 }
             } else {
                 // Plain integer → minutes (default for lawyers)
-                num_part.parse::<u64>().map(|m| m * 60).unwrap_or(0)
+                num_part.parse::<u64>().map_or(0, |m| m * 60)
             }
         }
         _ => 0,

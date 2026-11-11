@@ -107,11 +107,8 @@ fn build_app_with_body(raw: &str) -> App {
     use std::sync::atomic::{AtomicUsize, Ordering};
     static N: AtomicUsize = AtomicUsize::new(0);
     let n = N.fetch_add(1, Ordering::Relaxed);
-    let path = std::env::temp_dir().join(format!(
-        "tuxtime-bindings-{}-{}.txt",
-        std::process::id(),
-        n
-    ));
+    let path =
+        std::env::temp_dir().join(format!("tuxtime-bindings-{}-{}.txt", std::process::id(), n));
     let _ = std::fs::write(&path, raw);
     App::new(path, raw.into(), "2026-05-06".into(), Config::default())
 }
@@ -1519,7 +1516,11 @@ fn insert_normal_count_prefix_repeats_char_motion() {
     handle_insert(&mut app, key('5'));
     handle_insert(&mut app, key('h'));
     assert_eq!(app.draft.cursor(), 6, "5h moves left 5 chars");
-    assert_eq!(app.draft.pending_count(), 0, "count is consumed by the motion");
+    assert_eq!(
+        app.draft.pending_count(),
+        0,
+        "count is consumed by the motion"
+    );
 }
 
 #[test]
@@ -2996,8 +2997,7 @@ fn idle_nudge_skips_modes_with_unsaved_state() {
     let mut app = build_app();
     // Make the idle threshold trivially exceeded.
     app.prefs.idle_nudge_seconds = 0;
-    app.session.last_timer_activity =
-        std::time::Instant::now() - std::time::Duration::from_secs(60);
+    app.session.last_timer_activity = std::time::Instant::now() - std::time::Duration::from_mins(1);
 
     // Insert mode with a half-typed draft.
     app.nav.mode = Mode::Screen(Screen::Insert);
@@ -3043,8 +3043,7 @@ fn idle_nudge_skips_modes_with_unsaved_state() {
 fn idle_nudge_fires_in_normal_mode() {
     let mut app = build_app();
     app.prefs.idle_nudge_seconds = 0;
-    app.session.last_timer_activity =
-        std::time::Instant::now() - std::time::Duration::from_secs(60);
+    app.session.last_timer_activity = std::time::Instant::now() - std::time::Duration::from_mins(1);
     assert!(app.check_nudges());
     assert_eq!(app.nav.mode, Mode::Nudge(Nudge::Idle));
 }
@@ -3765,7 +3764,10 @@ fn ctrl_enter_in_edit_dialog_saves_and_starts_timer() {
     );
 
     assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
-    assert!(app.timer_running(), "Ctrl+Enter on an edit must start the timer");
+    assert!(
+        app.timer_running(),
+        "Ctrl+Enter on an edit must start the timer"
+    );
     let active = app.active_timer_task().expect("timer on a task");
     assert!(
         active.raw.contains("Draft motion"),
@@ -3873,11 +3875,7 @@ fn ctrl_j_in_edit_dialog_saves_and_starts_timer() {
     assert_eq!(app.nav.mode, Mode::Screen(Screen::Normal));
     assert!(app.timer_running());
     let active = app.active_timer_task().expect("timer on a task");
-    assert!(
-        active.raw.contains("Draft motion"),
-        "got: {}",
-        active.raw
-    );
+    assert!(active.raw.contains("Draft motion"), "got: {}", active.raw);
 }
 
 /// The alias must not swallow a plain `j`: in Insert mode it types the

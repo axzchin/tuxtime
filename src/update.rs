@@ -479,12 +479,12 @@ pub fn spawn_check() -> Receiver<Option<String>> {
     rx
 }
 
-const CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
+const CACHE_TTL: Duration = Duration::from_hours(24);
 /// How long to honor a cached *failure* (empty `tag`) before trying the
 /// network again. Short enough to recover within an hour, long enough to
 /// stop hammering GitHub once anonymous API calls have been rate-limited
 /// (which is what burned us once during testing).
-const NEGATIVE_CACHE_TTL: Duration = Duration::from_secs(60 * 60);
+const NEGATIVE_CACHE_TTL: Duration = Duration::from_hours(1);
 const CURL_TIMEOUT_SECS: u64 = 5;
 const RELEASE_URL: &str = "https://api.github.com/repos/axzchin/tuxtime/releases/latest";
 
@@ -606,8 +606,7 @@ fn xdg_cache_home() -> Option<PathBuf> {
 fn now_epoch() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+        .map_or(0, |d| d.as_secs())
 }
 
 /// Read a cache file. Returns `(epoch_secs, tag)` on success. Format is a
